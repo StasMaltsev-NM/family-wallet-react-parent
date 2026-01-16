@@ -91,39 +91,48 @@ const App: React.FC = () => {
           />
         </header>
 
-        {/* Слой 2: Плавающая навигация (Floating Island) */}
-        <div className="max-w-3xl mx-auto px-6 -mb-8 relative z-[60]">
-          <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white/[0.04] backdrop-blur-3xl border border-white/10 rounded-[2.5rem] py-4 px-8 shadow-[0_20px_50px_rgba(0,0,0,0.6)] flex items-center justify-between transition-all duration-500">
-            <NavButton 
-              active={activeTab === Tab.DASHBOARD} 
-              onClick={() => setActiveTab(Tab.DASHBOARD)} 
-              icon={<LayoutDashboard size={22} />} 
-              label="Главная" 
-              badgeCount={pendingPrizesCount}
-            />
-            <NavButton 
-              active={activeTab === Tab.MISSIONS} 
-              onClick={() => setActiveTab(Tab.MISSIONS)} 
-              icon={<Target size={22} />} 
-              label="Миссии" 
-              badgeCount={pendingMissionsCount}
-            />
-            <NavButton 
-              active={activeTab === Tab.SHOP} 
-              onClick={() => setActiveTab(Tab.SHOP)} 
-              icon={<ShoppingBag size={22} />} 
-              label="Магазин" 
-            />
-            <NavButton 
-              active={activeTab === Tab.AI_ASSISTANT} 
-              onClick={() => setActiveTab(Tab.AI_ASSISTANT)} 
-              icon={<Sparkles size={22} />} 
-              label="ИИ" 
-            />
-          </nav>
-        </div>
-      </div>
+       {/* Слой 2: Плавающая навигация (Floating Island) */}
+<div className="relative z-[60]">
+  <nav
+  className="fixed bottom-4 z-50 bg-white/[0.04] backdrop-blur-3xl border border-white/10 rounded-[2.5rem] py-4 px-6 shadow-[0_20px_50px_rgba(0,0,0,0.6)] flex items-center justify-between transition-all duration-500"
+  style={{
+    left: 12,
+    right: 12,
+  }}
+  >
+    <NavButton
+      active={activeTab === Tab.DASHBOARD}
+      onClick={() => setActiveTab(Tab.DASHBOARD)}
+      icon={<LayoutDashboard size={22} />}
+      label="Главная"
+      badgeCount={pendingPrizesCount}
+    />
 
+    <NavButton
+      active={activeTab === Tab.MISSIONS}
+      onClick={() => setActiveTab(Tab.MISSIONS)}
+      icon={<Target size={22} />}
+      label="Миссии"
+      badgeCount={pendingMissionsCount}
+    />
+
+    <NavButton
+      active={activeTab === Tab.SHOP}
+      onClick={() => setActiveTab(Tab.SHOP)}
+      icon={<ShoppingBag size={22} />}
+      label="Магазин"
+      badgeCount={0}
+    />
+
+    <NavButton
+      active={activeTab === Tab.AI}
+      onClick={() => setActiveTab(Tab.AI)}
+      icon={<Sparkles size={22} />}
+      label="ИИ"
+      badgeCount={0}
+    />
+  </nav>
+</div>
       {/* Слой 3: Контент, проплывающий под навигацией */}
       <main className="max-w-3xl mx-auto px-6 mt-12 pt-4 relative z-10">
         {renderContent()}
