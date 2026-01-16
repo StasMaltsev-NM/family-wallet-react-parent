@@ -33,6 +33,8 @@ export interface Mission {
   status: 'active' | 'completed' | 'pending';
   category: 'chores' | 'education' | 'sports';
   isRecurring: boolean;
+  isTeam?: boolean;
+  assignedToNames?: string[];
 }
 
 export interface Prize {

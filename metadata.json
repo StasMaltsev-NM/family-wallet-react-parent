@@ -1,7 +1,9 @@
+
 {
   "name": "Family Wallet Parent Dashboard",
   "description": "A sophisticated parent dashboard for managing children's finances, missions, and dreams with integrated AI insights and image generation.",
   "requestFramePermissions": [
-    "camera"
+    "camera",
+    "geolocation"
   ]
 }

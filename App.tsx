@@ -45,6 +45,14 @@ const App: React.FC = () => {
     setChildren(prev => prev.map(c => c.id === updated.id ? updated : c));
   };
 
+  const handleDeleteChild = (id: string) => {
+    const newChildren = children.filter(c => c.id !== id);
+    if (newChildren.length > 0) {
+      setChildren(newChildren);
+      if (selectedChildId === id) setSelectedChildId(newChildren[0].id);
+    }
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case Tab.DASHBOARD:
@@ -61,87 +69,76 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen pb-12 transition-colors duration-500 bg-black text-white">
-      {/* Слой 1: Фиксированная шапка с профилями */}
-      <div className="sticky top-0 z-50 bg-black">
-<header className="w-full px-4 pt-5 pb-2">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-2xl font-black tracking-tighter">Family Wallet</h1>
-            <div className="flex gap-4">
-              <button 
-                onClick={toggleTheme}
-                className="p-2.5 rounded-full bg-white/5 text-[var(--text-muted)] hover:text-[var(--primary)] transition-all border border-white/5"
-              >
-                <Palette size={20} />
-              </button>
-              <button 
-                onClick={() => setIsSettingsOpen(true)}
-                className="p-2.5 rounded-full bg-white/5 text-[var(--text-muted)] hover:text-[var(--primary)] transition-all border border-white/5"
-              >
-                <Settings size={20} />
-              </button>
-            </div>
+    <div className="min-h-screen pb-32 transition-colors duration-500 bg-black text-white">
+      {/* Шапка */}
+      <header className="max-w-3xl mx-auto px-6 pt-5 pb-2 sticky top-0 z-40 bg-black">
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-2xl font-black tracking-tighter">Family Wallet</h1>
+          <div className="flex gap-4">
+            <button 
+              onClick={toggleTheme}
+              className="p-2.5 rounded-full bg-white/5 text-[var(--text-muted)] hover:text-[var(--primary)] transition-all border border-white/5"
+            >
+              <Palette size={20} />
+            </button>
+            <button 
+              onClick={() => setIsSettingsOpen(true)}
+              className="p-2.5 rounded-full bg-white/5 text-[var(--text-muted)] hover:text-[var(--primary)] transition-all border border-white/5"
+            >
+              <Settings size={20} />
+            </button>
           </div>
-          
-          <ChildSwitcher 
-            children={children} 
-            selectedId={selectedChildId} 
-            onSelect={setSelectedChildId} 
-            onAdd={() => setIsAddChildOpen(true)}
-          />
-        </header>
+        </div>
+        
+        <ChildSwitcher 
+          children={children} 
+          selectedId={selectedChildId} 
+          onSelect={setSelectedChildId} 
+          onAdd={() => setIsAddChildOpen(true)}
+        />
+      </header>
 
-       {/* Слой 2: Плавающая навигация (Floating Island) */}
-<div className="relative z-[60]">
-  <nav
-  className="fixed bottom-4 z-50 bg-white/[0.04] backdrop-blur-3xl border border-white/10 rounded-[2.5rem] py-4 px-6 shadow-[0_20px_50px_rgba(0,0,0,0.6)] flex items-center justify-between transition-all duration-500"
-  style={{
-    left: 12,
-    right: 12,
-  }}
-  >
-    <NavButton
-      active={activeTab === Tab.DASHBOARD}
-      onClick={() => setActiveTab(Tab.DASHBOARD)}
-      icon={<LayoutDashboard size={22} />}
-      label="Главная"
-      badgeCount={pendingPrizesCount}
-    />
-
-    <NavButton
-      active={activeTab === Tab.MISSIONS}
-      onClick={() => setActiveTab(Tab.MISSIONS)}
-      icon={<Target size={22} />}
-      label="Миссии"
-      badgeCount={pendingMissionsCount}
-    />
-
-    <NavButton
-      active={activeTab === Tab.SHOP}
-      onClick={() => setActiveTab(Tab.SHOP)}
-      icon={<ShoppingBag size={22} />}
-      label="Магазин"
-      badgeCount={0}
-    />
-
-    <NavButton
-      active={activeTab === Tab.AI}
-      onClick={() => setActiveTab(Tab.AI)}
-      icon={<Sparkles size={22} />}
-      label="ИИ"
-      badgeCount={0}
-    />
-  </nav>
-</div>
-      {/* Слой 3: Контент, проплывающий под навигацией */}
-      <main className="max-w-3xl mx-auto px-6 mt-12 pt-4 relative z-10">
+      {/* Контент */}
+      <main className="max-w-3xl mx-auto px-6 mt-6">
         {renderContent()}
       </main>
+
+      {/* Нижняя навигация */}
+      <div className="fixed bottom-8 left-0 right-0 z-50 px-6">
+        <nav className="max-w-3xl mx-auto bg-white/[0.04] backdrop-blur-3xl border border-white/10 rounded-[2.5rem] py-4 px-8 shadow-[0_25px_60px_rgba(0,0,0,0.8)] flex items-center justify-between transition-all duration-500">
+          <NavButton 
+            active={activeTab === Tab.DASHBOARD} 
+            onClick={() => setActiveTab(Tab.DASHBOARD)} 
+            icon={<LayoutDashboard size={24} />} 
+            label="Главная" 
+            badgeCount={pendingPrizesCount + pendingMissionsCount}
+          />
+          <NavButton 
+            active={activeTab === Tab.MISSIONS} 
+            onClick={() => setActiveTab(Tab.MISSIONS)} 
+            icon={<Target size={24} />} 
+            label="Миссии" 
+          />
+          <NavButton 
+            active={activeTab === Tab.SHOP} 
+            onClick={() => setActiveTab(Tab.SHOP)} 
+            icon={<ShoppingBag size={24} />} 
+            label="Магазин" 
+          />
+          <NavButton 
+            active={activeTab === Tab.AI_ASSISTANT} 
+            onClick={() => setActiveTab(Tab.AI_ASSISTANT)} 
+            icon={<Sparkles size={24} />} 
+            label="ИИ" 
+          />
+        </nav>
+      </div>
 
       {isSettingsOpen && (
         <SettingsModal 
           children={children} 
           setChildren={setChildren}
+          onDeleteChild={handleDeleteChild}
           onClose={() => setIsSettingsOpen(false)} 
           onOpenAddChild={() => {
             setIsSettingsOpen(false);
@@ -175,17 +172,17 @@ interface NavButtonProps {
 const NavButton: React.FC<NavButtonProps> = ({ active, onClick, icon, label, badgeCount = 0 }) => (
   <button 
     onClick={onClick}
-    className={`relative flex flex-col items-center justify-center gap-1.5 transition-all duration-300 ${active ? 'text-[var(--primary)] scale-110' : 'text-[var(--text-muted)] opacity-50 hover:opacity-100 hover:scale-105'}`}
+    className={`relative flex flex-col items-center justify-center gap-1 transition-all duration-300 ${active ? 'text-[var(--primary)] scale-110' : 'text-[var(--text-muted)] opacity-50 hover:opacity-100'}`}
   >
     <div className="relative">
       {icon}
       {badgeCount > 0 && (
-        <span className="absolute -top-1 -right-2 bg-rose-500 text-white text-[9px] font-black min-w-[14px] h-[14px] px-1 rounded-full flex items-center justify-center shadow-lg animate-pulse ring-2 ring-black">
+        <span className="absolute -top-1.5 -right-3 bg-rose-500 text-white text-[10px] font-black min-w-[16px] h-[16px] px-1 rounded-full flex items-center justify-center shadow-lg ring-2 ring-black">
           {badgeCount}
         </span>
       )}
     </div>
-    <span className="text-[9px] font-black uppercase tracking-[0.12em]">{label}</span>
+    <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>
   </button>
 );
 
