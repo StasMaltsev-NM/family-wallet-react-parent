@@ -61,7 +61,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen pb-32 transition-colors duration-500 bg-black text-white">
+    <div className="min-h-screen pb-12 transition-colors duration-500 bg-black text-white">
       {/* Слой 1: Фиксированная шапка с профилями */}
       <div className="sticky top-0 z-50 bg-black">
 <header className="w-full px-4 pt-5 pb-2">
@@ -93,7 +93,7 @@ const App: React.FC = () => {
 
         {/* Слой 2: Плавающая навигация (Floating Island) */}
         <div className="max-w-3xl mx-auto px-6 -mb-8 relative z-[60]">
-          <nav className="bg-white/[0.04] backdrop-blur-3xl border border-white/10 rounded-[2.5rem] py-4 px-8 shadow-[0_20px_50px_rgba(0,0,0,0.6)] flex items-center justify-between transition-all duration-500">
+          <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white/[0.04] backdrop-blur-3xl border border-white/10 rounded-[2.5rem] py-4 px-8 shadow-[0_20px_50px_rgba(0,0,0,0.6)] flex items-center justify-between transition-all duration-500">
             <NavButton 
               active={activeTab === Tab.DASHBOARD} 
               onClick={() => setActiveTab(Tab.DASHBOARD)} 
