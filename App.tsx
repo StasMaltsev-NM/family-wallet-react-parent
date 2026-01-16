@@ -61,7 +61,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen pb-12 transition-colors duration-500 bg-black text-white">
+    <div className="min-h-screen pb-32 transition-colors duration-500 bg-black text-white">
       {/* Слой 1: Фиксированная шапка с профилями */}
       <div className="sticky top-0 z-50 bg-black">
 <header className="w-full px-4 pt-5 pb-2">
