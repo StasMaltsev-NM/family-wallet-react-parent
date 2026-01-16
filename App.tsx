@@ -64,7 +64,7 @@ const App: React.FC = () => {
     <div className="min-h-screen pb-12 transition-colors duration-500 bg-black text-white">
       {/* Слой 1: Фиксированная шапка с профилями */}
       <div className="sticky top-0 z-50 bg-black">
-        <header className="max-w-3xl mx-auto px-6 pt-5 pb-2">
+<header className="w-full px-4 pt-5 pb-2">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-2xl font-black tracking-tighter">Family Wallet</h1>
             <div className="flex gap-4">
