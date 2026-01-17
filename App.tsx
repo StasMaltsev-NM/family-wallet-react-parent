@@ -25,7 +25,26 @@ const App: React.FC = () => {
   const [selectedChildId, setSelectedChildId] = useState<string>(INITIAL_CHILDREN[0].id);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAddChildOpen, setIsAddChildOpen] = useState(false);
+useEffect(() => {
+  // Telegram WebApp
+  // @ts-ignore
+  const tg = window.Telegram?.WebApp;
+  if (tg) {
+    tg.ready();
+    tg.expand();
+  }
 
+  // фикс “полного экрана” + запрет провала в сворачивание TG при резком свайпе
+  document.documentElement.style.height = "100%";
+  document.body.style.height = "100%";
+  document.body.style.overflow = "hidden";
+
+  return () => {
+    document.documentElement.style.height = "";
+    document.body.style.height = "";
+    document.body.style.overflow = "";
+  };
+}, []);
   const selectedChild = children.find(c => c.id === selectedChildId) || children[0];
 
   const pendingPrizesCount = selectedChild.pendingPrizes.length;
@@ -69,8 +88,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen pb-32 transition-colors duration-500 bg-black text-white">
-      {/* Шапка */}
+<div className="h-screen flex flex-col transition-colors duration-500 bg-black text-white">      {/* Шапка */}
       <header className="max-w-3xl mx-auto px-6 pt-5 pb-2 sticky top-0 z-40 bg-black">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-black tracking-tighter">Family Wallet</h1>
@@ -99,9 +117,9 @@ const App: React.FC = () => {
       </header>
 
       {/* Контент */}
-      <main className="max-w-3xl mx-auto px-6 mt-6">
-        {renderContent()}
-      </main>
+     <main className="flex-1 overflow-y-auto scrollArea max-w-3xl mx-auto px-6 mt-6">
+  {renderContent()}
+</main>
 
       {/* Нижняя навигация */}
       <div className="fixed bottom-8 left-0 right-0 z-50 px-6">
