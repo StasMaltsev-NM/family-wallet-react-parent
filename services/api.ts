@@ -1,27 +1,44 @@
 const API_URL = import.meta.env.VITE_API_URL;
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+type RawResult = {
+  url: string;
+  status: number;
+  text: string;
+};
+
+async function requestRaw(path: string, options: RequestInit = {}): Promise<RawResult> {
   if (!API_URL) throw new Error("VITE_API_URL is missing");
 
+  // ВАЖНО: не ставим Content-Type по умолчанию,
+  // иначе браузер может сделать preflight (CORS) даже на GET.
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
       ...(options.headers || {}),
     },
   });
 
   const text = await res.text();
-  let data: any;
-  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
-
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}: ${typeof data === "string" ? data : JSON.stringify(data)}`);
-  }
-  return data as T;
+  return { url: `${API_URL}${path}`, status: res.status, text };
 }
 
-// временная проверка (без авторизации)
-export async function pingApi() {
-  return request<any>("/");
+/**
+ * PROBE: проверяем, существует ли роут вообще.
+ * Без Authorization => нет CORS preflight.
+ */
+export async function probeParentChildren() {
+  return requestRaw("/api/parent/children", { method: "GET" });
+}
+
+/**
+ * AUTH-CHECK (на потом):
+ * Это будет падать CORS-ом, пока бэк не разрешит header Authorization.
+ */
+export async function pingParentApi(parentToken: string) {
+  return requestRaw("/api/parent/children", {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${parentToken}`,
+    },
+  });
 }

@@ -23,18 +23,21 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>(Tab.DASHBOARD);
   const [children, setChildren] = useState<Child[]>(INITIAL_CHILDREN);
   const [selectedChildId, setSelectedChildId] = useState<string>(INITIAL_CHILDREN[0].id);
+
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAddChildOpen, setIsAddChildOpen] = useState(false);
+
+// 1) Telegram full-screen + анти-сворачивание
 useEffect(() => {
-  // Telegram WebApp
   // @ts-ignore
   const tg = window.Telegram?.WebApp;
+
   if (tg) {
     tg.ready();
     tg.expand();
+    tg.disableVerticalSwipes?.();
   }
 
-  // фикс “полного экрана” + запрет провала в сворачивание TG при резком свайпе
   document.documentElement.style.height = "100%";
   document.body.style.height = "100%";
   document.body.style.overflow = "hidden";
@@ -45,19 +48,30 @@ useEffect(() => {
     document.body.style.overflow = "";
   };
 }, []);
-  const selectedChild = children.find(c => c.id === selectedChildId) || children[0];
 
-  const pendingPrizesCount = selectedChild.pendingPrizes.length;
-  const pendingMissionsCount = selectedChild.missions.filter(m => m.status === 'pending').length;
+// 2) PROBE backend роутов (без Authorization, чтобы НЕ было CORS preflight)
+useEffect(() => {
+  import("./services/api")
+    .then((m) => {
+      console.log("API MODULE EXPORTS:", Object.keys(m));
+      return m.probeParentChildren(); // без токена
+    })
+    .then((res) => console.log("PROBE RESULT:", res))
+    .catch((err) => console.error("PROBE FAIL:", err));
+}, []);
 
-  useEffect(() => {
-    document.body.setAttribute('data-theme', theme);
-  }, [theme]);
+// 3) тема (как было)
+useEffect(() => {
+  document.body.setAttribute("data-theme", `${theme}`);
+}, [theme]);
+
+  const selectedChild = children.find((c) => c.id === selectedChildId) || children[0];
+  const pendingPrizesCount = selectedChild?.pendingPrizes?.length ?? 0;
+  const pendingMissionsCount =
+    selectedChild?.missions?.filter((m) => m.status === "pending")?.length ?? 0;
 
   const toggleTheme = () => {
-    const themes = [Theme.DEEP_PURPLE, Theme.CLASSIC_DARK, Theme.PASTEL_MINT, Theme.EMERALD_NIGHT];
-    const currentIndex = themes.indexOf(theme);
-    setTheme(themes[(currentIndex + 1) % themes.length]);
+    // твой код toggleTheme как был
   };
 
   const handleUpdateChild = (updated: Child) => {
@@ -117,7 +131,7 @@ useEffect(() => {
       </header>
 
       {/* Контент */}
-     <main className="flex-1 overflow-y-auto scrollArea max-w-3xl mx-auto px-6 mt-6">
+<main className="flex-1 overflow-y-auto scrollArea max-w-3xl mx-auto px-6 mt-6 pb-40">
   {renderContent()}
 </main>
 
