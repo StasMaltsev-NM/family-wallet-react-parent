@@ -85,6 +85,17 @@ useEffect(() => {
       if (selectedChildId === id) setSelectedChildId(newChildren[0].id);
     }
   };
+useEffect(() => {
+  const TEST_INVITE_CODE = "SRFK4A1C";
+
+  import("./services/api")
+    .then((mod) => {
+      console.log("API MODULE EXPORTS:", Object.keys(mod));
+      return mod.probeChildrenList(TEST_INVITE_CODE);
+    })
+    .then((res) => console.log("PROBE CHILDREN LIST:", res))
+    .catch((err) => console.error("PROBE FAIL:", err));
+}, []);
 
   const renderContent = () => {
     switch (activeTab) {
