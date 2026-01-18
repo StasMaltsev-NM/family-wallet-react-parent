@@ -61,6 +61,7 @@ export interface Child {
   balance: Balance;
   inviteCode: string;
   missions: Mission[];
+  apiChildId?: string; // <-- связь с backend child_id (child_001, child_002, ...)
   activities: Activity[];
   pendingPrizes: Prize[];
 }

@@ -1,188 +1,308 @@
+// App.tsx (FW-REACT-PARENT-COPY)
+// Цель: 1 источник истины для UI (children) + мост из API tasks -> missions,
+// чтобы вкладка "Миссии" показывала реальные задания и бейджи считались от API.
 
-import React, { useState, useEffect } from 'react';
-import { Theme, Tab, Child } from './types';
-import { INITIAL_CHILDREN } from './constants';
-import ChildSwitcher from './components/ChildSwitcher';
-import Dashboard from './components/Dashboard';
-import Missions from './components/Missions';
-import Shop from './components/Shop';
-import AIAssistant from './components/AIAssistant';
-import SettingsModal from './components/SettingsModal';
-import AddChildScreen from './components/AddChildScreen';
-import { 
-  LayoutDashboard, 
-  Target, 
-  ShoppingBag, 
-  Sparkles, 
-  Settings, 
-  Palette 
-} from 'lucide-react';
+import React, { useEffect, useMemo, useState } from "react";
+import { Theme, Tab, Child } from "./types";
+import { INITIAL_CHILDREN } from "./constants";
 
+import ChildSwitcher from "./components/ChildSwitcher";
+import Dashboard from "./components/Dashboard";
+import Missions from "./components/Missions";
+import Shop from "./components/Shop";
+import AIAssistant from "./components/AIAssistant";
+import SettingsModal from "./components/SettingsModal";
+import AddChildScreen from "./components/AddChildScreen";
+
+import {
+  LayoutDashboard,
+  Target,
+  ShoppingBag,
+  Sparkles,
+  Settings,
+  Palette,
+} from "lucide-react";
+
+import { parentApi } from "./services/api";
+
+// MVP: пока жестко. Потом вынесем в env / tg initData.
+const PARENT_CODE = "SRFK4A1C";
+
+// backend task.status -> UI mission.status (Missions ждёт 'pending' для "на проверке")
+function mapTaskStatusToMissionStatus(taskStatus: string) {
+  if (taskStatus === "WAITING") return "pending";
+  if (taskStatus === "CONFIRMED") return "approved";
+  return "assigned";
+}
+
+// Матчинг задач к ребёнку (чтобы не зависеть от совпадения id)
+function taskBelongsToChild(task: any, child: any): boolean {
+  // 1. Основной матч: backend child_id === ui apiChildId
+  if (child?.apiChildId && task?.child_id) {
+    return task.child_id === child.apiChildId;
+  }
+
+  // 2. Запасной матч: если вдруг совпадают id
+  if (task?.child_id && child?.id) {
+    return task.child_id === child.id;
+  }
+
+  // 3. ВРЕМЕННЫЙ MVP-МОСТ: сравнение по имени ребёнка
+  if (
+    typeof task?.child_name === "string" &&
+    typeof child?.name === "string" &&
+    task.child_name.trim().toLowerCase() ===
+      child.name.trim().toLowerCase()
+  ) {
+    return true;
+  }
+
+  return false;
+}
 const App: React.FC = () => {
   const [theme, setTheme] = useState<Theme>(Theme.DEEP_PURPLE);
   const [activeTab, setActiveTab] = useState<Tab>(Tab.DASHBOARD);
+
+  // База UI (не перезатираем её данными API - только "накладываем" missions сверху)
   const [children, setChildren] = useState<Child[]>(INITIAL_CHILDREN);
-  const [selectedChildId, setSelectedChildId] = useState<string>(INITIAL_CHILDREN[0].id);
+  const [selectedChildId, setSelectedChildId] = useState<string>(
+    INITIAL_CHILDREN[0]?.id
+  );
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAddChildOpen, setIsAddChildOpen] = useState(false);
 
-// 1) Telegram full-screen + анти-сворачивание
-useEffect(() => {
-  // @ts-ignore
-  const tg = window.Telegram?.WebApp;
+  // API задачи (источник истины для миссий на этом шаге)
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [apiError, setApiError] = useState<string | null>(null);
 
-  if (tg) {
-    tg.ready();
-    tg.expand();
-    tg.disableVerticalSwipes?.();
-  }
+  // 1) Telegram full-screen + анти-сворачивание
+  useEffect(() => {
+    // @ts-ignore
+    const tg = window.Telegram?.WebApp;
 
-  document.documentElement.style.height = "100%";
-  document.body.style.height = "100%";
-  document.body.style.overflow = "hidden";
+    if (tg) {
+      tg.ready();
+      tg.expand();
+      tg.disableVerticalSwipes?.();
+    }
 
-  return () => {
-    document.documentElement.style.height = "";
-    document.body.style.height = "";
-    document.body.style.overflow = "";
+    document.documentElement.style.height = "100%";
+    document.body.style.height = "100%";
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.documentElement.style.height = "";
+      document.body.style.height = "";
+      document.body.style.overflow = "";
+    };
+  }, []);
+
+  // 2) Тема
+  useEffect(() => {
+    document.body.setAttribute("data-theme", `${theme}`);
+  }, [theme]);
+
+  // 3) Загрузка API: whoami + tasks
+  const refreshTasks = async () => {
+    try {
+      setApiError(null);
+
+      const who = await parentApi.whoami(PARENT_CODE);
+      console.log("PARENT WHOAMI:", who);
+
+      const resp = await parentApi.getTasks(PARENT_CODE);
+      const nextTasks = resp?.tasks ?? [];
+      setTasks(nextTasks);
+
+      console.log("PARENT TASKS count:", nextTasks.length);
+      console.table(nextTasks.slice(0, 5));
+    } catch (e: any) {
+      const msg = e?.message || String(e);
+      setApiError(msg);
+      console.error("PARENT API FAIL:", e);
+    }
   };
-}, []);
 
-// 2) PROBE backend роутов (без Authorization, чтобы НЕ было CORS preflight)
-useEffect(() => {
-  import("./services/api")
-    .then((m) => {
-      console.log("API MODULE EXPORTS:", Object.keys(m));
-      return m.probeParentChildren(); // без токена
-    })
-    .then((res) => console.log("PROBE RESULT:", res))
-    .catch((err) => console.error("PROBE FAIL:", err));
-}, []);
+  useEffect(() => {
+    refreshTasks();
+  }, []);
 
-// 3) тема (как было)
-useEffect(() => {
-  document.body.setAttribute("data-theme", `${theme}`);
-}, [theme]);
+  // 4) Мост: создаём uiChildren = дети, у которых missions построены из tasks API
+const uiChildren: Child[] = useMemo(() => {
+  return children.map((c: any) => {
+    const childTasks = Array.isArray(tasks)
+      ? tasks.filter((t) => taskBelongsToChild(t, c))
+      : [];
 
-  const selectedChild = children.find((c) => c.id === selectedChildId) || children[0];
-  const pendingPrizesCount = selectedChild?.pendingPrizes?.length ?? 0;
+    const apiMissions = childTasks.map((t: any) => ({
+      id: t.id,
+      title: t.title,
+      reward: Number(t.reward_amount ?? 0),
+      status: mapTaskStatusToMissionStatus(t.status),
+      category: "api",
+      isRecurring: Boolean(t.recurring),
+      description: t.description ?? "",
+      icon: t.icon ?? "✅",
+      _raw: t,
+    }));
+
+    return {
+      ...c,
+      missions: apiMissions,
+    } as Child;
+  });
+}, [children, tasks]);
+
+  const selectedChild: Child = useMemo(() => {
+    return (
+      uiChildren.find((c: any) => c.id === selectedChildId) || uiChildren[0]
+    );
+  }, [uiChildren, selectedChildId]);
+
+  const pendingPrizesCount = (selectedChild as any)?.pendingPrizes?.length ?? 0;
   const pendingMissionsCount =
-    selectedChild?.missions?.filter((m) => m.status === "pending")?.length ?? 0;
+    (selectedChild as any)?.missions?.filter((m: any) => m.status === "pending")
+      ?.length ?? 0;
 
   const toggleTheme = () => {
-    // твой код toggleTheme как был
+    // оставь твою реализацию (если была). Сейчас заглушка не ломает приложение.
+    setTheme((prev) =>
+      prev === Theme.DEEP_PURPLE ? Theme.DEEP_BLUE : Theme.DEEP_PURPLE
+    );
   };
 
   const handleUpdateChild = (updated: Child) => {
-    setChildren(prev => prev.map(c => c.id === updated.id ? updated : c));
+    // обновляем базовых детей (uiChildren пересоберётся автоматически)
+    setChildren((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
   };
 
   const handleDeleteChild = (id: string) => {
-    const newChildren = children.filter(c => c.id !== id);
+    const newChildren = children.filter((c) => (c as any).id !== id);
     if (newChildren.length > 0) {
       setChildren(newChildren);
-      if (selectedChildId === id) setSelectedChildId(newChildren[0].id);
+      if (selectedChildId === id) setSelectedChildId((newChildren[0] as any).id);
     }
   };
-useEffect(() => {
-  const TEST_INVITE_CODE = "SRFK4A1C";
-
-  import("./services/api")
-    .then((mod) => {
-      console.log("API MODULE EXPORTS:", Object.keys(mod));
-      return mod.probeChildrenList(TEST_INVITE_CODE);
-    })
-    .then((res) => console.log("PROBE CHILDREN LIST:", res))
-    .catch((err) => console.error("PROBE FAIL:", err));
-}, []);
 
   const renderContent = () => {
     switch (activeTab) {
       case Tab.DASHBOARD:
-        return <Dashboard child={selectedChild} onUpdateChild={handleUpdateChild} />;
-      case Tab.MISSIONS:
-        return <Missions child={selectedChild} allChildren={children} onUpdateChild={handleUpdateChild} />;
+        return (
+          <>
+            {apiError ? (
+              <div className="mb-4 text-sm text-rose-400 whitespace-pre-wrap">
+                API error: {apiError}
+              </div>
+            ) : null}
+            <Dashboard child={selectedChild} onUpdateChild={handleUpdateChild} />
+          </>
+        );
+
+case Tab.MISSIONS:
+  return (
+    <Missions
+      // КРИТИЧНО: передаём ребёнка ИЗ uiChildren, а не из children
+      child={
+        uiChildren.find((c) => c.id === selectedChildId) || uiChildren[0]
+      }
+      allChildren={uiChildren}
+      onUpdateChild={handleUpdateChild}
+    />
+  );
+
       case Tab.SHOP:
-        return <Shop allChildren={children} />;
+        return <Shop allChildren={uiChildren} />;
+
       case Tab.AI_ASSISTANT:
         return <AIAssistant child={selectedChild} />;
+
       default:
         return <Dashboard child={selectedChild} onUpdateChild={handleUpdateChild} />;
     }
   };
 
   return (
-<div className="h-screen flex flex-col transition-colors duration-500 bg-black text-white">      {/* Шапка */}
+    <div className="h-screen flex flex-col transition-colors duration-500 bg-black text-white">
       <header className="max-w-3xl mx-auto px-6 pt-5 pb-2 sticky top-0 z-40 bg-black">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-black tracking-tighter">Family Wallet</h1>
+
           <div className="flex gap-4">
-            <button 
+            <button
               onClick={toggleTheme}
               className="p-2.5 rounded-full bg-white/5 text-[var(--text-muted)] hover:text-[var(--primary)] transition-all border border-white/5"
+              title="Сменить тему"
             >
               <Palette size={20} />
             </button>
-            <button 
+
+            <button
+              onClick={refreshTasks}
+              className="p-2.5 rounded-full bg-white/5 text-[var(--text-muted)] hover:text-[var(--primary)] transition-all border border-white/5"
+              title="Обновить из API"
+            >
+              ↻
+            </button>
+
+            <button
               onClick={() => setIsSettingsOpen(true)}
               className="p-2.5 rounded-full bg-white/5 text-[var(--text-muted)] hover:text-[var(--primary)] transition-all border border-white/5"
+              title="Настройки"
             >
               <Settings size={20} />
             </button>
           </div>
         </div>
-        
-        <ChildSwitcher 
-          children={children} 
-          selectedId={selectedChildId} 
-          onSelect={setSelectedChildId} 
+
+        <ChildSwitcher
+          children={uiChildren}
+          selectedId={selectedChildId}
+          onSelect={setSelectedChildId}
           onAdd={() => setIsAddChildOpen(true)}
         />
       </header>
 
-      {/* Контент */}
-<main className="flex-1 overflow-y-auto scrollArea max-w-3xl mx-auto px-6 mt-6 pb-40">
-  {renderContent()}
-</main>
+      <main className="flex-1 overflow-y-auto scrollArea max-w-3xl mx-auto px-6 mt-6 pb-40">
+        {renderContent()}
+      </main>
 
-      {/* Нижняя навигация */}
       <div className="fixed bottom-8 left-0 right-0 z-50 px-6">
         <nav className="max-w-3xl mx-auto bg-white/[0.04] backdrop-blur-3xl border border-white/10 rounded-[2.5rem] py-4 px-8 shadow-[0_25px_60px_rgba(0,0,0,0.8)] flex items-center justify-between transition-all duration-500">
-          <NavButton 
-            active={activeTab === Tab.DASHBOARD} 
-            onClick={() => setActiveTab(Tab.DASHBOARD)} 
-            icon={<LayoutDashboard size={24} />} 
-            label="Главная" 
+          <NavButton
+            active={activeTab === Tab.DASHBOARD}
+            onClick={() => setActiveTab(Tab.DASHBOARD)}
+            icon={<LayoutDashboard size={24} />}
+            label="Главная"
             badgeCount={pendingPrizesCount + pendingMissionsCount}
           />
-          <NavButton 
-            active={activeTab === Tab.MISSIONS} 
-            onClick={() => setActiveTab(Tab.MISSIONS)} 
-            icon={<Target size={24} />} 
-            label="Миссии" 
+          <NavButton
+            active={activeTab === Tab.MISSIONS}
+            onClick={() => setActiveTab(Tab.MISSIONS)}
+            icon={<Target size={24} />}
+            label="Миссии"
           />
-          <NavButton 
-            active={activeTab === Tab.SHOP} 
-            onClick={() => setActiveTab(Tab.SHOP)} 
-            icon={<ShoppingBag size={24} />} 
-            label="Магазин" 
+          <NavButton
+            active={activeTab === Tab.SHOP}
+            onClick={() => setActiveTab(Tab.SHOP)}
+            icon={<ShoppingBag size={24} />}
+            label="Магазин"
           />
-          <NavButton 
-            active={activeTab === Tab.AI_ASSISTANT} 
-            onClick={() => setActiveTab(Tab.AI_ASSISTANT)} 
-            icon={<Sparkles size={24} />} 
-            label="ИИ" 
+          <NavButton
+            active={activeTab === Tab.AI_ASSISTANT}
+            onClick={() => setActiveTab(Tab.AI_ASSISTANT)}
+            icon={<Sparkles size={24} />}
+            label="ИИ"
           />
         </nav>
       </div>
 
       {isSettingsOpen && (
-        <SettingsModal 
-          children={children} 
+        <SettingsModal
+          children={children}
           setChildren={setChildren}
           onDeleteChild={handleDeleteChild}
-          onClose={() => setIsSettingsOpen(false)} 
+          onClose={() => setIsSettingsOpen(false)}
           onOpenAddChild={() => {
             setIsSettingsOpen(false);
             setIsAddChildOpen(true);
@@ -191,11 +311,11 @@ useEffect(() => {
       )}
 
       {isAddChildOpen && (
-        <AddChildScreen 
-          onCancel={() => setIsAddChildOpen(false)} 
+        <AddChildScreen
+          onCancel={() => setIsAddChildOpen(false)}
           onAdd={(newChild) => {
-            setChildren(prev => [...prev, newChild]);
-            setSelectedChildId(newChild.id);
+            setChildren((prev) => [...prev, newChild]);
+            setSelectedChildId((newChild as any).id);
             setIsAddChildOpen(false);
           }}
         />
@@ -212,10 +332,20 @@ interface NavButtonProps {
   badgeCount?: number;
 }
 
-const NavButton: React.FC<NavButtonProps> = ({ active, onClick, icon, label, badgeCount = 0 }) => (
-  <button 
+const NavButton: React.FC<NavButtonProps> = ({
+  active,
+  onClick,
+  icon,
+  label,
+  badgeCount = 0,
+}) => (
+  <button
     onClick={onClick}
-    className={`relative flex flex-col items-center justify-center gap-1 transition-all duration-300 ${active ? 'text-[var(--primary)] scale-110' : 'text-[var(--text-muted)] opacity-50 hover:opacity-100'}`}
+    className={`relative flex flex-col items-center justify-center gap-1 transition-all duration-300 ${
+      active
+        ? "text-[var(--primary)] scale-110"
+        : "text-[var(--text-muted)] opacity-50 hover:opacity-100"
+    }`}
   >
     <div className="relative">
       {icon}
@@ -225,7 +355,9 @@ const NavButton: React.FC<NavButtonProps> = ({ active, onClick, icon, label, bad
         </span>
       )}
     </div>
-    <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>
+    <span className="text-[10px] font-black uppercase tracking-widest">
+      {label}
+    </span>
   </button>
 );
 
