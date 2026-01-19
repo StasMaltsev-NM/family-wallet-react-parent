@@ -25,10 +25,13 @@ import { editImageWithAI } from '../services/gemini';
 interface Props {
   child: Child;
   onUpdateChild: (child: Child) => void;
+
+  // API-экшен из App.tsx
+  onTaskAction: (taskId: string, action: "confirm" | "reject") => Promise<void>;
 }
 
-const Dashboard: React.FC<Props> = ({ child, onUpdateChild }) => {
-  const [isEditingDream, setIsEditingDream] = useState(false);
+const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction }) => {
+    const [isEditingDream, setIsEditingDream] = useState(false);
   const [editPrompt, setEditPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   
@@ -190,9 +193,23 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild }) => {
                     <p className="text-lg text-amber-400 font-black">+{m.reward} <Star size={16} fill="currentColor" className="inline mb-1" /></p>
                   </div>
                   <div className="flex gap-4">
-                    <button onClick={() => handleMissionAction(m.id, 'confirm')} className="w-14 h-14 bg-emerald-500 text-black rounded-[1.3rem] flex items-center justify-center shadow-xl shadow-emerald-500/20 active:scale-95 transition-all"><Check size={30} strokeWidth={3} /></button>
-                    <button onClick={() => handleMissionAction(m.id, 'reject')} className="w-14 h-14 bg-rose-500/10 text-rose-500 rounded-[1.3rem] flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all border border-rose-500/20"><X size={24} strokeWidth={3} /></button>
-                  </div>
+<button
+  onClick={async () => {
+    await onTaskAction(m.id, "confirm");
+  }}
+  className="w-14 h-14 bg-emerald-500 text-black rounded-[1.3rem] flex items-center justify-center shadow-xl shadow-emerald-500/20 active:scale-95 transition-all"
+>
+  <Check size={30} strokeWidth={3} />
+</button>
+
+<button
+  onClick={async () => {
+    await onTaskAction(m.id, "reject");
+  }}
+  className="w-14 h-14 bg-rose-500/10 text-rose-500 rounded-[1.3rem] flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all border border-rose-500/20"
+>
+  <X size={24} strokeWidth={3} />
+</button>                  </div>
                 </div>
               ))
             )}

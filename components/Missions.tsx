@@ -12,19 +12,17 @@ import {
   CalendarDays,
   Users,
 } from "lucide-react";
-import { parentApi } from "../services/api";
-
 interface Props {
   child: Child;
   allChildren: Child[];
   onUpdateChild: (child: Child) => void;
 
-  // --- МОСТ К BACKEND (источник истины) ---
-  parentCode: string; // X-Invite-Code родителя
-  tasks: ApiTask[]; // реальные задачи из backend
-  onRefresh: () => void; // обновить tasks из backend (GET /api/tasks/list)
+  // API-действие приходит из App.tsx
+  onTaskAction: (
+    taskId: string,
+    action: "confirm" | "reject" | "delete"
+  ) => Promise<void>;
 }
-
 // Реальная структура задач из backend
 export type ApiTask = {
   id: string;
@@ -59,7 +57,7 @@ function mapApiStatusToUi(status: ApiTask["status"]): "pending" | "active" | "co
   return "confirmed";
 }
 
-const Missions: React.FC<Props> = ({ child, allChildren, onUpdateChild, parentCode, tasks, onRefresh }) => {
+const Missions: React.FC<Props> = ({ child, allChildren, onUpdateChild, onTaskAction }) => {
   const [isAdding, setIsAdding] = useState(false);
 
   // UI-форма (пока это локальная форма, создание через API сделаем отдельным шагом)
@@ -73,61 +71,28 @@ const Missions: React.FC<Props> = ({ child, allChildren, onUpdateChild, parentCo
   });
 
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>([child.id]);
+const sortedMissions: Mission[] = useMemo(() => {
+  const list = Array.isArray(child.missions) ? child.missions : [];
 
-  // --- МОСТ: берем миссии из backend, фильтруем по выбранному ребенку ---
-  // ВАЖНО: это НЕ трогает твой UI, только источник данных
-  const sortedMissions: Mission[] = useMemo(() => {
-    const list = (tasks ?? [])
-      .filter((t) => t.child_id === child.id)
-      .map((t) => {
-        const uiStatus = mapApiStatusToUi(t.status);
-
-        // Приводим к твоему Mission формату для UI
-        const m: Mission = {
-          id: t.id,
-          title: t.title,
-          reward: t.reward_amount,
-          status: uiStatus, // "pending" | "active" | "confirmed"
-          category: "chores",
-          isRecurring: false,
-          isTeam: false,
-          assignedToNames: undefined,
-        };
-
-        // Если backend отдает child_name - покажем как “команда: имя”
-        // (это не ломает контракт, просто подпись)
-        if (t.child_name) {
-          (m as any).isTeam = true;
-          (m as any).assignedToNames = [t.child_name];
-        }
-
-        return m;
-      })
-      .sort((a, b) => {
-        if (a.status === "pending" && b.status !== "pending") return -1;
-        if (a.status !== "pending" && b.status === "pending") return 1;
-        return 0;
-      });
-
-    return list;
-  }, [tasks, child.id]);
+  return [...list].sort((a: any, b: any) => {
+    if (a.status === "pending" && b.status !== "pending") return -1;
+    if (a.status !== "pending" && b.status === "pending") return 1;
+    return 0;
+  });
+}, [child.missions]);
 
   // --- МОСТ: confirm/reject через API ---
-  const handleAction = async (missionId: string, action: "confirm" | "reject" | "delete") => {
-    // delete пока нельзя: нет подтвержденного endpoint
-    if (action === "delete") {
-      alert("Удаление пока отключено: нет API endpoint. Сделаем после согласования backend.");
-      return;
-    }
-
-    try {
-      await parentApi.confirmTask(parentCode, missionId, action);
-      await onRefresh(); // критично: синхронизация обоих экранов после любого действия
-    } catch (e) {
-      console.error(e);
-      alert(String(e));
-    }
-  };
+const handleAction = async (
+  missionId: string,
+  action: "confirm" | "reject" | "delete"
+) => {
+  try {
+    await onTaskAction(missionId, action);
+  } catch (e) {
+    console.error(e);
+    alert(String(e));
+  }
+};
 
   // --- UI helpers (твои, оставляем) ---
   const toggleChildSelection = (id: string) => {

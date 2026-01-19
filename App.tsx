@@ -31,8 +31,8 @@ const PARENT_CODE = "SRFK4A1C";
 // backend task.status -> UI mission.status (Missions ждёт 'pending' для "на проверке")
 function mapTaskStatusToMissionStatus(taskStatus: string) {
   if (taskStatus === "WAITING") return "pending";
-  if (taskStatus === "CONFIRMED") return "approved";
-  return "assigned";
+  if (taskStatus === "CONFIRMED") return "active";
+  return "active";
 }
 
 // Матчинг задач к ребёнку (чтобы не зависеть от совпадения id)
@@ -73,8 +73,9 @@ const App: React.FC = () => {
   const [isAddChildOpen, setIsAddChildOpen] = useState(false);
 
   // API задачи (источник истины для миссий на этом шаге)
-  const [tasks, setTasks] = useState<any[]>([]);
-  const [apiError, setApiError] = useState<string | null>(null);
+const [tasks, setTasks] = useState<any[]>([]);
+const [apiChildren, setApiChildren] = useState<any[]>([]);
+const [apiError, setApiError] = useState<string | null>(null);
 
   // 1) Telegram full-screen + анти-сворачивание
   useEffect(() => {
@@ -108,12 +109,15 @@ const App: React.FC = () => {
     try {
       setApiError(null);
 
-      const who = await parentApi.whoami(PARENT_CODE);
-      console.log("PARENT WHOAMI:", who);
+const kidsResp = await parentApi.listChildren(PARENT_CODE);
+const nextKids = kidsResp?.children ?? [];
+setApiChildren(nextKids);
 
-      const resp = await parentApi.getTasks(PARENT_CODE);
-      const nextTasks = resp?.tasks ?? [];
-      setTasks(nextTasks);
+const resp = await parentApi.getTasks(PARENT_CODE);
+const nextTasks = resp?.tasks ?? [];
+setTasks(nextTasks);
+console.log("PARENT CHILDREN count:", nextKids.length);
+console.table(nextKids.slice(0, 5));
 
       console.log("PARENT TASKS count:", nextTasks.length);
       console.table(nextTasks.slice(0, 5));
@@ -123,19 +127,71 @@ const App: React.FC = () => {
       console.error("PARENT API FAIL:", e);
     }
   };
+// 3.1) Экшен для Missions: подтвердить/отклонить/удалить задачу через API
+const onTaskAction = async (
+  taskId: string,
+  action: "confirm" | "reject" | "delete"
+) => {
+  if (action === "delete") {
+    alert("Удаление через API пока не подключено. Используй confirm/reject.");
+    return;
+  }
 
+  await parentApi.confirmTask(PARENT_CODE, taskId, action);
+  await refreshTasks(); // критично: сразу перетянуть свежие tasks из backend
+};
   useEffect(() => {
     refreshTasks();
   }, []);
+  useEffect(() => {
+  if (!Array.isArray(apiChildren) || apiChildren.length === 0) return;
+
+setChildren((prev) => {
+  return prev.map((uiChild: any) => {
+    // 0) ЗАМОК: если уже склеен - больше не трогаем вообще
+    // (иначе при каждом refresh можешь случайно "снести" apiChildId)
+    if (uiChild.apiChildId) return uiChild;
+
+    // 1) Временный матч по имени (MVP)
+    const byName = apiChildren.find((k: any) => {
+      const a = String(k?.name ?? "").trim().toLowerCase();
+      const b = String(uiChild?.name ?? "").trim().toLowerCase();
+      return a && b && a === b;
+    });
+
+    if (!byName) return uiChild;
+
+    // 2) Склеиваем ОДИН раз
+    return {
+      ...uiChild,
+      apiChildId: byName.id,               // фиксируем навсегда
+      name: byName.name ?? uiChild.name,   // можно обновлять имя
+      // avatar: byName.avatar ?? uiChild.avatar  // если позже появится на backend
+    };
+  });
+});
+}, [apiChildren]);
+useEffect(() => {
+  const misha = (children as any[]).find((c) => c.name === "Миша");
+  console.log("UI child Misha apiChildId:", misha?.apiChildId);
+}, [children]);
 
   // 4) Мост: создаём uiChildren = дети, у которых missions построены из tasks API
 const uiChildren: Child[] = useMemo(() => {
   return children.map((c: any) => {
-    const childTasks = Array.isArray(tasks)
-      ? tasks.filter((t) => taskBelongsToChild(t, c))
-      : [];
+    const apiId = c.apiChildId; // после "склейки" тут будет child_001
+const childTasks = Array.isArray(tasks)
+  ? tasks.filter((t: any) => {
+      if (!(t?.child_id && apiId && t.child_id === apiId)) return false;
+
+      // ВАЖНО: подтвержденные не показываем в "Миссии" и на главной,
+      // иначе визуально кажется, что "подтверждение не сработало"
+      return t.status !== "CONFIRMED";
+    })
+  : [];
 
     const apiMissions = childTasks.map((t: any) => ({
+      
       id: t.id,
       title: t.title,
       reward: Number(t.reward_amount ?? 0),
@@ -146,7 +202,11 @@ const uiChildren: Child[] = useMemo(() => {
       icon: t.icon ?? "✅",
       _raw: t,
     }));
-
+if (c.name === "Миша") {
+  console.log("Misha apiChildId:", c.apiChildId);
+  console.log("Misha tasks matched:", childTasks.length);
+  console.log("Misha missions mapped:", apiMissions.length);
+}    
     return {
       ...c,
       missions: apiMissions,
@@ -168,7 +228,7 @@ const uiChildren: Child[] = useMemo(() => {
   const toggleTheme = () => {
     // оставь твою реализацию (если была). Сейчас заглушка не ломает приложение.
     setTheme((prev) =>
-      prev === Theme.DEEP_PURPLE ? Theme.DEEP_BLUE : Theme.DEEP_PURPLE
+      prev === Theme.DEEP_PURPLE ? Theme.CLASSIC_DARK : Theme.PASTEL_MINT
     );
   };
 
@@ -195,20 +255,21 @@ const uiChildren: Child[] = useMemo(() => {
                 API error: {apiError}
               </div>
             ) : null}
-            <Dashboard child={selectedChild} onUpdateChild={handleUpdateChild} />
-          </>
+<Dashboard
+  child={selectedChild}
+  onUpdateChild={handleUpdateChild}
+  onTaskAction={onTaskAction}
+/>          </>
         );
 
 case Tab.MISSIONS:
   return (
-    <Missions
-      // КРИТИЧНО: передаём ребёнка ИЗ uiChildren, а не из children
-      child={
-        uiChildren.find((c) => c.id === selectedChildId) || uiChildren[0]
-      }
-      allChildren={uiChildren}
-      onUpdateChild={handleUpdateChild}
-    />
+<Missions
+  child={selectedChild}
+  allChildren={uiChildren}
+  onUpdateChild={handleUpdateChild}
+  onTaskAction={onTaskAction}
+/>
   );
 
       case Tab.SHOP:
@@ -218,8 +279,13 @@ case Tab.MISSIONS:
         return <AIAssistant child={selectedChild} />;
 
       default:
-        return <Dashboard child={selectedChild} onUpdateChild={handleUpdateChild} />;
-    }
+return (
+  <Dashboard
+    child={selectedChild}
+    onUpdateChild={handleUpdateChild}
+    onTaskAction={onTaskAction}
+  />
+);    }
   };
 
   return (
