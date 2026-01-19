@@ -1,7 +1,7 @@
 const API_URL =
   import.meta.env.VITE_API_URL ||
   "https://family-wallet-api.maltsevstas21.workers.dev";
-
+console.log("[api.ts loaded] API_URL =", API_URL);
 type Json = Record<string, any>;
 
 async function request<T>(
@@ -9,69 +9,101 @@ async function request<T>(
   options: RequestInit = {},
   inviteCode?: string
 ): Promise<T> {
-  const headers: Record<string, string> = {
-    ...(options.headers as Record<string, string> | undefined),
-  };
+  const url = `${API_URL}${path}`;
 
-  if (inviteCode) headers["X-Invite-Code"] = inviteCode;
-  if (!headers["Content-Type"] && options.method && options.method !== "GET") {
-    headers["Content-Type"] = "application/json";
+  // 1) Собираем headers правильно (работает и с объектом, и с Headers)
+  const headers = new Headers(options.headers || undefined);
+
+  // базовые
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
   }
 
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+  // ключевое
+  if (inviteCode) {
+    headers.set("X-Invite-Code", inviteCode);
+  }
 
-  const text = await res.text();
-  let data: any = null;
+  // 2) ЛОГИ ДО fetch (иначе при падении fetch ты их не увидишь)
+  console.log("[API request]", url);
+  console.log("[API invite]", inviteCode);
+  console.log("[API headers]", Object.fromEntries(headers.entries()));
+
+  let res: Response;
   try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = text;
+    res = await fetch(url, {
+      ...options,
+      headers,
+    });
+  } catch (e) {
+    console.error("[API fetch failed]", url, e);
+    throw e;
   }
 
   if (!res.ok) {
-    const msg =
-      (data && (data.error || data.message)) || `HTTP ${res.status}: ${text}`;
-    throw new Error(msg);
+    const text = await res.text().catch(() => "");
+    throw new Error(`API ${res.status} ${res.statusText}: ${text || url}`);
   }
 
-  return data as T;
+  return (await res.json()) as T;
 }
 
 // --- Parent API ---
 export const parentApi = {
-  getTasks(inviteCode: string) { /* ... */ },
-  confirmTask(inviteCode: string, taskId: string, action: string) { /* ... */ },
+confirmTask(inviteCode: string, taskId: string, action: "confirm" | "reject") {
+  return request<{ message: string; task?: any }>(
+    "/api/tasks/confirm",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        task_id: taskId,
+        action, // "confirm" | "reject"
+      }),
+    },
+    inviteCode
+  );
+},
+createTask(
+  inviteCode: string,
+  payload: {
+    child_id: string;
+    title: string;
+    description?: string;
+    reward_amount: number;
+    icon?: string;
+    status?: "IDLE" | "WAITING";
+    recurring?: any;
+    recurring_days?: any;
+  }
+) {
+  return request<{ message?: string; task: any }>(
+    "/api/tasks/create",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        status: "IDLE",   // ключевое: чтобы появилось у ребёнка в списке активных
+        icon: "✅",
+        ...payload,
+      }),
+    },
+    inviteCode
+  );
+},
   whoami(inviteCode: string) { /* ... */ },
-  listChildren(inviteCode: string) { /* ... */ },
-  getChild(inviteCode: string, childId: string) { /* ... */ },
-
-  // ✅ Создать задачу в backend (чтобы она появилась у ребенка)
-  createTask(
-    inviteCode: string,
-    payload: {
-      child_id: string;
-      title: string;
-      description?: string;
-      reward_amount: number;
-      icon?: string;
-      status?: "IDLE" | "WAITING";
-      recurring?: any;
-      recurring_days?: any;
-    }
-  ) {
-    return request<{ task: any; status?: string }>(
-      "/api/tasks/create",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          status: "WAITING",
-          icon: "✅",
-          ...payload,
-        }),
-      },
-      inviteCode
-    );
-  },
+listChildren(inviteCode: string) {
+  return request<{ children: any[] }>(
+    "/api/children/list",
+    { method: "GET" },
+    inviteCode
+  );
+},
+getTasks(inviteCode: string) {
+  return request<{ tasks: any[] }>(
+    "/api/tasks/list",
+    { method: "GET" },
+    inviteCode
+  );
+},
 };
 // --- Kid API ---
 export const kidApi = {

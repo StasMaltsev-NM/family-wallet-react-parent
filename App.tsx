@@ -188,47 +188,41 @@ useEffect(() => {
   console.log("UI child Misha apiChildId:", misha?.apiChildId);
 }, [children]);
 
-// 4) Мост: uiChildren = UI-дети, где missions берём из API tasks + баланс берём из API children
+// 4) Мост: uiChildren = UI-дети, но missions + balance берём из API
 const uiChildren: Child[] = useMemo(() => {
   return children.map((c: any) => {
-    const apiId = c.apiChildId; // после "склейки" тут будет child_001
+    const apiId = c.apiChildId;
 
-    // 4.1) Найдём этого ребёнка в ответе /api/children/list, чтобы взять актуальный баланс
-    const apiKid =
-      Array.isArray(apiChildren) && apiId
-        ? apiChildren.find((k: any) => k.id === apiId)
-        : null;
+    // найдём этого ребёнка в apiChildren, чтобы взять balance/pending_balance
+    const apiKid = apiId
+      ? apiChildren.find((k: any) => k?.id === apiId)
+      : null;
 
-    // 4.2) Отфильтруем задачи по ребёнку + не показываем CONFIRMED
+    // баланс берём из API, но не ломаем структуру UI
+    const nextBalance = {
+      confirmed: Number(apiKid?.balance ?? c.balance?.confirmed ?? 0),
+      pending: Number(apiKid?.pending_balance ?? c.balance?.pending ?? 0),
+    };
+
+    // задачи только этого ребёнка + ВАЖНО: CONFIRMED не показываем в миссиях
     const childTasks = Array.isArray(tasks)
       ? tasks.filter((t: any) => {
-          if (!apiId) return false;
-          if (!t?.child_id) return false;
-          if (t.child_id !== apiId) return false;
-
-          // подтвержденные скрываем из списков (иначе кажется что "не исчезло")
-return true;
+          if (!(t?.child_id && apiId && t.child_id === apiId)) return false;
+          return t.status !== "CONFIRMED";
         })
       : [];
 
-    // 4.3) tasks -> missions
     const apiMissions = childTasks.map((t: any) => ({
       id: t.id,
       title: t.title,
       reward: Number(t.reward_amount ?? 0),
-      status: mapTaskStatusToMissionStatus(t.status),
+      status: t.status === "WAITING" ? "pending" : "active", // WAITING -> на проверке, IDLE -> активная
       category: "api",
       isRecurring: Boolean(t.recurring),
       description: t.description ?? "",
       icon: t.icon ?? "✅",
       _raw: t,
     }));
-
-    // 4.4) Актуальный баланс из API (если есть), иначе оставляем UI-значения
-    const nextBalance = {
-      confirmed: Number(apiKid?.balance ?? c.balance?.confirmed ?? 0),
-      pending: Number(apiKid?.pending_balance ?? c.balance?.pending ?? 0),
-    };
 
     if (c.name === "Миша") {
       console.log("Misha apiChildId:", apiId);

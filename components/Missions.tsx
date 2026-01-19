@@ -148,6 +148,7 @@ const handleAddMission = async () => {
           description: null,
           reward_amount: Number(newMission.reward),
           icon: "✅",
+          status: "IDLE",
           recurring: newMission.isRecurring ? true : null,
           recurring_days:
             newMission.isRecurring && newMission.recurrenceType === "custom"
