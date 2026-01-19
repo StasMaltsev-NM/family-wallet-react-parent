@@ -39,36 +39,40 @@ async function request<T>(
 
 // --- Parent API ---
 export const parentApi = {
-  getTasks(inviteCode: string) {
-    return request<{ tasks: any[] }>("/api/tasks/list", { method: "GET" }, inviteCode);
-  },
+  getTasks(inviteCode: string) { /* ... */ },
+  confirmTask(inviteCode: string, taskId: string, action: string) { /* ... */ },
+  whoami(inviteCode: string) { /* ... */ },
+  listChildren(inviteCode: string) { /* ... */ },
+  getChild(inviteCode: string, childId: string) { /* ... */ },
 
-  confirmTask(inviteCode: string, taskId: string, action: "confirm" | "reject") {
-    return request<{ message: string; status: string; new_balance?: number }>(
-      "/api/tasks/confirm",
+  // ✅ Создать задачу в backend (чтобы она появилась у ребенка)
+  createTask(
+    inviteCode: string,
+    payload: {
+      child_id: string;
+      title: string;
+      description?: string;
+      reward_amount: number;
+      icon?: string;
+      status?: "IDLE" | "WAITING";
+      recurring?: any;
+      recurring_days?: any;
+    }
+  ) {
+    return request<{ task: any; status?: string }>(
+      "/api/tasks/create",
       {
         method: "POST",
-        body: JSON.stringify({ task_id: taskId, action }),
+        body: JSON.stringify({
+          status: "WAITING",
+          icon: "✅",
+          ...payload,
+        }),
       },
       inviteCode
     );
   },
-
-  whoami(inviteCode: string) {
-    return request<any>("/api/auth/whoami", { method: "GET" }, inviteCode);
-  },
-
-  // список детей (для родителя)
-  listChildren(inviteCode: string) {
-    return request<{ children: any[] }>("/api/children/list", { method: "GET" }, inviteCode);
-  },
-
-  // детали ребёнка
-  getChild(inviteCode: string, childId: string) {
-    return request<{ child: any }>(`/api/children/${childId}`, { method: "GET" }, inviteCode);
-  },
 };
-
 // --- Kid API ---
 export const kidApi = {
   getTasks(inviteCode: string) {

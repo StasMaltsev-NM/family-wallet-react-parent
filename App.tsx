@@ -24,6 +24,13 @@ import {
 } from "lucide-react";
 
 import { parentApi } from "./services/api";
+// TEMP DEBUG: чтобы дергать API из DevTools Console (потом удалим)
+declare global {
+  interface Window {
+    parentApi?: any;
+  }
+}
+window.parentApi = parentApi;
 
 // MVP: пока жестко. Потом вынесем в env / tg initData.
 const PARENT_CODE = "SRFK4A1C";
@@ -143,55 +150,69 @@ const onTaskAction = async (
   useEffect(() => {
     refreshTasks();
   }, []);
-  useEffect(() => {
+useEffect(() => {
   if (!Array.isArray(apiChildren) || apiChildren.length === 0) return;
 
-setChildren((prev) => {
-  return prev.map((uiChild: any) => {
-    // 0) ЗАМОК: если уже склеен - больше не трогаем вообще
-    // (иначе при каждом refresh можешь случайно "снести" apiChildId)
-    if (uiChild.apiChildId) return uiChild;
+  setChildren((prev) =>
+    prev.map((uiChild: any) => {
+      // 0) ЗАМОК: если уже склеен - больше не трогаем
+      if (uiChild.apiChildId) return uiChild;
 
-    // 1) Временный матч по имени (MVP)
-    const byName = apiChildren.find((k: any) => {
-      const a = String(k?.name ?? "").trim().toLowerCase();
-      const b = String(uiChild?.name ?? "").trim().toLowerCase();
-      return a && b && a === b;
-    });
+      // 1) MVP-матч по имени: UI "Миша" -> API "Стас" не совпадет
+      // поэтому делаем дополнительный матч по inviteCode, если он есть
+      const byInvite =
+        uiChild.inviteCode
+          ? apiChildren.find((k: any) => String(k?.invite_code ?? "") === String(uiChild.inviteCode ?? ""))
+          : null;
 
-    if (!byName) return uiChild;
+      const byName = apiChildren.find((k: any) => {
+        const a = String(k?.name ?? "").trim().toLowerCase();
+        const b = String(uiChild?.name ?? "").trim().toLowerCase();
+        return a && b && a === b;
+      });
 
-    // 2) Склеиваем ОДИН раз
-    return {
-      ...uiChild,
-      apiChildId: byName.id,               // фиксируем навсегда
-      name: byName.name ?? uiChild.name,   // можно обновлять имя
-      // avatar: byName.avatar ?? uiChild.avatar  // если позже появится на backend
-    };
-  });
-});
+      const apiKid = byInvite || byName;
+      if (!apiKid) return uiChild;
+
+      return {
+        ...uiChild,
+        apiChildId: apiKid.id,
+        // имя НЕ перетираем, иначе "Миша" станет "Стас" и ты офигеешь :)
+        // name: uiChild.name,
+      };
+    })
+  );
 }, [apiChildren]);
 useEffect(() => {
   const misha = (children as any[]).find((c) => c.name === "Миша");
   console.log("UI child Misha apiChildId:", misha?.apiChildId);
 }, [children]);
 
-  // 4) Мост: создаём uiChildren = дети, у которых missions построены из tasks API
+// 4) Мост: uiChildren = UI-дети, где missions берём из API tasks + баланс берём из API children
 const uiChildren: Child[] = useMemo(() => {
   return children.map((c: any) => {
     const apiId = c.apiChildId; // после "склейки" тут будет child_001
-const childTasks = Array.isArray(tasks)
-  ? tasks.filter((t: any) => {
-      if (!(t?.child_id && apiId && t.child_id === apiId)) return false;
 
-      // ВАЖНО: подтвержденные не показываем в "Миссии" и на главной,
-      // иначе визуально кажется, что "подтверждение не сработало"
-      return t.status !== "CONFIRMED";
-    })
-  : [];
+    // 4.1) Найдём этого ребёнка в ответе /api/children/list, чтобы взять актуальный баланс
+    const apiKid =
+      Array.isArray(apiChildren) && apiId
+        ? apiChildren.find((k: any) => k.id === apiId)
+        : null;
 
+    // 4.2) Отфильтруем задачи по ребёнку + не показываем CONFIRMED
+    const childTasks = Array.isArray(tasks)
+      ? tasks.filter((t: any) => {
+          if (!apiId) return false;
+          if (!t?.child_id) return false;
+          if (t.child_id !== apiId) return false;
+
+          // подтвержденные скрываем из списков (иначе кажется что "не исчезло")
+return true;
+        })
+      : [];
+
+    // 4.3) tasks -> missions
     const apiMissions = childTasks.map((t: any) => ({
-      
       id: t.id,
       title: t.title,
       reward: Number(t.reward_amount ?? 0),
@@ -202,23 +223,36 @@ const childTasks = Array.isArray(tasks)
       icon: t.icon ?? "✅",
       _raw: t,
     }));
-if (c.name === "Миша") {
-  console.log("Misha apiChildId:", c.apiChildId);
-  console.log("Misha tasks matched:", childTasks.length);
-  console.log("Misha missions mapped:", apiMissions.length);
-}    
+
+    // 4.4) Актуальный баланс из API (если есть), иначе оставляем UI-значения
+    const nextBalance = {
+      confirmed: Number(apiKid?.balance ?? c.balance?.confirmed ?? 0),
+      pending: Number(apiKid?.pending_balance ?? c.balance?.pending ?? 0),
+    };
+
+    if (c.name === "Миша") {
+      console.log("Misha apiChildId:", apiId);
+      console.log("Misha tasks matched:", childTasks.length);
+      console.log("Misha missions mapped:", apiMissions.length);
+      console.log("Misha balance (api/ui):", apiKid?.balance, apiKid?.pending_balance, nextBalance);
+    }
+
     return {
       ...c,
+      balance: nextBalance,
       missions: apiMissions,
     } as Child;
   });
-}, [children, tasks]);
+}, [children, tasks, apiChildren]);
+useEffect(() => {
+  const misha = (uiChildren as any[]).find((c) => c.name === "Миша");
+  console.log("UI child Misha apiChildId:", misha?.apiChildId);
+  console.log("UI child Misha missions:", misha?.missions?.length);
+}, [uiChildren]);
 
-  const selectedChild: Child = useMemo(() => {
-    return (
-      uiChildren.find((c: any) => c.id === selectedChildId) || uiChildren[0]
-    );
-  }, [uiChildren, selectedChildId]);
+const selectedChild: Child = useMemo(() => {
+  return uiChildren.find((c: any) => c.id === selectedChildId) || uiChildren[0];
+}, [uiChildren, selectedChildId]);
 
   const pendingPrizesCount = (selectedChild as any)?.pendingPrizes?.length ?? 0;
   const pendingMissionsCount =
@@ -264,12 +298,14 @@ if (c.name === "Миша") {
 
 case Tab.MISSIONS:
   return (
-<Missions
-  child={selectedChild}
-  allChildren={uiChildren}
-  onUpdateChild={handleUpdateChild}
-  onTaskAction={onTaskAction}
-/>
+    <Missions
+      child={selectedChild}
+      allChildren={uiChildren}
+      onUpdateChild={handleUpdateChild}
+      onTaskAction={onTaskAction}
+      parentCode={PARENT_CODE}
+      onRefresh={refreshTasks}
+    />
   );
 
       case Tab.SHOP:

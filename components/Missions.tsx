@@ -12,16 +12,20 @@ import {
   CalendarDays,
   Users,
 } from "lucide-react";
+import { parentApi } from "../services/api";
 interface Props {
   child: Child;
   allChildren: Child[];
   onUpdateChild: (child: Child) => void;
 
-  // API-действие приходит из App.tsx
-  onTaskAction: (
-    taskId: string,
-    action: "confirm" | "reject" | "delete"
-  ) => Promise<void>;
+  // API-действие приходит из App.tsx (confirm/reject)
+  onTaskAction: (taskId: string, action: "confirm" | "reject" | "delete") => Promise<void>;
+
+  // нужно для createTask
+  parentCode: string;
+
+  // чтобы после create/confirm/reject тянуть свежие tasks
+  onRefresh: () => Promise<void> | void;
 }
 // Реальная структура задач из backend
 export type ApiTask = {
@@ -57,7 +61,7 @@ function mapApiStatusToUi(status: ApiTask["status"]): "pending" | "active" | "co
   return "confirmed";
 }
 
-const Missions: React.FC<Props> = ({ child, allChildren, onUpdateChild, onTaskAction }) => {
+const Missions: React.FC<Props> = ({ child, allChildren, onUpdateChild, onTaskAction, parentCode, onRefresh }) => {
   const [isAdding, setIsAdding] = useState(false);
 
   // UI-форма (пока это локальная форма, создание через API сделаем отдельным шагом)
@@ -108,32 +112,65 @@ const handleAction = async (
 
   // ВАЖНО: создание миссии пока локальное - чтобы UI не сломать.
   // Реальный create через backend вынесем следующим шагом, когда подтвердим endpoint.
-  const handleAddMission = () => {
-    if (!newMission.title || !newMission.reward || selectedChildIds.length === 0) return;
+const handleAddMission = async () => {
+  if (!newMission.title || !newMission.reward || selectedChildIds.length === 0) return;
 
-    const teamNames = allChildren.filter((c) => selectedChildIds.includes(c.id)).map((c) => c.name);
+  // 1) Готовим миссию (локальный fallback, чтобы UI не ломался)
+  const teamNames = allChildren
+    .filter((c: any) => selectedChildIds.includes(c.id))
+    .map((c: any) => c.name);
 
-    const missionToAdd: Mission = {
-      id: Math.random().toString(36).substr(2, 9),
-      title: newMission.title,
-      reward: Number(newMission.reward),
-      status: "active",
-      category: "chores",
-      isRecurring: newMission.isRecurring,
-      isTeam: newMission.isTeam,
-      assignedToNames: newMission.isTeam ? teamNames : undefined,
-    };
+  const missionToAdd: Mission = {
+    id: Math.random().toString(36).substr(2, 9),
+    title: newMission.title,
+    reward: Number(newMission.reward),
+    status: "active",
+    category: "chores",
+    isRecurring: newMission.isRecurring,
+    isTeam: newMission.isTeam,
+    assignedToNames: newMission.isTeam ? teamNames : undefined,
+  };
 
-    // Локально обновляем (как было)
-    allChildren.forEach((c) => {
-      if (selectedChildIds.includes(c.id)) {
-        onUpdateChild({
-          ...c,
-          missions: [...c.missions, missionToAdd],
+  try {
+    // 2) Если createTask уже есть - создаём в backend по каждому выбранному ребёнку
+    const api: any = parentApi as any;
+
+    if (typeof api?.createTask === "function") {
+      for (const uiId of selectedChildIds) {
+        const uiChild: any = allChildren.find((c: any) => c.id === uiId);
+        const childIdForApi = uiChild?.apiChildId || uiChild?.id;
+
+        if (!childIdForApi) continue;
+
+        await api.createTask(parentCode, {
+          child_id: childIdForApi,
+          title: newMission.title,
+          description: null,
+          reward_amount: Number(newMission.reward),
+          icon: "✅",
+          recurring: newMission.isRecurring ? true : null,
+          recurring_days:
+            newMission.isRecurring && newMission.recurrenceType === "custom"
+              ? newMission.selectedDays
+              : null,
         });
       }
-    });
 
+      // подтягиваем свежие задачи из API, чтобы миссия появилась из tasks
+      await onRefresh();
+    } else {
+      // 3) Fallback: если API метода нет - обновляем локально, как раньше
+      allChildren.forEach((c: any) => {
+        if (selectedChildIds.includes(c.id)) {
+          onUpdateChild({
+            ...c,
+            missions: [...(c.missions || []), missionToAdd],
+          });
+        }
+      });
+    }
+
+    // 4) Сброс формы
     setIsAdding(false);
     setNewMission({
       title: "",
@@ -144,7 +181,11 @@ const handleAction = async (
       selectedDays: [],
     });
     setSelectedChildIds([child.id]);
-  };
+  } catch (e) {
+    console.error(e);
+    alert(String(e));
+  }
+};
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
