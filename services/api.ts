@@ -9,8 +9,10 @@ async function request<T>(
   options: RequestInit = {},
   inviteCode?: string
 ): Promise<T> {
-  const url = `${API_URL}${path}`;
-
+const isGet = String(options.method ?? "GET").toUpperCase() === "GET";
+const url = isGet
+  ? `${API_URL}${path}${path.includes("?") ? "&" : "?"}ts=${Date.now()}`
+  : `${API_URL}${path}`;
   // 1) Собираем headers правильно (работает и с объектом, и с Headers)
   const headers = new Headers(options.headers || undefined);
 
@@ -31,9 +33,12 @@ async function request<T>(
 
   let res: Response;
   try {
+    const method = String(options.method ?? "GET").toUpperCase();
+
     res = await fetch(url, {
       ...options,
       headers,
+      cache: method === "GET" ? "no-store" : options.cache,
     });
   } catch (e) {
     console.error("[API fetch failed]", url, e);

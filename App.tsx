@@ -2,7 +2,7 @@
 // Цель: 1 источник истины для UI (children) + мост из API tasks -> missions,
 // чтобы вкладка "Миссии" показывала реальные задания и бейджи считались от API.
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { Theme, Tab, Child } from "./types";
 import { INITIAL_CHILDREN } from "./constants";
 
@@ -31,6 +31,7 @@ declare global {
   }
 }
 window.parentApi = parentApi;
+console.log("[APP FILE LOADED]", new Date().toISOString());
 
 // MVP: пока жестко. Потом вынесем в env / tg initData.
 const PARENT_CODE = "SRFK4A1C";
@@ -67,6 +68,9 @@ function taskBelongsToChild(task: any, child: any): boolean {
   return false;
 }
 const App: React.FC = () => {
+  console.log("[APP RENDER]");
+  const BUILD = import.meta.env.VITE_BUILD_ID || "no-build-id";
+console.log("BUILD_ID:", BUILD);
   const [theme, setTheme] = useState<Theme>(Theme.DEEP_PURPLE);
   const [activeTab, setActiveTab] = useState<Tab>(Tab.DASHBOARD);
 
@@ -83,8 +87,10 @@ const App: React.FC = () => {
 const [tasks, setTasks] = useState<any[]>([]);
 const [apiChildren, setApiChildren] = useState<any[]>([]);
 const [apiError, setApiError] = useState<string | null>(null);
-
-  // 1) Telegram full-screen + анти-сворачивание
+const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
+const BUILD_ID = import.meta.env.VITE_BUILD_ID || "no-build-id";
+console.log("[BUILD_ID]", BUILD_ID);
+// 1) Telegram full-screen + анти-сворачивание
   useEffect(() => {
     // @ts-ignore
     const tg = window.Telegram?.WebApp;
@@ -111,29 +117,60 @@ const [apiError, setApiError] = useState<string | null>(null);
     document.body.setAttribute("data-theme", `${theme}`);
   }, [theme]);
 
-  // 3) Загрузка API: whoami + tasks
-  const refreshTasks = async () => {
+// ✅ lastSyncAt должен обновляться даже если API упал
+// поэтому не ставь setLastSyncAt только в try - ставим в finally
+const refreshTasks = useCallback(async () => {
+  try {
+    console.log("[auto-refresh] tick", new Date().toLocaleTimeString());
+    setApiError(null);
+
+    const kidsResp = await parentApi.listChildren(PARENT_CODE);
+    const nextKids = kidsResp?.children ?? [];
+    setApiChildren(nextKids);
+
+    const resp = await parentApi.getTasks(PARENT_CODE);
+    const nextTasks = resp?.tasks ?? [];
+    setTasks(nextTasks);
+
+    console.log("[auto-refresh] children/tasks:", nextKids.length, nextTasks.length);
+  } catch (e: any) {
+    const msg = e?.message || String(e);
+    setApiError(msg);
+    console.error("PARENT API FAIL:", e);
+  } finally {
+    setLastSyncAt(Date.now());
+  }
+}, [PARENT_CODE]);
+
+// держим актуальную refreshTasks, чтобы setInterval всегда звал свежую версию
+const refreshTasksRef = useRef<() => Promise<void>>(async () => {});
+useEffect(() => {
+  refreshTasksRef.current = refreshTasks;
+}, [refreshTasks]);
+
+// авто-рефреш: сразу + каждые 3 секунды (неубиваемый)
+useEffect(() => {
+  let alive = true;
+  console.log("[auto-refresh] mounted");
+
+  const tick = async () => {
+    if (!alive) return;
     try {
-      setApiError(null);
-
-const kidsResp = await parentApi.listChildren(PARENT_CODE);
-const nextKids = kidsResp?.children ?? [];
-setApiChildren(nextKids);
-
-const resp = await parentApi.getTasks(PARENT_CODE);
-const nextTasks = resp?.tasks ?? [];
-setTasks(nextTasks);
-console.log("PARENT CHILDREN count:", nextKids.length);
-console.table(nextKids.slice(0, 5));
-
-      console.log("PARENT TASKS count:", nextTasks.length);
-      console.table(nextTasks.slice(0, 5));
-    } catch (e: any) {
-      const msg = e?.message || String(e);
-      setApiError(msg);
-      console.error("PARENT API FAIL:", e);
+      await refreshTasksRef.current();
+    } catch (e) {
+      console.warn("[auto-refresh] tick failed", e);
     }
   };
+
+  tick(); // первый раз сразу
+  const id = window.setInterval(tick, 3000);
+
+  return () => {
+    alive = false;
+    window.clearInterval(id);
+    console.log("[auto-refresh] cleanup");
+  };
+}, []);
 // 3.1) Экшен для Missions: подтвердить/отклонить/удалить задачу через API
 const onTaskAction = async (
   taskId: string,
@@ -147,9 +184,7 @@ const onTaskAction = async (
   await parentApi.confirmTask(PARENT_CODE, taskId, action);
   await refreshTasks(); // критично: сразу перетянуть свежие tasks из backend
 };
-  useEffect(() => {
-    refreshTasks();
-  }, []);
+
 useEffect(() => {
   if (!Array.isArray(apiChildren) || apiChildren.length === 0) return;
 
@@ -340,7 +375,12 @@ return (
             >
               ↻
             </button>
-
+                    <span className="text-[10px] text-white/50 ml-2">
+<span className="text-[10px] text-white/50 ml-2">
+  build {BUILD}
+</span>
+  {lastSyncAt ? `sync ${new Date(lastSyncAt).toLocaleTimeString()}` : "sync -"}
+</span>
             <button
               onClick={() => setIsSettingsOpen(true)}
               className="p-2.5 rounded-full bg-white/5 text-[var(--text-muted)] hover:text-[var(--primary)] transition-all border border-white/5"
