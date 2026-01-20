@@ -89,7 +89,14 @@ const [apiChildren, setApiChildren] = useState<any[]>([]);
 const [apiError, setApiError] = useState<string | null>(null);
 const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
 const BUILD_ID = import.meta.env.VITE_BUILD_ID || "no-build-id";
-console.log("[BUILD_ID]", BUILD_ID);
+
+useEffect(() => {
+  console.log("[BUILD_ID]", BUILD_ID);
+  console.log("[APP EFFECT MOUNTED]");
+}, [BUILD_ID]);
+useEffect(() => {
+  console.log("[APP EFFECT MOUNTED]");
+}, []);
 // 1) Telegram full-screen + анти-сворачивание
   useEffect(() => {
     // @ts-ignore
@@ -238,14 +245,15 @@ const uiChildren: Child[] = useMemo(() => {
       confirmed: Number(apiKid?.balance ?? c.balance?.confirmed ?? 0),
       pending: Number(apiKid?.pending_balance ?? c.balance?.pending ?? 0),
     };
-
+if (c.name === "Миша") {
+  console.log("[DEBUG Misha] apiId:", apiId, "tasks.len:", Array.isArray(tasks) ? tasks.length : "no-tasks");
+  console.log("[DEBUG Misha] first task child_ids:", (Array.isArray(tasks) ? tasks.slice(0, 3).map(t => t?.child_id) : []));
+  console.log("[DEBUG Misha] first task statuses:", (Array.isArray(tasks) ? tasks.slice(0, 3).map(t => t?.status) : []));
+}
     // задачи только этого ребёнка + ВАЖНО: CONFIRMED не показываем в миссиях
-    const childTasks = Array.isArray(tasks)
-      ? tasks.filter((t: any) => {
-          if (!(t?.child_id && apiId && t.child_id === apiId)) return false;
-          return t.status !== "CONFIRMED";
-        })
-      : [];
+const childTasks = Array.isArray(tasks)
+  ? tasks.filter((t: any) => taskBelongsToChild(t, c) && t.status !== "CONFIRMED")
+  : [];
 
     const apiMissions = childTasks.map((t: any) => ({
       id: t.id,

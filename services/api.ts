@@ -56,17 +56,17 @@ const url = isGet
 // --- Parent API ---
 export const parentApi = {
 confirmTask(inviteCode: string, taskId: string, action: "confirm" | "reject") {
-  return request<{ message: string; task?: any }>(
+  return request<{ message: string; task?: any; child?: any }>(
     "/api/tasks/confirm",
     {
       method: "POST",
-      body: JSON.stringify({
-        task_id: taskId,
-        action, // "confirm" | "reject"
-      }),
+      body: JSON.stringify({ task_id: taskId, action }),
     },
     inviteCode
-  );
+  ).then((r) => {
+    console.log("[confirmTask response]", r);
+    return r;
+  });
 },
 createTask(
   inviteCode: string,
