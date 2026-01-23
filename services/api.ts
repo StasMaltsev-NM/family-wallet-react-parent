@@ -109,6 +109,26 @@ getTasks(inviteCode: string) {
     inviteCode
   );
 },
+// Награды
+createReward(inviteCode: string, title: string, price: number, description?: string) {
+  return request<{ reward_id: string }>("/api/rewards/create", {
+    method: "POST",
+    body: JSON.stringify({ title, price, description }),
+  }, inviteCode);
+},
+
+listRewards(inviteCode: string) {
+  return request<{ rewards: any[] }>("/api/rewards/list", {
+    method: "GET",
+  }, inviteCode);
+},
+
+deliverReward(inviteCode: string, rewardId: string, childId: string) {
+  return request<{ message: string }>("/api/rewards/deliver", {
+    method: "POST",
+    body: JSON.stringify({ reward_id: rewardId, child_id: childId }),
+  }, inviteCode);
+},
 };
 // --- Kid API ---
 export const kidApi = {
