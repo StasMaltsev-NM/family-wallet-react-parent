@@ -15,9 +15,9 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode }) => {
   const [newPrize, setNewPrize] = useState({ name: '', cost: '', isPermanent: true });
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>(allChildren.map(c => c.id));
   const [prizes, setPrizes] = useState<Prize[]>(PRIZES);
-useEffect(() => {
-  parentApi.listRewards(inviteCode).then(res => {
-    console.log('[Shop] loaded rewards:', res.rewards);
+  useEffect(() => {
+    parentApi.listRewards(inviteCode).then(res => {
+      console.log('[Shop] loaded rewards:', res.rewards);
     // TODO: setPrizes из res.rewards
   }).catch(err => {
     console.error('[Shop] listRewards error:', err);
