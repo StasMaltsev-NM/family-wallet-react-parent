@@ -1,18 +1,28 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Child, Prize } from '../types';
 import { PRIZES } from '../constants';
+import { parentApi } from '../services/api';
 import { Plus, ShoppingCart, Lock, Box, Check, Star, Trash2, Info } from 'lucide-react';
 
 interface Props {
   allChildren: Child[];
+  inviteCode: string;
 }
 
-const Shop: React.FC<Props> = ({ allChildren }) => {
+const Shop: React.FC<Props> = ({ allChildren, inviteCode }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [newPrize, setNewPrize] = useState({ name: '', cost: '', isPermanent: true });
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>(allChildren.map(c => c.id));
   const [prizes, setPrizes] = useState<Prize[]>(PRIZES);
+useEffect(() => {
+  parentApi.listRewards(inviteCode).then(res => {
+    console.log('[Shop] loaded rewards:', res.rewards);
+    // TODO: setPrizes из res.rewards
+  }).catch(err => {
+    console.error('[Shop] listRewards error:', err);
+  });
+}, [inviteCode]);
 
   const toggleChildSelection = (id: string) => {
     setSelectedChildIds(prev => 
