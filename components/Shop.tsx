@@ -13,7 +13,9 @@ interface Props {
 const Shop: React.FC<Props> = ({ allChildren, inviteCode }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [newPrize, setNewPrize] = useState({ name: '', cost: '', isPermanent: true });
-  const [selectedChildIds, setSelectedChildIds] = useState<string[]>(allChildren.map(c => c.id));
+  const [selectedChildIds, setSelectedChildIds] = useState<string[]>(
+    allChildren.map(c => c.apiChildId).filter((id): id is string => !!id && id !== 'undefined')
+  );
   const [prizes, setPrizes] = useState<Prize[]>(PRIZES);
 useEffect(() => {
   parentApi.listRewards(inviteCode).then(res => {
