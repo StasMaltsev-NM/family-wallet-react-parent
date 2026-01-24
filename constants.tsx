@@ -4,44 +4,86 @@ import { Child, Mission, Prize, Activity } from './types';
 export const INITIAL_CHILDREN: Child[] = [
   {
     id: '1',
-    name: 'Миша',
+    name: 'Стас',
     apiChildId: "child_001",
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Misha',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Stas',
     dream: {
-      title: 'LEGO Star Wars Сокол Тысячелетия',
-      price: 800,
-      current: 450,
-      image: 'https://picsum.photos/seed/lego/400/300'
+      title: 'PlayStation 5',
+      price: 50000,
+      current: 0,
+      image: 'https://picsum.photos/seed/ps5/400/300'
     },
-    balance: { confirmed: 450, pending: 120 },
-    inviteCode: 'MISH-9923-KIDS',
-    missions: [
-      { id: 'm1', title: 'Убраться в комнате', reward: 5, status: 'active', category: 'chores', isRecurring: true },
-      { id: 'm2', title: 'Математика 1ч', reward: 15, status: 'pending', category: 'education', isRecurring: false }
-    ],
-    activities: [
-      { id: 'a1', type: 'mission', description: 'Успехи в математике', amount: 15, date: 'Сегодня, 14:30' }
-    ],
-    pendingPrizes: [
-      { id: 'p1', name: 'Киновечер', cost: 20, image: 'https://picsum.photos/seed/movie/200/200', isOneTime: true }
-    ]
+    balance: { confirmed: 0, pending: 0 },
+    inviteCode: '',
+    missions: [],
+    activities: [],
+    pendingPrizes: []
   },
   {
     id: '2',
-    name: 'Алиса',
-    apiChildId: "child_002",
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Alisa',
+    name: 'Юра',
+    apiChildId: "child_1767409257985",
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Yura',
     dream: {
-      title: 'Электрогитара Fender',
-      price: 1200,
-      current: 300,
-      image: 'https://picsum.photos/seed/guitar/400/300'
+      title: 'Велосипед',
+      price: 30000,
+      current: 0,
+      image: 'https://picsum.photos/seed/bike/400/300'
     },
-    balance: { confirmed: 300, pending: 50 },
-    inviteCode: 'ALIS-1122-ROCK',
-    missions: [
-      { id: 'm3', title: 'Выгулять собаку', reward: 10, status: 'active', category: 'chores', isRecurring: true }
-    ],
+    balance: { confirmed: 0, pending: 0 },
+    inviteCode: '',
+    missions: [],
+    activities: [],
+    pendingPrizes: []
+  },
+  {
+    id: '3',
+    name: 'Аксинья',
+    apiChildId: "child_1767409278693",
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Aksinya',
+    dream: {
+      title: 'Кукла',
+      price: 5000,
+      current: 0,
+      image: 'https://picsum.photos/seed/doll/400/300'
+    },
+    balance: { confirmed: 0, pending: 0 },
+    inviteCode: '',
+    missions: [],
+    activities: [],
+    pendingPrizes: []
+  },
+  {
+    id: '4',
+    name: 'Свят',
+    apiChildId: "child_1767409303711",
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Svyat',
+    dream: {
+      title: 'Лего',
+      price: 15000,
+      current: 0,
+      image: 'https://picsum.photos/seed/lego/400/300'
+    },
+    balance: { confirmed: 0, pending: 0 },
+    inviteCode: '',
+    missions: [],
+    activities: [],
+    pendingPrizes: []
+  },
+  {
+    id: '5',
+    name: 'тест',
+    apiChildId: "child_1768149494902",
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Test',
+    dream: {
+      title: 'Игрушка',
+      price: 3000,
+      current: 0,
+      image: 'https://picsum.photos/seed/toy/400/300'
+    },
+    balance: { confirmed: 0, pending: 0 },
+    inviteCode: '',
+    missions: [],
     activities: [],
     pendingPrizes: []
   }
