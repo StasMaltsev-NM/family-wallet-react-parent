@@ -110,10 +110,24 @@ getTasks(inviteCode: string) {
   );
 },
 // Награды
-createReward(inviteCode: string, title: string, price: number, description?: string) {
+createReward(
+  inviteCode: string,
+  childId: string,
+  title: string,
+  price: number,
+  description?: string,
+  isPermanent: boolean = true
+) {
   return request<{ reward_id: string }>("/api/rewards/create", {
     method: "POST",
-    body: JSON.stringify({ title, price, description }),
+    body: JSON.stringify({
+      child_id: childId,
+      title,
+      price,
+      description: description || '',
+      icon: '🎁',
+      is_permanent: isPermanent ? 1 : 0
+    }),
   }, inviteCode);
 },
 
