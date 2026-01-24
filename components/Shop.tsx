@@ -17,14 +17,18 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>([]);
   const [prizes, setPrizes] = useState<Prize[]>(PRIZES);
 useEffect(() => {
+  console.log('[Shop] currentChild:', currentChild);
   parentApi.listRewards(inviteCode).then(res => {
     console.log('[Shop] loaded rewards:', res.rewards);
     
 const mapped = res.rewards
 .filter((r: any) => {
   if (!currentChild) return true;
-  // Поддержка старых записей с UI id (1, 2) и новых с apiChildId (child_001, child_002)
-  return r.child_id === currentChild.apiChildId || r.child_id === currentChild.id;
+  
+  const match = r.child_id === currentChild.apiChildId || r.child_id === currentChild.id;
+  console.log(`[Shop FILTER] reward: ${r.title}, child_id: ${r.child_id}, currentChild.apiChildId: ${currentChild.apiChildId}, currentChild.id: ${currentChild.id}, match: ${match}`);
+  
+  return match;
 })
   .map((r: any) => ({
     id: r.id,
@@ -40,7 +44,7 @@ const mapped = res.rewards
   }).catch(err => {
     console.error('[Shop] listRewards error:', err);
   });
-}, [inviteCode]);
+}, [inviteCode, currentChild]);
 
   const toggleChildSelection = (id: string) => {
     setSelectedChildIds(prev => 
