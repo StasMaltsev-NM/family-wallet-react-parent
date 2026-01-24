@@ -13,9 +13,7 @@ interface Props {
 const Shop: React.FC<Props> = ({ allChildren, inviteCode }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [newPrize, setNewPrize] = useState({ name: '', cost: '', isPermanent: true });
-  const [selectedChildIds, setSelectedChildIds] = useState<string[]>(
-    allChildren.map(c => c.apiChildId).filter((id): id is string => !!id && id !== 'undefined')
-  );
+  const [selectedChildIds, setSelectedChildIds] = useState<string[]>([]);
   const [prizes, setPrizes] = useState<Prize[]>(PRIZES);
 useEffect(() => {
   parentApi.listRewards(inviteCode).then(res => {
@@ -161,10 +159,10 @@ const handleCreateReward = async () => {
                   {allChildren.map(c => (
                     <button
                       key={c.id}
-                      onClick={() => toggleChildSelection(c.id)}
+                      onClick={() => toggleChildSelection(c.apiChildId || c.id)}
                       className={`
                         flex items-center gap-3 px-5 py-3 rounded-2xl border transition-all duration-300
-                        ${selectedChildIds.includes(c.id) 
+                        ${selectedChildIds.includes(c.apiChildId || c.id) 
                           ? 'bg-[var(--primary)]/20 border-[var(--primary)] text-[var(--primary)] shadow-lg' 
                           : 'bg-white/5 border-transparent text-[var(--text-muted)] opacity-60'
                         }
