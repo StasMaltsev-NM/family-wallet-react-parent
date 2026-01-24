@@ -50,14 +50,28 @@ const mapped = res.rewards
   };
 
 const handleCreateReward = async () => {
+  console.log('[SHOP] CREATE START:', {
+    selectedChildIds,
+    newPrizeName: newPrize.name,
+    newPrizeCost: newPrize.cost,
+    isPermanent: newPrize.isPermanent
+  });
+
   if (selectedChildIds.length === 0) {
     alert('Выберите хотя бы одного ребёнка!');
+    return;
+  }
+  
+  if (!newPrize.name || !newPrize.cost) {
+    alert('Заполните название и цену!');
     return;
   }
   
   try {
     // Создаём награду для КАЖДОГО выбранного ребёнка
     for (const childId of selectedChildIds) {
+      console.log('[SHOP] Creating reward for child:', childId);
+      
       await parentApi.createReward(
         inviteCode,
         childId,
@@ -68,8 +82,12 @@ const handleCreateReward = async () => {
       );
     }
     
+    console.log('[SHOP] Rewards created successfully!');
+    
     // Перезагрузим список наград
     const rewardsRes = await parentApi.listRewards(inviteCode);
+    console.log('[SHOP] Loaded rewards:', rewardsRes);
+    
     const mapped = rewardsRes.rewards.map((r: any) => ({
       id: r.id,
       name: r.title,
@@ -85,9 +103,11 @@ const handleCreateReward = async () => {
     setIsAdding(false);
     setNewPrize({ name: '', cost: '', isPermanent: true });
     
-  } catch (err) {
-    console.error('[Shop CREATE] error:', err);
-    alert('Ошибка создания награды!');
+  } catch (err: any) {
+    console.error('[SHOP] CREATE ERROR:', err);
+    console.error('[SHOP] ERROR MESSAGE:', err?.message);
+    console.error('[SHOP] ERROR RESPONSE:', err?.response);
+    alert(`Ошибка: ${err?.message || 'Неизвестная ошибка'}`);
   }
 };
 
