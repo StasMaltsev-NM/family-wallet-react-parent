@@ -21,7 +21,11 @@ useEffect(() => {
     console.log('[Shop] loaded rewards:', res.rewards);
     
 const mapped = res.rewards
-  .filter((r: any) => !currentChild || r.child_id === currentChild.apiChildId)
+.filter((r: any) => {
+  if (!currentChild) return true;
+  // Поддержка старых записей с UI id (1, 2) и новых с apiChildId (child_001, child_002)
+  return r.child_id === currentChild.apiChildId || r.child_id === currentChild.id;
+})
   .map((r: any) => ({
     id: r.id,
     name: r.title,
