@@ -146,7 +146,7 @@ deliverReward(inviteCode: string, rewardId: string, childId: string) {
 
 deleteReward(inviteCode: string, rewardId: string) {
   return request<{ message: string }>("/api/rewards/delete", {
-    method: "POST",
+    method: "DELETE",  // ← ИСПРАВИЛИ!
     body: JSON.stringify({ reward_id: rewardId }),
   }, inviteCode);
 },
