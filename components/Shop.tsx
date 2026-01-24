@@ -8,9 +8,10 @@ import { Plus, ShoppingCart, Lock, Box, Check, Star, Trash2, Info } from 'lucide
 interface Props {
   allChildren: Child[];
   inviteCode: string;
+  currentChild?: Child;
 }
 
-const Shop: React.FC<Props> = ({ allChildren, inviteCode }) => {
+const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [newPrize, setNewPrize] = useState({ name: '', cost: '', isPermanent: true });
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>([]);
@@ -19,15 +20,17 @@ useEffect(() => {
   parentApi.listRewards(inviteCode).then(res => {
     console.log('[Shop] loaded rewards:', res.rewards);
     
-    const mapped = res.rewards.map((r: any) => ({
-      id: r.id,
-      name: r.title,
-      cost: r.price,
-      image: r.icon 
-        ? `https://em-content.zobj.net/thumbs/120/apple/354/${r.icon.codePointAt(0).toString(16)}.png`
-        : `https://picsum.photos/seed/${r.id}/200/200`,
-      isOneTime: !r.is_permanent  // ← 0 = многоразовая, 1 = разовая
-    }));
+const mapped = res.rewards
+  .filter((r: any) => !currentChild || r.child_id === currentChild.apiChildId)
+  .map((r: any) => ({
+    id: r.id,
+    name: r.title,
+    cost: r.price,
+    image: r.icon 
+      ? `https://em-content.zobj.net/thumbs/120/apple/354/${r.icon.codePointAt(0).toString(16)}.png`
+      : `https://picsum.photos/seed/${r.id}/200/200`,
+    isOneTime: !r.is_permanent
+  }));
     
     setPrizes(mapped);
   }).catch(err => {
@@ -83,8 +86,14 @@ const handleCreateReward = async () => {
   }
 };
 
-  const handleDeletePrize = (id: string) => {
-    setPrizes(prev => prev.filter(p => p.id !== id));
+  const handleDeletePrize = async (id: string) => {
+    try {
+      await parentApi.deleteReward(inviteCode, id);
+      setPrizes(prev => prev.filter(p => p.id !== id));
+    } catch (err) {
+      console.error('[Shop DELETE] error:', err);
+      alert('Ошибка удаления награды!');
+    }
   };
 
   return (

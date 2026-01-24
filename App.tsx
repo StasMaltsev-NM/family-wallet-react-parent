@@ -346,7 +346,7 @@ case Tab.MISSIONS:
   );
 
       case Tab.SHOP:
-return <Shop allChildren={uiChildren} inviteCode={PARENT_CODE} />;
+return <Shop allChildren={uiChildren} inviteCode={PARENT_CODE} currentChild={selectedChild} />;
 
       case Tab.AI_ASSISTANT:
         return <AIAssistant child={selectedChild} />;
