@@ -43,6 +43,48 @@ useEffect(() => {
     );
   };
 
+const handleCreateReward = async () => {
+  if (selectedChildIds.length === 0) {
+    alert('Выберите хотя бы одного ребёнка!');
+    return;
+  }
+  
+  try {
+    // Создаём награду для КАЖДОГО выбранного ребёнка
+    for (const childId of selectedChildIds) {
+      await parentApi.createReward(
+        inviteCode,
+        childId,
+        newPrize.name,
+        parseInt(newPrize.cost),
+        '',
+        newPrize.isPermanent
+      );
+    }
+    
+    // Перезагрузим список наград
+    const rewardsRes = await parentApi.listRewards(inviteCode);
+    const mapped = rewardsRes.rewards.map((r: any) => ({
+      id: r.id,
+      name: r.title,
+      cost: r.price,
+      image: r.icon 
+        ? `https://em-content.zobj.net/thumbs/120/apple/354/${r.icon.codePointAt(0).toString(16)}.png`
+        : `https://picsum.photos/seed/${r.id}/200/200`,
+      isOneTime: !r.is_permanent
+    }));
+    setPrizes(mapped);
+    
+    // Закроем форму и сбросим
+    setIsAdding(false);
+    setNewPrize({ name: '', cost: '', isPermanent: true });
+    
+  } catch (err) {
+    console.error('[Shop CREATE] error:', err);
+    alert('Ошибка создания награды!');
+  }
+};
+
   const handleDeletePrize = (id: string) => {
     setPrizes(prev => prev.filter(p => p.id !== id));
   };
@@ -182,7 +224,7 @@ useEffect(() => {
             <div className="flex gap-4">
               <button onClick={() => setIsAdding(false)} className="flex-1 py-5 text-sm font-black text-[var(--text-muted)] hover:text-white transition-colors uppercase tracking-widest">Отмена</button>
               <button 
-                onClick={() => setIsAdding(false)} 
+                onClick={handleCreateReward}
                 disabled={!newPrize.name || !newPrize.cost}
                 className="btn-primary flex-[2] py-5 text-lg font-black rounded-2xl shadow-xl shadow-[var(--primary)]/30 active:scale-[0.98] disabled:opacity-20 transition-all"
               >
