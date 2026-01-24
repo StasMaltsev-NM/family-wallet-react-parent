@@ -24,11 +24,8 @@ useEffect(() => {
 const mapped = res.rewards
 .filter((r: any) => {
   if (!currentChild) return true;
-  
-  const match = r.child_id === currentChild.apiChildId || r.child_id === currentChild.id;
-  console.log(`[Shop FILTER] reward: ${r.title}, child_id: ${r.child_id}, currentChild.apiChildId: ${currentChild.apiChildId}, currentChild.id: ${currentChild.id}, match: ${match}`);
-  
-  return match;
+  // Фильтруем только по apiChildId (backend id)
+  return r.child_id === currentChild.apiChildId;
 })
   .map((r: any) => ({
     id: r.id,
