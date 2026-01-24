@@ -146,8 +146,15 @@ deliverReward(inviteCode: string, rewardId: string, childId: string) {
 
 deleteReward(inviteCode: string, rewardId: string) {
   return request<{ message: string }>("/api/rewards/delete", {
-    method: "DELETE",  // ← ИСПРАВИЛИ!
+    method: "DELETE",
     body: JSON.stringify({ reward_id: rewardId }),
+  }, inviteCode);
+},
+
+deleteTask(inviteCode: string, taskId: string) {  // ← ДОБАВЬ!
+  return request<{ message: string }>("/api/tasks/delete", {
+    method: "DELETE",
+    body: JSON.stringify({ task_id: taskId }),
   }, inviteCode);
 },
 };

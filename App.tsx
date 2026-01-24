@@ -183,13 +183,13 @@ const onTaskAction = async (
   taskId: string,
   action: "confirm" | "reject" | "delete"
 ) => {
-  if (action === "delete") {
-    alert("Удаление через API пока не подключено. Используй confirm/reject.");
-    return;
-  }
-
+if (action === "delete") {
+  await parentApi.deleteTask(PARENT_CODE, taskId);
+  await refreshTasks();
+  return;
+}
   await parentApi.confirmTask(PARENT_CODE, taskId, action);
-  await refreshTasks(); // критично: сразу перетянуть свежие tasks из backend
+  await refreshTasks();
 };
 
 useEffect(() => {
