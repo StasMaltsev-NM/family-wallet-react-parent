@@ -34,7 +34,7 @@ const mapped = res.rewards
     image: r.icon 
       ? `https://em-content.zobj.net/thumbs/120/apple/354/${r.icon.codePointAt(0).toString(16)}.png`
       : `https://picsum.photos/seed/${r.id}/200/200`,
-    isOneTime: !r.is_permanent
+    isOneTime: r.is_permanent === 0
   }));
     
     setPrizes(mapped);
@@ -77,7 +77,7 @@ const handleCreateReward = async () => {
       image: r.icon 
         ? `https://em-content.zobj.net/thumbs/120/apple/354/${r.icon.codePointAt(0).toString(16)}.png`
         : `https://picsum.photos/seed/${r.id}/200/200`,
-      isOneTime: !r.is_permanent
+      isOneTime: r.is_permanent === 0
     }));
     setPrizes(mapped);
     
