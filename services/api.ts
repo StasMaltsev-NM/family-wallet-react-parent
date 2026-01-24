@@ -143,6 +143,13 @@ deliverReward(inviteCode: string, rewardId: string, childId: string) {
     body: JSON.stringify({ reward_id: rewardId, child_id: childId }),
   }, inviteCode);
 },
+
+deleteReward(inviteCode: string, rewardId: string) {
+  return request<{ message: string }>("/api/rewards/delete", {
+    method: "POST",
+    body: JSON.stringify({ reward_id: rewardId }),
+  }, inviteCode);
+},
 };
 // --- Kid API ---
 export const kidApi = {
