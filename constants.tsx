@@ -29,7 +29,7 @@ export const INITIAL_CHILDREN: Child[] = [
   {
     id: '2',
     name: 'Алиса',
-    apiChildId: "undefined",
+    apiChildId: "child_002",
     avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Alisa',
     dream: {
       title: 'Электрогитара Fender',
