@@ -126,7 +126,7 @@ createReward(
       price,
       description: description || '',
       icon: '🎁',
-      is_permanent: isPermanent ? 0 : 1
+      is_permanent: isPermanent ? 1 : 0
     }),
   }, inviteCode);
 },
