@@ -5,6 +5,7 @@ export const INITIAL_CHILDREN: Child[] = [
   {
     id: '1',
     name: 'Стас',
+    apiChildId: "child_001",
     avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Stas',
     dream: {
       title: 'PlayStation 5',
@@ -21,6 +22,7 @@ export const INITIAL_CHILDREN: Child[] = [
   {
     id: '2',
     name: 'Юра',
+    apiChildId: "child_1767409257985",
     avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Yura',
     dream: {
       title: 'Велосипед',
@@ -37,6 +39,7 @@ export const INITIAL_CHILDREN: Child[] = [
   {
     id: '3',
     name: 'Аксинья',
+    apiChildId: "child_1767409278693",
     avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Aksinya',
     dream: {
       title: 'Кукла',
@@ -53,6 +56,7 @@ export const INITIAL_CHILDREN: Child[] = [
   {
     id: '4',
     name: 'Свят',
+    apiChildId: "child_1767409303711",
     avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Svyat',
     dream: {
       title: 'Лего',
@@ -69,6 +73,7 @@ export const INITIAL_CHILDREN: Child[] = [
   {
     id: '5',
     name: 'тест',
+    apiChildId: "child_1768149494902",
     avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Test',
     dream: {
       title: 'Игрушка',
