@@ -28,16 +28,17 @@ interface Props {
 
   // API-экшен из App.tsx
   onTaskAction: (taskId: string, action: "confirm" | "reject") => Promise<void>;
+  pendingPurchases?: any[];
 }
 
-const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction }) => {
+const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendingPurchases = [] }) => {
     const [isEditingDream, setIsEditingDream] = useState(false);
   const [editPrompt, setEditPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   
   const pendingMissions = child.missions.filter(m => m.status === 'pending');
   const [isMissionsExpanded, setIsMissionsExpanded] = useState(pendingMissions.length > 0);
-  const [isPrizesExpanded, setIsPrizesExpanded] = useState(child.pendingPrizes.length > 0);
+  const [isPrizesExpanded, setIsPrizesExpanded] = useState(pendingPurchases.length > 0);
   const [isActivityExpanded, setIsActivityExpanded] = useState(false);
   const [isMapFullscreen, setIsMapFullscreen] = useState(false);
 
@@ -225,29 +226,29 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction }) => {
               <Gift size={26} />
             </div>
             <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white">Вручить награды</h4>
-            {child.pendingPrizes.length > 0 && <span className="bg-[var(--primary)] text-black text-[12px] font-black px-3 py-1.5 rounded-full shadow-lg">{child.pendingPrizes.length}</span>}
+            {pendingPurchases.length > 0 && <span className="bg-[var(--primary)] text-black text-[12px] font-black px-3 py-1.5 rounded-full shadow-lg">{pendingPurchases.length}</span>}
           </div>
           <ChevronDown size={24} className={`text-[var(--text-muted)] transition-transform duration-500 ${isPrizesExpanded ? 'rotate-180' : ''}`} />
         </button>
         
         {isPrizesExpanded && (
           <div className="p-7 pt-0 space-y-4 animate-in fade-in slide-in-from-top-2">
-            {child.pendingPrizes.length === 0 ? (
+            {pendingPurchases.length === 0 ? (
               <p className="text-center py-6 text-[12px] font-black text-[var(--text-muted)] uppercase tracking-widest">Нет наград к выдаче</p>
             ) : (
-              child.pendingPrizes.map(p => (
+              pendingPurchases.map(p => (
                 <div key={p.id} className="flex items-center gap-6 p-6 bg-white/[0.03] rounded-[2.2rem] border border-white/10 shadow-lg hover:bg-white/[0.05] transition-all">
                   {/* Увеличенная картинка награды */}
                   <div className="relative flex-shrink-0">
-                    <img src={p.image} className="w-20 h-20 rounded-[1.5rem] object-cover border-2 border-white/10 shadow-xl" />
+                    <div className="w-20 h-20 rounded-[1.5rem] flex items-center justify-center text-5xl border-2 border-white/10 shadow-xl bg-white/5">{p.reward_icon}</div>
                   </div>
                   
                   {/* Инфо блок */}
                   <div className="flex-1 min-w-0">
-                    <h5 className="text-xl font-black text-white truncate leading-tight mb-2">{p.name}</h5>
+                    <h5 className="text-xl font-black text-white truncate leading-tight mb-2">{p.reward_title}</h5>
                     <div className="flex flex-col gap-1.5">
                       <div className="flex items-center gap-2 text-lg text-[var(--text-muted)] font-black">
-                        <span>{p.cost}</span>
+                        <span>{p.price}</span>
                         <Star size={18} fill="currentColor" className="text-amber-400" />
                       </div>
                       <div className="flex items-center gap-2 text-amber-400/90 font-black animate-pulse mt-1">

@@ -157,6 +157,12 @@ deleteTask(inviteCode: string, taskId: string) {  // ← ДОБАВЬ!
     body: JSON.stringify({ task_id: taskId }),
   }, inviteCode);
 },
+
+  getChildPurchases(inviteCode: string, childId: string) {
+    return request<{ purchases: any[] }>(`/api/rewards/purchases?child_id=${childId}`, {
+      method: "GET",
+    }, inviteCode);
+  },
 };
 // --- Kid API ---
 export const kidApi = {

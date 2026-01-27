@@ -88,6 +88,7 @@ const [tasks, setTasks] = useState<any[]>([]);
 const [apiChildren, setApiChildren] = useState<any[]>([]);
 const [apiError, setApiError] = useState<string | null>(null);
 const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
+const [childPurchases, setChildPurchases] = useState<Record<string, any[]>>({});
 const BUILD_ID = import.meta.env.VITE_BUILD_ID || "no-build-id";
 
 useEffect(() => {
@@ -136,6 +137,27 @@ const refreshTasks = useCallback(async () => {
     setApiChildren(nextKids);
 
     const resp = await parentApi.getTasks(PARENT_CODE);
+
+    // Загрузим покупки для каждого ребёнка
+    const purchasesPromises = nextKids.map(async (kid: any) => {
+      try {
+        const purchasesResp = await parentApi.getChildPurchases(PARENT_CODE, kid.id);
+        return { child_id: kid.id, purchases: purchasesResp?.purchases ?? [] };
+      } catch (e) {
+        console.error(`[purchases] failed for ${kid.id}:`, e);
+        return { child_id: kid.id, purchases: [] };
+      }
+    });
+
+    const purchasesResults = await Promise.all(purchasesPromises);
+    console.log("[purchases] loaded:", purchasesResults);
+
+    // Сохраним покупки в state
+    const purchasesMap: Record<string, any[]> = {};
+    purchasesResults.forEach(({ child_id, purchases }) => {
+      purchasesMap[child_id] = purchases;
+    });
+    setChildPurchases(purchasesMap);
     const nextTasks = resp?.tasks ?? [];
     setTasks(nextTasks);
 
@@ -291,7 +313,8 @@ const selectedChild: Child = useMemo(() => {
   return uiChildren.find((c: any) => c.id === selectedChildId) || uiChildren[0];
 }, [uiChildren, selectedChildId]);
 
-  const pendingPrizesCount = (selectedChild as any)?.pendingPrizes?.length ?? 0;
+  const apiChildId = (selectedChild as any)?.apiChildId;
+  const pendingPrizesCount = childPurchases[apiChildId]?.filter((p: any) => p.status === "pending").length ?? 0;
   const pendingMissionsCount =
     (selectedChild as any)?.missions?.filter((m: any) => m.status === "pending")
       ?.length ?? 0;
@@ -330,6 +353,7 @@ const selectedChild: Child = useMemo(() => {
   child={selectedChild}
   onUpdateChild={handleUpdateChild}
   onTaskAction={onTaskAction}
+  pendingPurchases={childPurchases[apiChildId] || []}
 />          </>
         );
 
