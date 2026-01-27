@@ -8,15 +8,21 @@ interface Props {
   selectedId: string;
   onSelect: (id: string) => void;
   onAdd: () => void;
+  childPurchases: Record<string, any[]>;
 }
 
-const ChildSwitcher: React.FC<Props> = ({ children, selectedId, onSelect, onAdd }) => {
+const ChildSwitcher: React.FC<Props> = ({ children, selectedId, onSelect, onAdd, childPurchases }) => {
   return (
     <div className="flex overflow-x-auto no-scrollbar gap-6 items-center pt-4 pb-6 px-5 -mx-5">
       {children.map(child => {
         const isSelected = child.id === selectedId;
+        
+        // Реальные покупки из API
+        const apiChildId = (child as any).apiChildId || child.id;
+        const pendingPurchases = childPurchases[apiChildId]?.filter((p: any) => p.status === "pending").length ?? 0;
+        
         const hasNotification = 
-          child.pendingPrizes.length > 0 || 
+          pendingPurchases > 0 || 
           child.missions.some(m => m.status === 'pending');
 
         return (
