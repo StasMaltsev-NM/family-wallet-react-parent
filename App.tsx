@@ -428,6 +428,7 @@ return (
           selectedId={selectedChildId}
           onSelect={setSelectedChildId}
           onAdd={() => setIsAddChildOpen(true)}
+          childPurchases={childPurchases}
         />
       </header>
 
