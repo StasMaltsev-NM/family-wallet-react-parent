@@ -158,8 +158,8 @@ deleteTask(inviteCode: string, taskId: string) {  // ← ДОБАВЬ!
   }, inviteCode);
 },
 
-  getChildPurchases(inviteCode: string, childId: string) {
-    return request<{ purchases: any[] }>(`/api/rewards/purchases?child_id=${childId}`, {
+  getFamilyPurchases(inviteCode: string) {
+    return request<{ purchases: any[] }>("/api/rewards/purchases/family", {
       method: "GET",
     }, inviteCode);
   },

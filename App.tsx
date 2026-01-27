@@ -138,26 +138,26 @@ const refreshTasks = useCallback(async () => {
 
     const resp = await parentApi.getTasks(PARENT_CODE);
 
-    // Загрузим покупки для каждого ребёнка
-    const purchasesPromises = nextKids.map(async (kid: any) => {
-      try {
-        const purchasesResp = await parentApi.getChildPurchases(PARENT_CODE, kid.id);
-        return { child_id: kid.id, purchases: purchasesResp?.purchases ?? [] };
-      } catch (e) {
-        console.error(`[purchases] failed for ${kid.id}:`, e);
-        return { child_id: kid.id, purchases: [] };
-      }
-    });
 
-    const purchasesResults = await Promise.all(purchasesPromises);
-    console.log("[purchases] loaded:", purchasesResults);
+    // Загрузим все покупки семьи сразу
+    try {
+      const purchasesResp = await parentApi.getFamilyPurchases(PARENT_CODE);
+      const allPurchases = purchasesResp?.purchases ?? [];
+      console.log("[purchases] loaded:", allPurchases.length);
 
-    // Сохраним покупки в state
-    const purchasesMap: Record<string, any[]> = {};
-    purchasesResults.forEach(({ child_id, purchases }) => {
-      purchasesMap[child_id] = purchases;
-    });
-    setChildPurchases(purchasesMap);
+      // Разложим по child_id
+      const purchasesMap: Record<string, any[]> = {};
+      allPurchases.forEach((p: any) => {
+        if (!purchasesMap[p.child_id]) {
+          purchasesMap[p.child_id] = [];
+        }
+        purchasesMap[p.child_id].push(p);
+      });
+      setChildPurchases(purchasesMap);
+    } catch (e) {
+      console.error("[purchases] failed:", e);
+      setChildPurchases({});
+    }
     const nextTasks = resp?.tasks ?? [];
     setTasks(nextTasks);
 
