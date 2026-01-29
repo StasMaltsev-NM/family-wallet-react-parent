@@ -279,30 +279,44 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
         {isActivityExpanded && (
           <div className="p-7 pt-0 space-y-6 animate-in fade-in slide-in-from-top-2">
             {child.activities.length === 0 ? (
-              <p className="text-center py-6 text-[12px] font-black text-[var(--text-muted)] uppercase tracking-widest">Истории пока нет</p>
+              <p className="text-center py-6 text-[12px] font-black text-[var(--text-muted)] uppercase tracking-widest">
+                Истории пока нет
+              </p>
             ) : (
-              [
-                ...child.activities,
-                { id: 'purchase-ex', type: 'purchase', description: 'Награда: Большая Пицца', amount: -40, date: 'Сегодня, 19:15' }
-              ].sort((a, b) => b.id.localeCompare(a.id)).map(a => (
-                <div key={a.id} className="flex items-center justify-between gap-6 px-2">
-                  <div className="flex items-center gap-5 min-w-0">
-                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shadow-lg border border-white/5 ${a.amount >= 0 ? 'bg-emerald-500/10' : 'bg-rose-500/10'}`}>
-                      {a.type === 'mission' ? '🎯' : '🎁'}
+              [...child.activities]
+                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                .slice(0, 7)
+                .map((a) => (
+                  <div key={a.id} className="flex items-center justify-between gap-6 px-2">
+                    <div className="flex items-center gap-5 min-w-0">
+                      <div
+                        className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shadow-lg border border-white/5 
+                          ${a.amount >= 0 ? "bg-emerald-500/10" : "bg-rose-500/10"}`}
+                      >
+                        {a.type === "mission" ? "🎯" : "🎁"}
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="text-lg font-black text-white/95 truncate leading-tight">
+                          {a.description}
+                        </p>
+                        <p className="text-[11px] text-[var(--text-muted)] uppercase font-bold tracking-[0.1em] mt-1.5">
+                          {a.date}
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-lg font-black text-white/95 truncate leading-tight">{a.description}</p>
-                      <p className="text-[11px] text-[var(--text-muted)] uppercase font-bold tracking-[0.1em] mt-1.5">{a.date}</p>
-                    </div>
+
+                    <span
+                      className={`text-xl font-black flex items-center gap-1.5 flex-shrink-0 
+                        ${a.amount >= 0 ? "text-emerald-500" : "text-rose-500"}`}
+                    >
+                      {a.amount >= 0 ? `+${a.amount}` : `${a.amount}`}
+                      <Star size={16} fill="currentColor" />
+                    </span>
                   </div>
-                  <span className={`text-xl font-black flex items-center gap-1.5 flex-shrink-0 ${a.amount >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                    {a.amount >= 0 ? `+${a.amount}` : `${a.amount}`} 
-                    <Star size={16} fill="currentColor" />
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
+                ))
+            )}          
+</div>
         )}
       </div>
 

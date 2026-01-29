@@ -89,6 +89,7 @@ const [apiChildren, setApiChildren] = useState<any[]>([]);
 const [apiError, setApiError] = useState<string | null>(null);
 const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
 const [childPurchases, setChildPurchases] = useState<Record<string, any[]>>({});
+const [childHistory, setChildHistory] = useState<Record<string, any[]>>({});  // ← ДОБАВЬ ЭТУ СТРОКУ
 const BUILD_ID = import.meta.env.VITE_BUILD_ID || "no-build-id";
 
 useEffect(() => {
@@ -138,7 +139,6 @@ const refreshTasks = useCallback(async () => {
 
     const resp = await parentApi.getTasks(PARENT_CODE);
 
-
     // Загрузим все покупки семьи сразу
     try {
       const purchasesResp = await parentApi.getFamilyPurchases(PARENT_CODE);
@@ -158,6 +158,38 @@ const refreshTasks = useCallback(async () => {
       console.error("[purchases] failed:", e);
       setChildPurchases({});
     }
+
+    console.log("[DEBUG] ПЕРЕД БЛОКОМ ИСТОРИИ!");  // ← ДОБАВЬ ЭТО!
+
+    // ← ДОБАВЬ ЗАГРУЗКУ ИСТОРИИ:
+    try {
+      console.log("[history] LOADING...");
+  const historyResp = await parentApi.getHistory(PARENT_CODE);  // ← ИЗМЕНЕНО!
+  const historyItems = historyResp.history || [];  // ← ДОБАВЛЕНО!
+  console.log("[history] loaded:", historyItems.length);
+  
+  // Группируем по child_id
+  const historyMap: Record<string, any[]> = {};
+  for (const item of historyItems) {  // ← ТЕПЕРЬ ОК!
+    if (!historyMap[item.child_id]) {
+      historyMap[item.child_id] = [];
+    }
+    historyMap[item.child_id].push({
+      id: item.id,
+      type: item.type === 'task' ? 'mission' : 'purchase',
+      description: item.title,
+      amount: item.amount,
+      date: item.created_at,
+    });
+  }
+  
+  setChildHistory(historyMap);
+} catch (e) {
+  console.error("[history] FAILED:", e);
+  console.error("[history] ERROR DETAILS:", e);
+  setChildHistory({});
+}
+    
     const nextTasks = resp?.tasks ?? [];
     setTasks(nextTasks);
 
@@ -257,31 +289,53 @@ const uiChildren: Child[] = useMemo(() => {
   return children.map((c: any) => {
     const apiId = c.apiChildId;
 
-    // найдём этого ребёнка в apiChildren, чтобы взять balance/pending_balance
-    const apiKid = apiId
+    // 1) Ищем ребёнка в API сначала по apiChildId
+    let apiKid = apiId
       ? apiChildren.find((k: any) => k?.id === apiId)
       : null;
 
-    // баланс берём из API, но не ломаем структуру UI
+    // 2) Fallback: если apiChildId не совпал - ищем по имени
+    if (!apiKid) {
+      apiKid =
+        apiChildren.find(
+          (k: any) => String(k?.name || "").trim() === String(c?.name || "").trim()
+        ) || null;
+    }
+
+    // 3) Ключ для истории: сначала реальный api id, иначе apiChildId из UI
+    const historyKey: string | undefined = apiKid?.id || apiId;
+
     const nextBalance = {
       confirmed: Number(apiKid?.balance ?? c.balance?.confirmed ?? 0),
       pending: Number(apiKid?.pending_balance ?? c.balance?.pending ?? 0),
     };
-if (c.name === "Миша") {
-  console.log("[DEBUG Misha] apiId:", apiId, "tasks.len:", Array.isArray(tasks) ? tasks.length : "no-tasks");
-  console.log("[DEBUG Misha] first task child_ids:", (Array.isArray(tasks) ? tasks.slice(0, 3).map(t => t?.child_id) : []));
-  console.log("[DEBUG Misha] first task statuses:", (Array.isArray(tasks) ? tasks.slice(0, 3).map(t => t?.status) : []));
-}
-    // задачи только этого ребёнка + ВАЖНО: CONFIRMED не показываем в миссиях
-const childTasks = Array.isArray(tasks)
-  ? tasks.filter((t: any) => taskBelongsToChild(t, c) && t.status !== "CONFIRMED")
-  : [];
+
+    if (c.name === "Миша") {
+      console.log(
+        "[DEBUG Misha] apiId:",
+        apiId,
+        "tasks.len:",
+        Array.isArray(tasks) ? tasks.length : "no-tasks"
+      );
+      console.log(
+        "[DEBUG Misha] first task child_ids:",
+        Array.isArray(tasks) ? tasks.slice(0, 3).map((t: any) => t?.child_id) : []
+      );
+      console.log(
+        "[DEBUG Misha] first task statuses:",
+        Array.isArray(tasks) ? tasks.slice(0, 3).map((t: any) => t?.status) : []
+      );
+    }
+
+    const childTasks = Array.isArray(tasks)
+      ? tasks.filter((t: any) => taskBelongsToChild(t, c) && t.status !== "CONFIRMED")
+      : [];
 
     const apiMissions = childTasks.map((t: any) => ({
       id: t.id,
       title: t.title,
       reward: Number(t.reward_amount ?? 0),
-      status: t.status === "WAITING" ? "pending" : "active", // WAITING -> на проверке, IDLE -> активная
+      status: t.status === "WAITING" ? "pending" : "active",
       category: "api",
       isRecurring: Boolean(t.recurring),
       description: t.description ?? "",
@@ -289,20 +343,14 @@ const childTasks = Array.isArray(tasks)
       _raw: t,
     }));
 
-    if (c.name === "Миша") {
-      console.log("Misha apiChildId:", apiId);
-      console.log("Misha tasks matched:", childTasks.length);
-      console.log("Misha missions mapped:", apiMissions.length);
-      console.log("Misha balance (api/ui):", apiKid?.balance, apiKid?.pending_balance, nextBalance);
-    }
-
     return {
       ...c,
       balance: nextBalance,
       missions: apiMissions,
+      activities: historyKey ? (childHistory[historyKey] || []) : [],
     } as Child;
   });
-}, [children, tasks, apiChildren]);
+}, [children, tasks, apiChildren, childHistory]);
 useEffect(() => {
   const misha = (uiChildren as any[]).find((c) => c.name === "Миша");
   console.log("UI child Misha apiChildId:", misha?.apiChildId);

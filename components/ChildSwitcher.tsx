@@ -25,7 +25,8 @@ const ChildSwitcher: React.FC<Props> = ({ children, selectedId, onSelect, onAdd,
           apiChildId,
           purchases: childPurchases[apiChildId],
           pendingPurchases,
-          pendingMissions: child.missions.filter(m => m.status === 'pending').length
+          pendingMissions: child.missions.filter(m => m.status === 'pending').length,
+          activities: child.activities?.length || 0  // ← ДОБАВЬ ЭТО!
         });
         
         const hasNotification = 

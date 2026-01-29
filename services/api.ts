@@ -9,24 +9,21 @@ async function request<T>(
   options: RequestInit = {},
   inviteCode?: string
 ): Promise<T> {
-const isGet = String(options.method ?? "GET").toUpperCase() === "GET";
-const url = isGet
-  ? `${API_URL}${path}${path.includes("?") ? "&" : "?"}ts=${Date.now()}`
-  : `${API_URL}${path}`;
-  // 1) Собираем headers правильно (работает и с объектом, и с Headers)
+  const isGet = String(options.method ?? "GET").toUpperCase() === "GET";
+  const url = isGet
+    ? `${API_URL}${path}${path.includes("?") ? "&" : "?"}ts=${Date.now()}`
+    : `${API_URL}${path}`;
+  
   const headers = new Headers(options.headers || undefined);
 
-  // базовые
   if (!headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 
-  // ключевое
   if (inviteCode) {
     headers.set("X-Invite-Code", inviteCode);
   }
 
-  // 2) ЛОГИ ДО fetch (иначе при падении fetch ты их не увидишь)
   console.log("[API request]", url);
   console.log("[API invite]", inviteCode);
   console.log("[API headers]", Object.fromEntries(headers.entries()));
@@ -55,115 +52,139 @@ const url = isGet
 
 // --- Parent API ---
 export const parentApi = {
-confirmTask(inviteCode: string, taskId: string, action: "confirm" | "reject") {
-  return request<{ message: string; task?: any; child?: any }>(
-    "/api/tasks/confirm",
-    {
-      method: "POST",
-      body: JSON.stringify({ task_id: taskId, action }),
-    },
-    inviteCode
-  ).then((r) => {
-    console.log("[confirmTask response]", r);
-    return r;
-  });
-},
-createTask(
-  inviteCode: string,
-  payload: {
-    child_id: string;
-    title: string;
-    description?: string;
-    reward_amount: number;
-    icon?: string;
-    status?: "IDLE" | "WAITING";
-    recurring?: any;
-    recurring_days?: any;
-  }
-) {
-  return request<{ message?: string; task: any }>(
-    "/api/tasks/create",
-    {
+  confirmTask(inviteCode: string, taskId: string, action: "confirm" | "reject") {
+    return request<{ message: string; task?: any; child?: any }>(
+      "/api/tasks/confirm",
+      {
+        method: "POST",
+        body: JSON.stringify({ task_id: taskId, action }),
+      },
+      inviteCode
+    ).then((r) => {
+      console.log("[confirmTask response]", r);
+      return r;
+    });
+  },
+
+  createTask(
+    inviteCode: string,
+    payload: {
+      child_id: string;
+      title: string;
+      description?: string;
+      reward_amount: number;
+      icon?: string;
+      status?: "IDLE" | "WAITING";
+      recurring?: any;
+      recurring_days?: any;
+    }
+  ) {
+    return request<{ message?: string; task: any }>(
+      "/api/tasks/create",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          status: "IDLE",
+          icon: "✅",
+          ...payload,
+        }),
+      },
+      inviteCode
+    );
+  },
+
+  deleteTask(inviteCode: string, taskId: string) {
+    return request<{ message: string }>(
+      "/api/tasks/delete",
+      {
+        method: "DELETE",
+        body: JSON.stringify({ task_id: taskId }),
+      },
+      inviteCode
+    );
+  },
+
+  whoami(inviteCode: string) {
+    return request<any>("/api/auth/whoami", { method: "GET" }, inviteCode);
+  },
+
+  listChildren(inviteCode: string) {
+    return request<{ children: any[] }>(
+      "/api/children/list",
+      { method: "GET" },
+      inviteCode
+    );
+  },
+
+  getTasks(inviteCode: string) {
+    return request<{ tasks: any[] }>(
+      "/api/tasks/list",
+      { method: "GET" },
+      inviteCode
+    );
+  },
+
+  createReward(
+    inviteCode: string,
+    childId: string,
+    title: string,
+    price: number,
+    description?: string,
+    isPermanent: boolean = true
+  ) {
+    return request<{ reward_id: string }>("/api/rewards/create", {
       method: "POST",
       body: JSON.stringify({
-        status: "IDLE",   // ключевое: чтобы появилось у ребёнка в списке активных
-        icon: "✅",
-        ...payload,
+        child_id: childId,
+        title,
+        price,
+        description: description || '',
+        icon: '🎁',
+        is_permanent: isPermanent ? 1 : 0
       }),
-    },
-    inviteCode
-  );
-},
-  whoami(inviteCode: string) { /* ... */ },
-listChildren(inviteCode: string) {
-  return request<{ children: any[] }>(
-    "/api/children/list",
-    { method: "GET" },
-    inviteCode
-  );
-},
-getTasks(inviteCode: string) {
-  return request<{ tasks: any[] }>(
-    "/api/tasks/list",
-    { method: "GET" },
-    inviteCode
-  );
-},
-// Награды
-createReward(
-  inviteCode: string,
-  childId: string,
-  title: string,
-  price: number,
-  description?: string,
-  isPermanent: boolean = true
-) {
-  return request<{ reward_id: string }>("/api/rewards/create", {
-    method: "POST",
-    body: JSON.stringify({
-      child_id: childId,
-      title,
-      price,
-      description: description || '',
-      icon: '🎁',
-      is_permanent: isPermanent ? 1 : 0
-    }),
-  }, inviteCode);
-},
+    }, inviteCode);
+  },
 
-listRewards(inviteCode: string) {
-  return request<{ rewards: any[] }>("/api/rewards/list", {
-    method: "GET",
-  }, inviteCode);
-},
+  listRewards(inviteCode: string) {
+    return request<{ rewards: any[] }>("/api/rewards/list", {
+      method: "GET",
+    }, inviteCode);
+  },
 
-deliverReward(inviteCode: string, rewardId: string, childId: string) {
-  return request<{ message: string }>("/api/rewards/deliver", {
-    method: "POST",
-    body: JSON.stringify({ reward_id: rewardId, child_id: childId }),
-  }, inviteCode);
-},
+  deliverReward(inviteCode: string, rewardId: string, childId: string) {
+    return request<{ message: string }>("/api/rewards/deliver", {
+      method: "POST",
+      body: JSON.stringify({ reward_id: rewardId, child_id: childId }),
+    }, inviteCode);
+  },
 
-deleteReward(inviteCode: string, rewardId: string) {
-  return request<{ message: string }>("/api/rewards/delete", {
-    method: "DELETE",
-    body: JSON.stringify({ reward_id: rewardId }),
-  }, inviteCode);
-},
-
-deleteTask(inviteCode: string, taskId: string) {  // ← ДОБАВЬ!
-  return request<{ message: string }>("/api/tasks/delete", {
-    method: "DELETE",
-    body: JSON.stringify({ task_id: taskId }),
-  }, inviteCode);
-},
+  deleteReward(inviteCode: string, rewardId: string) {
+    return request<{ message: string }>("/api/rewards/delete", {
+      method: "DELETE",
+      body: JSON.stringify({ reward_id: rewardId }),
+    }, inviteCode);
+  },
 
   getFamilyPurchases(inviteCode: string) {
     return request<{ purchases: any[] }>("/api/rewards/purchases/family", {
       method: "GET",
     }, inviteCode);
   },
+
+getHistory(inviteCode: string) {
+  console.log("[getHistory] CALLING API...");  // ← ДОБАВЬ ЭТО!
+  return request<any>("/api/history", { method: "GET" }, inviteCode)
+    .then(r => {
+      console.log("[getHistory] SUCCESS:", r);  // ← И ЭТО!
+      return r;
+    })
+    .catch(e => {
+      console.error("[getHistory] ERROR:", e);  // ← И ЭТО!
+      throw e;
+    });
+},
 };
+
 // --- Kid API ---
 export const kidApi = {
   getTasks(inviteCode: string) {
@@ -183,5 +204,9 @@ export const kidApi = {
 
   whoami(inviteCode: string) {
     return request<any>("/api/auth/whoami", { method: "GET" }, inviteCode);
+  },
+
+  getHistory(inviteCode: string) {
+    return request<any>("/api/history", { method: "GET" }, inviteCode);
   },
 };
