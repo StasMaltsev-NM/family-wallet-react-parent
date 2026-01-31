@@ -1,14 +1,12 @@
-// DEV SAFETY: TelegramGameProxy fallback (for browser/dev)
-if (import.meta.env.DEV) {
-  const w = window as any;
+// SAFETY: TelegramGameProxy fallback (для всех окружений)
+const w = window as any;
 
-  if (!w.TelegramGameProxy) {
-    w.TelegramGameProxy = {};
-  }
+if (!w.TelegramGameProxy) {
+  w.TelegramGameProxy = {};
+}
 
-  if (typeof w.TelegramGameProxy.receiveEvent !== 'function') {
-    w.TelegramGameProxy.receiveEvent = () => {};
-  }
+if (typeof w.TelegramGameProxy.receiveEvent !== 'function') {
+  w.TelegramGameProxy.receiveEvent = () => {};
 }
 
 import React from 'react';
