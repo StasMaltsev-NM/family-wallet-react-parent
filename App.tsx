@@ -612,13 +612,6 @@ if (!code) {
                     setIsInviteModalOpen(false);
                     setAuthError(null);
                     setCodeDraft("");
-                  } else if (result.status === 'create_family') {
-                    // TODO: показать форму создания семьи
-                    console.log('[INVITE MODAL] CREATE FAMILY:', result);
-                    await tgCloudSet(INVITE_KEY, v);
-                    setParentCode(v);
-                    setIsInviteModalOpen(false);
-                    setAuthError(null);
                   } else if (result.status === 'needs_invite') {
                     setAuthError('Неверный код приглашения');
                     setIsInviteModalOpen(true);
