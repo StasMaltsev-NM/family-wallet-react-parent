@@ -127,6 +127,23 @@ export const parentApi = {
     );
   },
 
+  addChild(inviteCode: string, payload: {
+    name: string;
+    avatar: string;
+    dream_title?: string;
+    dream_price?: number;
+    dream_image?: string;
+  }) {
+    return request<{ message: string; child_id: string }>(
+      "/api/children/add",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      inviteCode
+    );
+  },
+
   getTasks(inviteCode: string) {
     return request<{ tasks: any[] }>(
       "/api/tasks/list",

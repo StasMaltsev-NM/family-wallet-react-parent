@@ -851,10 +851,36 @@ if (!code) {
       {isAddChildOpen && (
         <AddChildScreen
           onCancel={() => setIsAddChildOpen(false)}
-          onAdd={(newChild: any) => {
-            setChildren((prev) => [...prev, newChild] as any);
-            setSelectedChildId(newChild.id);
-            setIsAddChildOpen(false);
+          onAdd={async (newChild: any) => {
+            try {
+              // СОЗДАТЬ РЕБЁНКА В API!
+              if (parentCode) {
+                const response = await parentApi.addChild(parentCode, {
+                  name: newChild.name,
+                  avatar: newChild.avatar,
+                  dream_title: newChild.dream?.title || "",
+                  dream_price: newChild.dream?.price || 0,
+                  dream_image: newChild.dream?.image || "",
+                });
+                console.log("[ADD CHILD] Успешно создан:", response);
+
+                // ОБНОВИТЬ STATE С ДАННЫМИ ИЗ API
+                const childWithApiId = {
+                  ...newChild,
+                  apiChildId: response.child_id,
+                  id: response.child_id,
+                };
+                setChildren((prev) => [...prev, childWithApiId] as any);
+                setSelectedChildId(childWithApiId.id);
+
+                // ПЕРЕЗАГРУЗИТЬ ДАННЫЕ
+                setTimeout(() => refreshTasks(), 500);
+              }
+              setIsAddChildOpen(false);
+            } catch (err: any) {
+              console.error("[ADD CHILD] FAILED:", err);
+              alert(`Ошибка создания ребёнка: ${err.message}`);
+            }
           }}
         />
       )}
