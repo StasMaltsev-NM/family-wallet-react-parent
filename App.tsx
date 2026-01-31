@@ -857,6 +857,8 @@ if (!code) {
               if (parentCode) {
                 const response = await parentApi.addChild(parentCode, {
                   name: newChild.name,
+                  role: "child",
+                  age: newChild.age || 10,
                   avatar: newChild.avatar,
                   dream_title: newChild.dream?.title || "",
                   dream_price: newChild.dream?.price || 0,

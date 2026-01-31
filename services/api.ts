@@ -129,10 +129,13 @@ export const parentApi = {
 
   addChild(inviteCode: string, payload: {
     name: string;
+    role: string;
+    age: number;
     avatar: string;
     dream_title?: string;
     dream_price?: number;
     dream_image?: string;
+    ai_description?: string;
   }) {
     return request<{ message: string; child_id: string }>(
       "/api/children/add",
