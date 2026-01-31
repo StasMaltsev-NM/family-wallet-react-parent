@@ -1,6 +1,5 @@
+/* global Telegram */
 // App.tsx (FW-REACT-PARENT-COPY)
-// Цель: 1 источник истины для UI (children) + мост из API tasks -> missions,
-// чтобы вкладка "Миссии" показывала реальные задания и бейджи считались от API.
 
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { Theme, Tab, Child } from "./types";
@@ -24,7 +23,8 @@ import {
 } from "lucide-react";
 
 import { parentApi } from "./services/api";
-// TEMP DEBUG: чтобы дергать API из DevTools Console (потом удалим)
+
+// TEMP DEBUG
 declare global {
   interface Window {
     parentApi?: any;
@@ -33,77 +33,124 @@ declare global {
 window.parentApi = parentApi;
 console.log("[APP FILE LOADED]", new Date().toISOString());
 
-// MVP: пока жестко. Потом вынесем в env / tg initData.
-const PARENT_CODE = "SRFK4A1C";
+// ===== Telegram helpers =====
+function getTg(): any | null {
+  return (window as any)?.Telegram?.WebApp ?? null;
+}
 
-// backend task.status -> UI mission.status (Missions ждёт 'pending' для "на проверке")
+function getTgUserId(): string {
+  const id =
+    (window as any)?.Telegram?.WebApp?.initDataUnsafe?.user?.id != null
+      ? String((window as any).Telegram.WebApp.initDataUnsafe.user.id)
+      : "";
+  return id || "";
+}
+
+async function sha256Short(input: string): Promise<string> {
+  try {
+    const enc = new TextEncoder().encode(input);
+    const buf = await crypto.subtle.digest("SHA-256", enc);
+    const arr = Array.from(new Uint8Array(buf));
+    const hex = arr.map((b) => b.toString(16).padStart(2, "0")).join("");
+    return hex.slice(0, 16);
+  } catch {
+    return "";
+  }
+}
+
+function parentInviteStorageKey(identityKey: string) {
+  return `fw_parent_invite_${identityKey}`;
+}
+
+async function tgCloudGet(key: string): Promise<string> {
+  const tg = getTg();
+  if (!tg?.CloudStorage?.getItem) return "";
+  return await new Promise((resolve) => {
+    tg.CloudStorage.getItem(key, (err: any, value: string) => {
+      if (err) return resolve("");
+      resolve((value || "").trim());
+    });
+  });
+}
+
+async function tgCloudSet(key: string, value: string): Promise<void> {
+  const tg = getTg();
+  if (!tg?.CloudStorage?.setItem) return;
+  await new Promise((resolve) => {
+    tg.CloudStorage.setItem(key, value, () => resolve(true));
+  });
+}
+
+async function tgCloudDel(key: string): Promise<void> {
+  const tg = getTg();
+  if (!tg?.CloudStorage?.removeItem) return;
+  await new Promise((resolve) => {
+    tg.CloudStorage.removeItem(key, () => resolve(true));
+  });
+}
+
+// backend task.status -> UI mission.status
 function mapTaskStatusToMissionStatus(taskStatus: string) {
   if (taskStatus === "WAITING") return "pending";
   if (taskStatus === "CONFIRMED") return "active";
   return "active";
 }
 
-// Матчинг задач к ребёнку (чтобы не зависеть от совпадения id)
+// Match task -> child
 function taskBelongsToChild(task: any, child: any): boolean {
-  // 1. Основной матч: backend child_id === ui apiChildId
-  if (child?.apiChildId && task?.child_id) {
-    return task.child_id === child.apiChildId;
-  }
+  if (child?.apiChildId && task?.child_id) return task.child_id === child.apiChildId;
+  if (task?.child_id && child?.id) return task.child_id === child.id;
 
-  // 2. Запасной матч: если вдруг совпадают id
-  if (task?.child_id && child?.id) {
-    return task.child_id === child.id;
-  }
-
-  // 3. ВРЕМЕННЫЙ MVP-МОСТ: сравнение по имени ребёнка
   if (
     typeof task?.child_name === "string" &&
     typeof child?.name === "string" &&
-    task.child_name.trim().toLowerCase() ===
-      child.name.trim().toLowerCase()
+    task.child_name.trim().toLowerCase() === child.name.trim().toLowerCase()
   ) {
     return true;
   }
-
   return false;
 }
+
 const App: React.FC = () => {
   console.log("[APP RENDER]");
-  const BUILD = import.meta.env.VITE_BUILD_ID || "no-build-id";
-console.log("BUILD_ID:", BUILD);
+
+  const BUILD_ID = import.meta.env.VITE_BUILD_ID || "no-build-id";
+  console.log("BUILD_ID:", BUILD_ID);
+
+  const __tg = (window as any)?.Telegram?.WebApp;
+  console.log("[TG DEBUG] hasTG=", !!__tg);
+  console.log("[TG DEBUG] userId=", __tg?.initDataUnsafe?.user?.id);
+  console.log("[TG DEBUG] initDataLen=", String(__tg?.initData ?? "").length);
+
   const [theme, setTheme] = useState<Theme>(Theme.DEEP_PURPLE);
   const [activeTab, setActiveTab] = useState<Tab>(Tab.DASHBOARD);
 
-  // База UI (не перезатираем её данными API - только "накладываем" missions сверху)
   const [children, setChildren] = useState<Child[]>(INITIAL_CHILDREN);
   const [selectedChildId, setSelectedChildId] = useState<string>(
-    INITIAL_CHILDREN[0]?.id
+    INITIAL_CHILDREN[0]?.id ?? ""
   );
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAddChildOpen, setIsAddChildOpen] = useState(false);
 
-  // API задачи (источник истины для миссий на этом шаге)
-const [tasks, setTasks] = useState<any[]>([]);
-const [apiChildren, setApiChildren] = useState<any[]>([]);
-const [apiError, setApiError] = useState<string | null>(null);
-const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
-const [childPurchases, setChildPurchases] = useState<Record<string, any[]>>({});
-const [childHistory, setChildHistory] = useState<Record<string, any[]>>({});  // ← ДОБАВЬ ЭТУ СТРОКУ
-const BUILD_ID = import.meta.env.VITE_BUILD_ID || "no-build-id";
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [apiChildren, setApiChildren] = useState<any[]>([]);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
+  const [childPurchases, setChildPurchases] = useState<Record<string, any[]>>({});
+  const [childHistory, setChildHistory] = useState<Record<string, any[]>>({});
 
-useEffect(() => {
-  console.log("[BUILD_ID]", BUILD_ID);
-  console.log("[APP EFFECT MOUNTED]");
-}, [BUILD_ID]);
-useEffect(() => {
-  console.log("[APP EFFECT MOUNTED]");
-}, []);
-// 1) Telegram full-screen + анти-сворачивание
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [parentCode, setParentCode] = useState<string>("");
+  const [codeDraft, setCodeDraft] = useState<string>("");
+
+  // identityKey: уникально для TG-акка (tg_user_id) или web fallback (fw_web_user_id)
+  const [identityKey, setIdentityKey] = useState<string>("");
+  const INVITE_KEY = useMemo(() => parentInviteStorageKey(identityKey), [identityKey]);
+
+  // Telegram: ready/expand + layout
   useEffect(() => {
-    // @ts-ignore
-    const tg = window.Telegram?.WebApp;
-
+    const tg = getTg();
     if (tg) {
       tg.ready();
       tg.expand();
@@ -121,269 +168,289 @@ useEffect(() => {
     };
   }, []);
 
-  // 2) Тема
+  // theme
   useEffect(() => {
     document.body.setAttribute("data-theme", `${theme}`);
   }, [theme]);
 
-// ✅ lastSyncAt должен обновляться даже если API упал
-// поэтому не ставь setLastSyncAt только в try - ставим в finally
-const refreshTasks = useCallback(async () => {
-  try {
-    console.log("[auto-refresh] tick", new Date().toLocaleTimeString());
-    setApiError(null);
+  // compute identityKey once
+  useEffect(() => {
+    const id = getTgUserId();
+    const key = id ? `id_${id}` : "";
+    setIdentityKey(key);
 
-    const kidsResp = await parentApi.listChildren(PARENT_CODE);
-    const nextKids = kidsResp?.children ?? [];
-    setApiChildren(nextKids);
-
-    const resp = await parentApi.getTasks(PARENT_CODE);
-
-    // Загрузим все покупки семьи сразу
-    try {
-      const purchasesResp = await parentApi.getFamilyPurchases(PARENT_CODE);
-      const allPurchases = purchasesResp?.purchases ?? [];
-      console.log("[purchases] loaded:", allPurchases.length);
-
-      // Разложим по child_id
-      const purchasesMap: Record<string, any[]> = {};
-      allPurchases.forEach((p: any) => {
-        if (!purchasesMap[p.child_id]) {
-          purchasesMap[p.child_id] = [];
-        }
-        purchasesMap[p.child_id].push(p);
-      });
-      setChildPurchases(purchasesMap);
-    } catch (e) {
-      console.error("[purchases] failed:", e);
-      setChildPurchases({});
-    }
-
-    console.log("[DEBUG] ПЕРЕД БЛОКОМ ИСТОРИИ!");  // ← ДОБАВЬ ЭТО!
-
-    // ← ДОБАВЬ ЗАГРУЗКУ ИСТОРИИ:
-    try {
-      console.log("[history] LOADING...");
-  const historyResp = await parentApi.getHistory(PARENT_CODE);  // ← ИЗМЕНЕНО!
-  const historyItems = historyResp.history || [];  // ← ДОБАВЛЕНО!
-  console.log("[history] loaded:", historyItems.length);
-  
-  // Группируем по child_id
-  const historyMap: Record<string, any[]> = {};
-  for (const item of historyItems) {  // ← ТЕПЕРЬ ОК!
-    if (!historyMap[item.child_id]) {
-      historyMap[item.child_id] = [];
-    }
-    historyMap[item.child_id].push({
-      id: item.id,
-      type: item.type === 'task' ? 'mission' : 'purchase',
-      description: item.title,
-      amount: item.amount,
-      date: item.created_at,
+    console.log("[IDENTITY]", {
+      rawId: id,
+      identityKey: key,
+      hasTG: !!getTg(),
+      initDataLen: String(getTg()?.initData ?? "").length,
     });
-  }
-  
-  setChildHistory(historyMap);
-} catch (e) {
-  console.error("[history] FAILED:", e);
-  console.error("[history] ERROR DETAILS:", e);
-  setChildHistory({});
-}
-    
-    const nextTasks = resp?.tasks ?? [];
-    setTasks(nextTasks);
+  }, []);
 
-    console.log("[auto-refresh] children/tasks:", nextKids.length, nextTasks.length);
-  } catch (e: any) {
-    const msg = e?.message || String(e);
-    setApiError(msg);
-    console.error("PARENT API FAIL:", e);
-  } finally {
-    setLastSyncAt(Date.now());
-  }
-}, [PARENT_CODE]);
+  // load parentCode for this identityKey
+  useEffect(() => {
+    (async () => {
+      if (!identityKey) {
+        setParentCode("");
+        setIsInviteModalOpen(true);
+        return;
+      }
 
-// держим актуальную refreshTasks, чтобы setInterval всегда звал свежую версию
-const refreshTasksRef = useRef<() => Promise<void>>(async () => {});
-useEffect(() => {
-  refreshTasksRef.current = refreshTasks;
-}, [refreshTasks]);
+      const saved = await tgCloudGet(INVITE_KEY);
 
-// авто-рефреш: сразу + каждые 3 секунды (неубиваемый)
-useEffect(() => {
-  let alive = true;
-  console.log("[auto-refresh] mounted");
+      if (saved) {
+        setParentCode(saved);
+        setIsInviteModalOpen(false);
+      } else {
+        setParentCode("");
+        setIsInviteModalOpen(true);
+      }
+    })();
+  }, [identityKey, INVITE_KEY]);
 
-  const tick = async () => {
-    if (!alive) return;
-    try {
-      await refreshTasksRef.current();
-    } catch (e) {
-      console.warn("[auto-refresh] tick failed", e);
-    }
-  };
+  useEffect(() => {
+    console.log("[AUTH STATE]", {
+      identityKey,
+      INVITE_KEY,
+      parentCode,
+      isInviteModalOpen,
+    });
+  }, [identityKey, INVITE_KEY, parentCode, isInviteModalOpen]);
 
-  tick(); // первый раз сразу
-  const id = window.setInterval(tick, 3000);
+  // ===== refreshTasks =====
+  const parentCodeRef = useRef<string>("");
+  useEffect(() => {
+    parentCodeRef.current = parentCode;
+  }, [parentCode]);
 
-  return () => {
-    alive = false;
-    window.clearInterval(id);
-    console.log("[auto-refresh] cleanup");
-  };
-}, []);
-// 3.1) Экшен для Missions: подтвердить/отклонить/удалить задачу через API
-const onTaskAction = async (
-  taskId: string,
-  action: "confirm" | "reject" | "delete"
-) => {
-if (action === "delete") {
-  await parentApi.deleteTask(PARENT_CODE, taskId);
-  await refreshTasks();
+  const refreshTasks = useCallback(async () => {
+    const code = parentCodeRef.current;
+
+if (!code) {
+  setApiChildren([]);
+  setTasks([]);
+  setChildPurchases({});
+  // childHistory сбросится только при явном logout
   return;
 }
-  await parentApi.confirmTask(PARENT_CODE, taskId, action);
-  await refreshTasks();
-};
 
-useEffect(() => {
-  if (!Array.isArray(apiChildren) || apiChildren.length === 0) return;
+    try {
+      console.log("[auto-refresh] tick", new Date().toLocaleTimeString());
+      setApiError(null);
 
-  setChildren((prev) =>
-    prev.map((uiChild: any) => {
-      // 0) ЗАМОК: если уже склеен - больше не трогаем
-      if (uiChild.apiChildId) return uiChild;
+      const kidsResp = await parentApi.listChildren(code);
+      const nextKids = kidsResp?.children ?? [];
+      setApiChildren(nextKids);
 
-      // 1) MVP-матч по имени: UI "Миша" -> API "Стас" не совпадет
-      // поэтому делаем дополнительный матч по inviteCode, если он есть
-      const byInvite =
-        uiChild.inviteCode
-          ? apiChildren.find((k: any) => String(k?.invite_code ?? "") === String(uiChild.inviteCode ?? ""))
-          : null;
+      const resp = await parentApi.getTasks(code);
 
-      const byName = apiChildren.find((k: any) => {
-        const a = String(k?.name ?? "").trim().toLowerCase();
-        const b = String(uiChild?.name ?? "").trim().toLowerCase();
-        return a && b && a === b;
-      });
+      // purchases
+      try {
+        const purchasesResp = await parentApi.getFamilyPurchases(code);
+        const allPurchases = purchasesResp?.purchases ?? [];
 
-      const apiKid = byInvite || byName;
-      if (!apiKid) return uiChild;
+        const purchasesMap: Record<string, any[]> = {};
+        for (const p of allPurchases) {
+          if (!purchasesMap[p.child_id]) purchasesMap[p.child_id] = [];
+          purchasesMap[p.child_id].push(p);
+        }
+        setChildPurchases(purchasesMap);
+      } catch (e) {
+        console.error("[purchases] failed:", e);
+        setChildPurchases({});
+      }
 
-      return {
-        ...uiChild,
-        apiChildId: apiKid.id,
-        // имя НЕ перетираем, иначе "Миша" станет "Стас" и ты офигеешь :)
-        // name: uiChild.name,
-      };
-    })
-  );
-}, [apiChildren]);
-useEffect(() => {
-  const misha = (children as any[]).find((c) => c.name === "Миша");
-  console.log("UI child Misha apiChildId:", misha?.apiChildId);
-}, [children]);
+      // history
+      try {
+        const historyResp = await parentApi.getHistory(code);
+        const historyItems = historyResp?.history || [];
 
-// 4) Мост: uiChildren = UI-дети, но missions + balance берём из API
-const uiChildren: Child[] = useMemo(() => {
-  return children.map((c: any) => {
-    const apiId = c.apiChildId;
+        const historyMap: Record<string, any[]> = {};
+        for (const item of historyItems) {
+          if (!historyMap[item.child_id]) historyMap[item.child_id] = [];
+          historyMap[item.child_id].push({
+            id: item.id,
+            type: item.type === "task" ? "mission" : "purchase",
+            description: item.title,
+            amount: item.amount,
+            date: item.created_at,
+          });
+        }
+        setChildHistory(historyMap);
+      } catch (e) {
+        console.error("[history] FAILED:", e);
+        setChildHistory({});
+      }
 
-    // 1) Ищем ребёнка в API сначала по apiChildId
-    let apiKid = apiId
-      ? apiChildren.find((k: any) => k?.id === apiId)
-      : null;
+      const nextTasks = resp?.tasks ?? [];
+      setTasks(nextTasks);
 
-    // 2) Fallback: если apiChildId не совпал - ищем по имени
-    if (!apiKid) {
-      apiKid =
-        apiChildren.find(
-          (k: any) => String(k?.name || "").trim() === String(c?.name || "").trim()
-        ) || null;
+      console.log("[auto-refresh] children/tasks:", nextKids.length, nextTasks.length);
+    } catch (e: any) {
+      const msg = e?.message || String(e);
+      setApiError(msg);
+      console.error("PARENT API FAIL:", e);
+    } finally {
+      setLastSyncAt(Date.now());
     }
+  }, []);
 
-    // 3) Ключ для истории: сначала реальный api id, иначе apiChildId из UI
-    const historyKey: string | undefined = apiKid?.id || apiId;
+  // auto refresh loop
+  useEffect(() => {
+    let alive = true;
+    console.log("[auto-refresh] mounted");
 
-    const nextBalance = {
-      confirmed: Number(apiKid?.balance ?? c.balance?.confirmed ?? 0),
-      pending: Number(apiKid?.pending_balance ?? c.balance?.pending ?? 0),
+    const tick = async () => {
+      if (!alive) return;
+      try {
+        await refreshTasks();
+      } catch (e) {
+        console.warn("[auto-refresh] tick failed", e);
+      }
     };
 
-    if (c.name === "Миша") {
-      console.log(
-        "[DEBUG Misha] apiId:",
-        apiId,
-        "tasks.len:",
-        Array.isArray(tasks) ? tasks.length : "no-tasks"
-      );
-      console.log(
-        "[DEBUG Misha] first task child_ids:",
-        Array.isArray(tasks) ? tasks.slice(0, 3).map((t: any) => t?.child_id) : []
-      );
-      console.log(
-        "[DEBUG Misha] first task statuses:",
-        Array.isArray(tasks) ? tasks.slice(0, 3).map((t: any) => t?.status) : []
-      );
-    }
+    tick();
+    const id = window.setInterval(tick, 3000);
 
-    const childTasks = Array.isArray(tasks)
-      ? tasks.filter((t: any) => taskBelongsToChild(t, c) && t.status !== "CONFIRMED")
-      : [];
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+      console.log("[auto-refresh] cleanup");
+    };
+  }, [refreshTasks]);
 
-    const apiMissions = childTasks.map((t: any) => ({
-      id: t.id,
-      title: t.title,
-      reward: Number(t.reward_amount ?? 0),
-      status: t.status === "WAITING" ? "pending" : "active",
-      category: "api",
-      isRecurring: Boolean(t.recurring),
-      description: t.description ?? "",
-      icon: t.icon ?? "✅",
-      _raw: t,
-    }));
+  // task actions
+  const onTaskAction = useCallback(
+    async (taskId: string, action: "confirm" | "reject" | "delete") => {
+      const code = parentCodeRef.current;
+      if (!code) return;
 
-    return {
-      ...c,
-      balance: nextBalance,
-      missions: apiMissions,
-      activities: historyKey ? (childHistory[historyKey] || []) : [],
-    } as Child;
-  });
-}, [children, tasks, apiChildren, childHistory]);
-useEffect(() => {
-  const misha = (uiChildren as any[]).find((c) => c.name === "Миша");
-  console.log("UI child Misha apiChildId:", misha?.apiChildId);
-  console.log("UI child Misha missions:", misha?.missions?.length);
-}, [uiChildren]);
+      if (action === "delete") {
+        await parentApi.deleteTask(code, taskId);
+        await refreshTasks();
+        return;
+      }
 
-const selectedChild: Child = useMemo(() => {
-  return uiChildren.find((c: any) => c.id === selectedChildId) || uiChildren[0];
-}, [uiChildren, selectedChildId]);
+      await parentApi.confirmTask(code, taskId, action);
+      await refreshTasks();
+    },
+    [refreshTasks]
+  );
+
+  // lock-in apiChildId mapping once found
+  useEffect(() => {
+    if (!Array.isArray(apiChildren) || apiChildren.length === 0) return;
+
+    setChildren((prev) =>
+      prev.map((uiChild: any) => {
+        if (uiChild.apiChildId) return uiChild;
+
+        const byInvite = uiChild.inviteCode
+          ? apiChildren.find(
+              (k: any) =>
+                String(k?.invite_code ?? "") === String(uiChild.inviteCode ?? "")
+            )
+          : null;
+
+        const byName = apiChildren.find((k: any) => {
+          const a = String(k?.name ?? "").trim().toLowerCase();
+          const b = String(uiChild?.name ?? "").trim().toLowerCase();
+          return a && b && a === b;
+        });
+
+        const apiKid = byInvite || byName;
+        if (!apiKid) return uiChild;
+
+        return {
+          ...uiChild,
+          apiChildId: apiKid.id,
+        };
+      })
+    );
+  }, [apiChildren]);
+
+  // bridge: UI children + missions/balance/history from API
+  const uiChildren: Child[] = useMemo(() => {
+    return children.map((c: any) => {
+      const apiId = c.apiChildId;
+
+      let apiKid = apiId ? apiChildren.find((k: any) => k?.id === apiId) : null;
+      if (!apiKid) {
+        apiKid =
+          apiChildren.find(
+            (k: any) =>
+              String(k?.name || "").trim() === String(c?.name || "").trim()
+          ) || null;
+      }
+
+      const historyKey: string | undefined = apiKid?.id || apiId;
+
+      const nextBalance = {
+        confirmed: Number(apiKid?.balance ?? c.balance?.confirmed ?? 0),
+        pending: Number(apiKid?.pending_balance ?? c.balance?.pending ?? 0),
+      };
+
+      const childTasks = Array.isArray(tasks)
+        ? tasks.filter(
+            (t: any) => taskBelongsToChild(t, c) && t.status !== "CONFIRMED"
+          )
+        : [];
+
+      const apiMissions = childTasks.map((t: any) => ({
+        id: t.id,
+        title: t.title,
+        reward: Number(t.reward_amount ?? 0),
+        status: mapTaskStatusToMissionStatus(String(t.status || "")),
+        category: "api",
+        isRecurring: Boolean(t.recurring),
+        description: t.description ?? "",
+        icon: t.icon ?? "✅",
+        _raw: t,
+      }));
+
+      return {
+        ...c,
+        balance: nextBalance,
+        missions: apiMissions,
+        activities: historyKey ? (childHistory[historyKey] || []) : [],
+      } as Child;
+    });
+  }, [children, tasks, apiChildren, childHistory]);
+
+  const selectedChild: Child = useMemo(() => {
+    if (!selectedChildId) return null as any;
+    return (
+      (uiChildren as any).find((c: any) => c.id === selectedChildId) ||
+      uiChildren[0] ||
+      (null as any)
+    );
+  }, [uiChildren, selectedChildId]);
 
   const apiChildId = (selectedChild as any)?.apiChildId;
-  const pendingPrizesCount = childPurchases[apiChildId]?.filter((p: any) => p.status === "pending").length ?? 0;
+  const pendingPrizesCount =
+    childPurchases[apiChildId]?.filter((p: any) => p.status === "pending").length ??
+    0;
   const pendingMissionsCount =
     (selectedChild as any)?.missions?.filter((m: any) => m.status === "pending")
       ?.length ?? 0;
 
   const toggleTheme = () => {
-    // оставь твою реализацию (если была). Сейчас заглушка не ломает приложение.
     setTheme((prev) =>
       prev === Theme.DEEP_PURPLE ? Theme.CLASSIC_DARK : Theme.PASTEL_MINT
     );
   };
 
   const handleUpdateChild = (updated: Child) => {
-    // обновляем базовых детей (uiChildren пересоберётся автоматически)
-    setChildren((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+    setChildren((prev) =>
+      prev.map((c: any) => (c.id === (updated as any).id ? updated : c))
+    );
   };
 
   const handleDeleteChild = (id: string) => {
-    const newChildren = children.filter((c) => (c as any).id !== id);
+    const newChildren = (children as any[]).filter((c) => c.id !== id);
     if (newChildren.length > 0) {
-      setChildren(newChildren);
-      if (selectedChildId === id) setSelectedChildId((newChildren[0] as any).id);
+      setChildren(newChildren as any);
+      if (selectedChildId === id) setSelectedChildId(newChildren[0]?.id);
     }
   };
 
@@ -397,41 +464,106 @@ const selectedChild: Child = useMemo(() => {
                 API error: {apiError}
               </div>
             ) : null}
-<Dashboard
-  child={selectedChild}
-  onUpdateChild={handleUpdateChild}
-  onTaskAction={onTaskAction}
-  pendingPurchases={childPurchases[apiChildId] || []}
-/>          </>
+            <Dashboard
+              child={selectedChild}
+              onUpdateChild={handleUpdateChild}
+              onTaskAction={onTaskAction as any}
+              pendingPurchases={childPurchases[apiChildId] || []}
+            />
+          </>
         );
 
-case Tab.MISSIONS:
-  return (
-    <Missions
-      child={selectedChild}
-      allChildren={uiChildren}
-      onUpdateChild={handleUpdateChild}
-      onTaskAction={onTaskAction}
-      parentCode={PARENT_CODE}
-      onRefresh={refreshTasks}
-    />
-  );
+      case Tab.MISSIONS:
+        return (
+          <Missions
+            child={selectedChild}
+            allChildren={uiChildren}
+            onUpdateChild={handleUpdateChild}
+            onTaskAction={onTaskAction as any}
+            parentCode={parentCode}
+            onRefresh={refreshTasks as any}
+          />
+        );
 
       case Tab.SHOP:
-return <Shop allChildren={uiChildren} inviteCode={PARENT_CODE} currentChild={selectedChild} />;
+        return (
+          <Shop
+            allChildren={uiChildren}
+            inviteCode={parentCode}
+            currentChild={selectedChild}
+          />
+        );
 
       case Tab.AI_ASSISTANT:
         return <AIAssistant child={selectedChild} />;
 
       default:
-return (
-  <Dashboard
-    child={selectedChild}
-    onUpdateChild={handleUpdateChild}
-    onTaskAction={onTaskAction}
-  />
-);    }
+        return (
+          <Dashboard
+            child={selectedChild}
+            onUpdateChild={handleUpdateChild}
+            onTaskAction={onTaskAction as any}
+          />
+        );
+    }
   };
+
+  // ===== Auth gate =====
+  if (!parentCode) {
+    return (
+      <div
+        className="min-h-screen flex flex-col items-center justify-center p-6"
+        style={{ backgroundColor: "#0b0b10", color: "#fff" }}
+      >
+        <div
+          className="w-full max-w-md rounded-2xl p-6"
+          style={{ backgroundColor: "rgba(255,255,255,0.06)" }}
+        >
+          <div className="text-xl font-semibold">Вход родителя</div>
+          <div className="mt-2 text-sm" style={{ opacity: 0.8 }}>
+            Введи код родителя. Он сохранится в этом Telegram аккаунте.
+          </div>
+
+          <input
+            className="mt-4 w-full rounded-xl px-4 py-3"
+            style={{ backgroundColor: "rgba(255,255,255,0.08)", outline: "none" }}
+            placeholder="Код родителя"
+            value={codeDraft}
+            onChange={(e) => setCodeDraft(e.target.value)}
+          />
+
+          <button
+            className="mt-4 w-full rounded-xl px-4 py-3 font-semibold"
+            style={{ backgroundColor: "#7c3aed" }}
+            onClick={async () => {
+              const v = (codeDraft || "").trim();
+              if (!v) return;
+              // if (!identityKey) return;  // ВРЕМЕННО ОТКЛЮЧЕНО ДЛЯ ТЕСТА
+
+              await tgCloudSet(INVITE_KEY, v);
+              setParentCode(v);
+              setIsInviteModalOpen(false);
+            }}
+          >
+            Продолжить
+          </button>
+
+          <button
+            className="mt-3 w-full rounded-xl px-4 py-3"
+            style={{ backgroundColor: "rgba(255,255,255,0.08)" }}
+            onClick={async () => {
+              if (identityKey) await tgCloudDel(INVITE_KEY);
+              setCodeDraft("");
+              setParentCode("");
+              setIsInviteModalOpen(true);
+            }}
+          >
+            Сбросить код
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen flex flex-col transition-colors duration-500 bg-black text-white">
@@ -439,7 +571,7 @@ return (
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-black tracking-tighter">Family Wallet</h1>
 
-          <div className="flex gap-4">
+          <div className="flex gap-4 items-center">
             <button
               onClick={toggleTheme}
               className="p-2.5 rounded-full bg-white/5 text-[var(--text-muted)] hover:text-[var(--primary)] transition-all border border-white/5"
@@ -455,12 +587,14 @@ return (
             >
               ↻
             </button>
-                    <span className="text-[10px] text-white/50 ml-2">
-<span className="text-[10px] text-white/50 ml-2">
-  build {BUILD}
-</span>
-  {lastSyncAt ? `sync ${new Date(lastSyncAt).toLocaleTimeString()}` : "sync -"}
-</span>
+
+            <span className="text-[10px] text-white/50">
+              build {BUILD_ID}{" "}
+              {lastSyncAt
+                ? `sync ${new Date(lastSyncAt).toLocaleTimeString()}`
+                : "sync -"}
+            </span>
+
             <button
               onClick={() => setIsSettingsOpen(true)}
               className="p-2.5 rounded-full bg-white/5 text-[var(--text-muted)] hover:text-[var(--primary)] transition-all border border-white/5"
@@ -517,8 +651,8 @@ return (
       {isSettingsOpen && (
         <SettingsModal
           children={children}
-          setChildren={setChildren}
-          onDeleteChild={handleDeleteChild}
+          setChildren={setChildren as any}
+          onDeleteChild={handleDeleteChild as any}
           onClose={() => setIsSettingsOpen(false)}
           onOpenAddChild={() => {
             setIsSettingsOpen(false);
@@ -530,9 +664,9 @@ return (
       {isAddChildOpen && (
         <AddChildScreen
           onCancel={() => setIsAddChildOpen(false)}
-          onAdd={(newChild) => {
-            setChildren((prev) => [...prev, newChild]);
-            setSelectedChildId((newChild as any).id);
+          onAdd={(newChild: any) => {
+            setChildren((prev) => [...prev, newChild] as any);
+            setSelectedChildId(newChild.id);
             setIsAddChildOpen(false);
           }}
         />
@@ -540,7 +674,6 @@ return (
     </div>
   );
 };
-
 interface NavButtonProps {
   active: boolean;
   onClick: () => void;
@@ -572,9 +705,7 @@ const NavButton: React.FC<NavButtonProps> = ({
         </span>
       )}
     </div>
-    <span className="text-[10px] font-black uppercase tracking-widest">
-      {label}
-    </span>
+    <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>
   </button>
 );
 

@@ -210,3 +210,18 @@ export const kidApi = {
     return request<any>("/api/history", { method: "GET" }, inviteCode);
   },
 };
+// --- Auth API ---
+export const authApi = {
+  authenticateWithTelegram(initData: string, inviteCode?: string) {
+    return request<{
+      status: 'authenticated' | 'needs_invite';
+      family_id?: string;
+      invite_code?: string;
+      family_name?: string;
+      tg_user_id?: string;
+    }>('/api/auth/telegram', {
+      method: 'POST',
+      body: JSON.stringify({ initData, inviteCode })
+    });
+  }
+};
