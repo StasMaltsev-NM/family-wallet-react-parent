@@ -59,6 +59,7 @@ async function sha256Short(input: string): Promise<string> {
 }
 
 function parentInviteStorageKey(identityKey: string) {
+    if (!identityKey) return ""; // НЕ СОЗДАЁМ КЛЮЧ, ЕСЛИ identityKey ПУСТОЙ!
   return `fw_parent_invite_${identityKey}`;
 }
 
@@ -593,11 +594,38 @@ if (!code) {
             onClick={async () => {
               const v = (codeDraft || "").trim();
               if (!v) return;
-              // if (!identityKey) return;  // ВРЕМЕННО ОТКЛЮЧЕНО ДЛЯ ТЕСТА
 
               await tgCloudSet(INVITE_KEY, v);
               setParentCode(v);
               setIsInviteModalOpen(false);
+
+              // ПОВТОРЯЕМ AUTH С НОВЫМ КОДОМ
+              setIsAuthLoading(true);
+              try {
+                const tg = getTg();
+                const initData = tg?.initData ?? "";
+                if (initData) {
+                  const result = await authApi.authenticateWithTelegram(initData, v);
+                  console.log('[INVITE MODAL] AUTH RESULT:', result);
+                  
+                  if (result.status === 'authenticated' && result.invite_code) {
+                    setParentCode(result.invite_code);
+                    setAuthError(null);
+                  } else if (result.status === 'create_family') {
+                    // TODO: показать форму создания семьи
+                    console.log('[INVITE MODAL] CREATE FAMILY:', result);
+                  } else if (result.status === 'needs_invite') {
+                    setAuthError('Неверный код приглашения');
+                    setIsInviteModalOpen(true);
+                  }
+                }
+              } catch (err: any) {
+                console.error('[INVITE MODAL] AUTH FAILED:', err);
+                setAuthError(err.message || 'Ошибка авторизации');
+                setIsInviteModalOpen(true);
+              } finally {
+                setIsAuthLoading(false);
+              }
             }}
           >
             Продолжить
