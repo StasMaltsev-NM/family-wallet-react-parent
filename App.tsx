@@ -656,8 +656,15 @@ if (!code) {
           <div className="flex gap-4 items-center">
                         <button
               onClick={async () => {
+                console.log('[LOGOUT] identityKey:', identityKey);
+                console.log('[LOGOUT] INVITE_KEY:', INVITE_KEY);
+                
                 // Очистить Cloud Storage
-                if (identityKey) await tgCloudDel(INVITE_KEY);
+                if (identityKey && INVITE_KEY) {
+                  await tgCloudDel(INVITE_KEY);
+                  console.log('[LOGOUT] Удалён ключ:', INVITE_KEY);
+                }
+                
                 // Очистить state
                 setParentCode("");
                 setCodeDraft("");
