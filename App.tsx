@@ -490,9 +490,9 @@ if (!code) {
   const pendingPrizesCount =
     childPurchases[apiChildId]?.filter((p: any) => p.status === "pending").length ??
     0;
-  const pendingMissionsCount =
-    (selectedChild as any)?.missions?.filter((m: any) => m.status === "pending")
-      ?.length ?? 0;
+  const pendingMissionsCount = selectedChild
+    ? ((selectedChild as any).missions?.filter((m: any) => m.status === "pending")?.length ?? 0)
+    : 0;
 
   const toggleTheme = () => {
     setTheme((prev) =>
