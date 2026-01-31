@@ -232,6 +232,12 @@ useEffect(() => {
         console.log('[NEW AUTH] SUCCESS:', result);
         
         if (result.status === 'authenticated' && result.invite_code) {
+          // ОЧИСТИТЬ СТАРЫЕ ДАННЫЕ ПРИ СМЕНЕ СЕМЬИ!
+          setChildren([]);
+          setTasks([]);
+          setChildPurchases({});
+          setChildHistory({});
+          
           setParentCode(result.invite_code);
           setIsInviteModalOpen(false);
           await tgCloudSet(INVITE_KEY, result.invite_code); // Сохраняем в Cloud
@@ -606,6 +612,12 @@ if (!code) {
                   console.log('[INVITE MODAL] AUTH RESULT:', result);
                   
                   if (result.status === 'authenticated' && result.invite_code) {
+                    // ОЧИСТИТЬ СТАРЫЕ ДАННЫЕ ПРИ СМЕНЕ СЕМЬИ!
+                    setChildren([]);
+                    setTasks([]);
+                    setChildPurchases({});
+                    setChildHistory({});
+                    
                     // ТОЛЬКО ЕСЛИ УСПЕШНО — СОХРАНЯЕМ!
                     await tgCloudSet(INVITE_KEY, result.invite_code);
                     setParentCode(result.invite_code);
