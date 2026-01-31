@@ -264,7 +264,7 @@ useEffect(() => {
 
   // Запускаем ВСЕГДА (приоритет новому AUTH!)
   initAuth();
-}, [parentCode]);
+}, []);
 
   useEffect(() => {
     console.log("[AUTH STATE]", {
@@ -279,7 +279,7 @@ useEffect(() => {
   const parentCodeRef = useRef<string>("");
   useEffect(() => {
     parentCodeRef.current = parentCode;
-  }, [parentCode]);
+  }, []);
 
   const refreshTasks = useCallback(async () => {
     const code = parentCodeRef.current;
