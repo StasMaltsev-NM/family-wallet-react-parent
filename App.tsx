@@ -653,6 +653,29 @@ if (!code) {
     );
   }
 
+  // СТРАХОВКА ОТ КРАША — ЕСЛИ НЕТ ДЕТЕЙ!
+  if (!selectedChild && uiChildren.length === 0) {
+    return (
+      <div style={{ 
+        padding: 24, 
+        color: "#fff", 
+        background: "#1a1a2e", 
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 18,
+        gap: 12
+      }}>
+        <div>🔄 Загрузка профиля...</div>
+        <div style={{ fontSize: 14, opacity: 0.6 }}>
+          {parentCode ? `Код: ${parentCode}` : 'Ожидание авторизации'}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen flex flex-col transition-colors duration-500 bg-black text-white">
       <header className="max-w-3xl mx-auto px-6 pt-5 pb-2 sticky top-0 z-40 bg-black">
