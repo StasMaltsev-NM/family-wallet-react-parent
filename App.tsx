@@ -515,6 +515,23 @@ if (!code) {
   };
 
   const renderContent = () => {
+    // ЗАЩИТА ОТ NULL!
+    if (!selectedChild && uiChildren.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+          <div className="text-6xl mb-4">👋</div>
+          <h2 className="text-2xl font-bold mb-2 text-white">Добро пожаловать!</h2>
+          <p className="text-white/60 mb-6">Добавьте первого ребёнка, чтобы начать</p>
+          <button
+            onClick={() => setIsAddChildOpen(true)}
+            className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl font-semibold hover:scale-105 transition-transform"
+          >
+            + Добавить ребёнка
+          </button>
+        </div>
+      );
+    }
+
     switch (activeTab) {
       case Tab.DASHBOARD:
         return (
@@ -524,17 +541,23 @@ if (!code) {
                 API error: {apiError}
               </div>
             ) : null}
-            <Dashboard
-              child={selectedChild}
-              onUpdateChild={handleUpdateChild}
-              onTaskAction={onTaskAction as any}
-              pendingPurchases={childPurchases[apiChildId] || []}
-            />
+            {selectedChild ? (
+              <Dashboard
+                child={selectedChild}
+                onUpdateChild={handleUpdateChild}
+                onTaskAction={onTaskAction as any}
+                pendingPurchases={childPurchases[apiChildId] || []}
+              />
+            ) : (
+              <div className="text-center py-12 text-white/60">
+                Выберите ребёнка
+              </div>
+            )}
           </>
         );
 
       case Tab.MISSIONS:
-        return (
+        return selectedChild ? (
           <Missions
             child={selectedChild}
             allChildren={uiChildren}
@@ -543,6 +566,10 @@ if (!code) {
             parentCode={parentCode}
             onRefresh={refreshTasks as any}
           />
+        ) : (
+          <div className="text-center py-12 text-white/60">
+            Выберите ребёнка
+          </div>
         );
 
       case Tab.SHOP:
@@ -555,15 +582,25 @@ if (!code) {
         );
 
       case Tab.AI_ASSISTANT:
-        return <AIAssistant child={selectedChild} />;
+        return selectedChild ? (
+          <AIAssistant child={selectedChild} />
+        ) : (
+          <div className="text-center py-12 text-white/60">
+            Выберите ребёнка
+          </div>
+        );
 
       default:
-        return (
+        return selectedChild ? (
           <Dashboard
             child={selectedChild}
             onUpdateChild={handleUpdateChild}
             onTaskAction={onTaskAction as any}
           />
+        ) : (
+          <div className="text-center py-12 text-white/60">
+            Выберите ребёнка
+          </div>
         );
     }
   };
