@@ -506,11 +506,28 @@ if (!code) {
     );
   };
 
-  const handleDeleteChild = (id: string) => {
-    const newChildren = (children as any[]).filter((c) => c.id !== id);
-    if (newChildren.length > 0) {
+  const handleDeleteChild = async (id: string) => {
+    try {
+      // УДАЛИТЬ ИЗ API!
+      if (parentCode) {
+        await parentApi.deleteChild(parentCode, id);
+        console.log("[DELETE CHILD] Успешно удалён:", id);
+      }
+
+      // УДАЛИТЬ ИЗ STATE
+      const newChildren = (children as any[]).filter((c) => c.id !== id);
       setChildren(newChildren as any);
-      if (selectedChildId === id) setSelectedChildId(newChildren[0]?.id);
+
+      // ЕСЛИ УДАЛИЛИ ВЫБРАННОГО → ВЫБРАТЬ ПЕРВОГО (ИЛИ NULL)
+      if (selectedChildId === id) {
+        setSelectedChildId(newChildren[0]?.id ?? "");
+      }
+
+      // ПЕРЕЗАГРУЗИТЬ ДАННЫЕ
+      setTimeout(() => refreshTasks(), 500);
+    } catch (err: any) {
+      console.error("[DELETE CHILD] FAILED:", err);
+      alert(`Ошибка удаления: ${err.message}`);
     }
   };
 

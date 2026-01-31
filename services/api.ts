@@ -116,6 +116,17 @@ export const parentApi = {
     );
   },
 
+  deleteChild(inviteCode: string, childId: string) {
+    return request<{ message: string }>(
+      "/api/children/delete",
+      {
+        method: "DELETE",
+        body: JSON.stringify({ child_id: childId }),
+      },
+      inviteCode
+    );
+  },
+
   getTasks(inviteCode: string) {
     return request<{ tasks: any[] }>(
       "/api/tasks/list",
