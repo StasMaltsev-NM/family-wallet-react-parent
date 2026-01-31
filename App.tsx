@@ -735,7 +735,7 @@ if (!code) {
             onClick={() => setActiveTab(Tab.DASHBOARD)}
             icon={<LayoutDashboard size={24} />}
             label="Главная"
-            badgeCount={pendingPrizesCount + pendingMissionsCount}
+            badgeCount={selectedChild ? (pendingPrizesCount + pendingMissionsCount) : 0}
           />
           <NavButton
             active={activeTab === Tab.MISSIONS}
