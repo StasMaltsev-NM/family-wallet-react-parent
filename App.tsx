@@ -209,44 +209,53 @@ const App: React.FC = () => {
     })();
   }, [identityKey, INVITE_KEY]);
   // NEW AUTH: backend Telegram auth via initData
-  useEffect(() => {
-    const initAuth = async () => {
-      const tg = getTg();
-      if (!tg || !tg.initData) {
-        console.log("[NEW AUTH] No Telegram initData - skip");
-        return;
-      }
-
+useEffect(() => {
+  // Новый AUTH через backend (приоритет!)
+  const initAuth = async () => {
+    const tg = getTg();
+    const initData = tg?.initData ?? "";
+    
+    if (initData) {
+      console.log('[NEW AUTH] Запускаем (даже если parentCode есть)', { initData: initData.substring(0, 50) + '...' });
+      setIsAuthLoading(true);
+      
       try {
-        setIsAuthLoading(true);
-        setAuthError(null);
-
-        const initData = tg.initData;
-        console.log("[NEW AUTH] sending initData len:", initData.length);
-
         const result = await authApi.authenticateWithTelegram(initData);
-
-        console.log("[NEW AUTH] result:", result);
-
-        if (result.status === "authenticated") {
-          setParentCode(result.invite_code || "");
+        console.log('[NEW AUTH] SUCCESS:', result);
+        
+        if (result.status === 'authenticated' && result.invite_code) {
+          setParentCode(result.invite_code);
           setIsInviteModalOpen(false);
-        } else {
+          await tgCloudSet(INVITE_KEY, result.invite_code); // Сохраняем в Cloud
+        } else if (result.status === 'needs_invite') {
           setIsInviteModalOpen(true);
         }
-      } catch (e: any) {
-        console.error("[NEW AUTH] failed:", e);
-        setAuthError(e?.message || "Auth failed");
+        
+        setAuthError(null);
+      } catch (err: any) {
+        console.error('[NEW AUTH] FAILED:', err);
+        setAuthError(err.message || 'Ошибка авторизации');
+        
+        // Fallback к старому AUTH
+        if (!parentCode) {
+          setIsInviteModalOpen(true);
+        }
       } finally {
         setIsAuthLoading(false);
       }
-    };
-
-    // запускаем только если старый auth не сработал
-    if (!parentCode) {
-      initAuth();
+    } else {
+      console.log('[NEW AUTH] No Telegram initData - skip');
+      
+      // Fallback к старому AUTH только если НЕТ initData
+      if (!parentCode) {
+        setIsInviteModalOpen(true);
+      }
     }
-  }, [parentCode]);
+  };
+
+  // Запускаем ВСЕГДА (приоритет новому AUTH!)
+  initAuth();
+}, [parentCode]);
 
   useEffect(() => {
     console.log("[AUTH STATE]", {
