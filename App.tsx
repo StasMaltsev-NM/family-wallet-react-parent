@@ -20,6 +20,7 @@ import {
   Sparkles,
   Settings,
   Palette,
+  LogOut,
 } from "lucide-react";
 
 import { parentApi } from "./services/api";
@@ -655,6 +656,21 @@ if (!code) {
           <h1 className="text-2xl font-black tracking-tighter">Family Wallet</h1>
 
           <div className="flex gap-4 items-center">
+                        <button
+              onClick={async () => {
+                // Очистить Cloud Storage
+                if (identityKey) await tgCloudDel(INVITE_KEY);
+                // Очистить state
+                setParentCode("");
+                setCodeDraft("");
+                setIsInviteModalOpen(true);
+              }}
+              className="p-2.5 rounded-full bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-all border border-red-500/30"
+              title="Выход"
+            >
+              <LogOut size={20} />
+            </button>
+
             <button
               onClick={toggleTheme}
               className="p-2.5 rounded-full bg-white/5 text-[var(--text-muted)] hover:text-[var(--primary)] transition-all border border-white/5"
