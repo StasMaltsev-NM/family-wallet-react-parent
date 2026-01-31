@@ -214,7 +214,7 @@ export const kidApi = {
 export const authApi = {
   authenticateWithTelegram(initData: string, inviteCode?: string) {
     return request<{
-      status: 'authenticated' | 'needs_invite';
+      status: 'authenticated' | 'needs_invite' | 'create_family';
       family_id?: string;
       invite_code?: string;
       family_name?: string;

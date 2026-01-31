@@ -226,7 +226,7 @@ useEffect(() => {
       setIsAuthLoading(true);
       
       try {
-        const result = await authApi.authenticateWithTelegram(initData);
+        const result = await authApi.authenticateWithTelegram(initData, parentCode || undefined);
         console.log('[NEW AUTH] SUCCESS:', result);
         
         if (result.status === 'authenticated' && result.invite_code) {
