@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 
 import { parentApi } from "./services/api";
-
+import { authApi } from "./services/api";
 // TEMP DEBUG
 declare global {
   interface Window {
@@ -143,7 +143,8 @@ const App: React.FC = () => {
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [parentCode, setParentCode] = useState<string>("");
   const [codeDraft, setCodeDraft] = useState<string>("");
-
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   // identityKey: уникально для TG-акка (tg_user_id) или web fallback (fw_web_user_id)
   const [identityKey, setIdentityKey] = useState<string>("");
   const INVITE_KEY = useMemo(() => parentInviteStorageKey(identityKey), [identityKey]);
@@ -207,6 +208,45 @@ const App: React.FC = () => {
       }
     })();
   }, [identityKey, INVITE_KEY]);
+  // NEW AUTH: backend Telegram auth via initData
+  useEffect(() => {
+    const initAuth = async () => {
+      const tg = getTg();
+      if (!tg || !tg.initData) {
+        console.log("[NEW AUTH] No Telegram initData - skip");
+        return;
+      }
+
+      try {
+        setIsAuthLoading(true);
+        setAuthError(null);
+
+        const initData = tg.initData;
+        console.log("[NEW AUTH] sending initData len:", initData.length);
+
+        const result = await authApi.authenticateWithTelegram(initData);
+
+        console.log("[NEW AUTH] result:", result);
+
+        if (result.status === "authenticated") {
+          setParentCode(result.invite_code || "");
+          setIsInviteModalOpen(false);
+        } else {
+          setIsInviteModalOpen(true);
+        }
+      } catch (e: any) {
+        console.error("[NEW AUTH] failed:", e);
+        setAuthError(e?.message || "Auth failed");
+      } finally {
+        setIsAuthLoading(false);
+      }
+    };
+
+    // запускаем только если старый auth не сработал
+    if (!parentCode) {
+      initAuth();
+    }
+  }, [parentCode]);
 
   useEffect(() => {
     console.log("[AUTH STATE]", {
