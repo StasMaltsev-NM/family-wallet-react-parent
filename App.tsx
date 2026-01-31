@@ -654,7 +654,7 @@ if (!code) {
   }
 
   // СТРАХОВКА ОТ КРАША — ЕСЛИ НЕТ ДЕТЕЙ!
-  if (!selectedChild && uiChildren.length === 0) {
+    if (!selectedChild && uiChildren.length === 0 && lastSyncAt === 0) {
     return (
       <div style={{ 
         padding: 24, 
