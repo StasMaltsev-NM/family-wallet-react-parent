@@ -596,10 +596,6 @@ if (!code) {
               const v = (codeDraft || "").trim();
               if (!v) return;
 
-              await tgCloudSet(INVITE_KEY, v);
-              setParentCode(v);
-              setIsInviteModalOpen(false);
-
               // ПОВТОРЯЕМ AUTH С НОВЫМ КОДОМ
               setIsAuthLoading(true);
               try {
@@ -610,11 +606,19 @@ if (!code) {
                   console.log('[INVITE MODAL] AUTH RESULT:', result);
                   
                   if (result.status === 'authenticated' && result.invite_code) {
+                    // ТОЛЬКО ЕСЛИ УСПЕШНО — СОХРАНЯЕМ!
+                    await tgCloudSet(INVITE_KEY, result.invite_code);
                     setParentCode(result.invite_code);
+                    setIsInviteModalOpen(false);
                     setAuthError(null);
+                    setCodeDraft("");
                   } else if (result.status === 'create_family') {
                     // TODO: показать форму создания семьи
                     console.log('[INVITE MODAL] CREATE FAMILY:', result);
+                    await tgCloudSet(INVITE_KEY, v);
+                    setParentCode(v);
+                    setIsInviteModalOpen(false);
+                    setAuthError(null);
                   } else if (result.status === 'needs_invite') {
                     setAuthError('Неверный код приглашения');
                     setIsInviteModalOpen(true);
@@ -622,8 +626,9 @@ if (!code) {
                 }
               } catch (err: any) {
                 console.error('[INVITE MODAL] AUTH FAILED:', err);
-                setAuthError(err.message || 'Ошибка авторизации');
+                setAuthError(err.message || 'Недействительный код');
                 setIsInviteModalOpen(true);
+                // НЕ ЗАКРЫВАЕМ МОДАЛКУ!
               } finally {
                 setIsAuthLoading(false);
               }
