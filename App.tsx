@@ -224,6 +224,7 @@ useEffect(() => {
     console.log("[NEW AUTH] keys:", Array.from(p.keys()));
     
     if (initData) {
+      if (initData && !isInviteModalOpen) { // ← ДОБАВЬ !isInviteModalOpen
       console.log('[NEW AUTH] Запускаем (даже если parentCode есть)', { initData: initData.substring(0, 50) + '...' });
       setIsAuthLoading(true);
       
