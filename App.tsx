@@ -211,13 +211,13 @@ const App: React.FC = () => {
   // NEW AUTH: backend Telegram auth via initData
 useEffect(() => {
   // Новый AUTH через backend (приоритет!)
-    const initAuth = async () => {
-      const tg = getTg();
-      const initData = tg?.initData ?? "";
-      
-      if (initData) {
-        console.log('[NEW AUTH] FULL initData:', initData); // ← ПОЛНЫЙ initData!
-        console.log('[NEW AUTH] Запускаем (даже если parentCode есть)', { initDataLen: initData.length });
+  const initAuth = async () => {
+    const tg = getTg();
+    const initData = tg?.initData ?? "";
+    
+    if (initData) {
+      console.log('[NEW AUTH] Запускаем (даже если parentCode есть)', { initData: initData.substring(0, 50) + '...' });
+      setIsAuthLoading(true);
       
       try {
         const result = await authApi.authenticateWithTelegram(initData);
