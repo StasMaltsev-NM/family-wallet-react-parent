@@ -235,6 +235,9 @@ useEffect(() => {
           setParentCode(result.invite_code);
           setIsInviteModalOpen(false);
           await tgCloudSet(INVITE_KEY, result.invite_code); // Сохраняем в Cloud
+          
+          // ПЕРЕЗАГРУЗИТЬ ДАННЫЕ НОВОЙ СЕМЬИ!
+          setTimeout(() => refreshTasks(), 1000);
         } else if (result.status === 'needs_invite') {
           setIsInviteModalOpen(true);
         }
@@ -612,6 +615,9 @@ if (!code) {
                     setIsInviteModalOpen(false);
                     setAuthError(null);
                     setCodeDraft("");
+                    
+                    // ПЕРЕЗАГРУЗИТЬ ДАННЫЕ НОВОЙ СЕМЬИ!
+                    setTimeout(() => refreshTasks(), 1000);
                   } else if (result.status === 'needs_invite') {
                     setAuthError('Неверный код приглашения');
                     setIsInviteModalOpen(true);
