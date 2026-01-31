@@ -215,6 +215,12 @@ useEffect(() => {
     const tg = getTg();
     const initData = tg?.initData ?? "";
     
+    const p = new URLSearchParams(initData);
+    console.log("[NEW AUTH] initData len:", initData.length);
+    console.log("[NEW AUTH] initData head:", initData.slice(0, 300));
+    console.log("[NEW AUTH] hash:", p.get("hash"));
+    console.log("[NEW AUTH] keys:", Array.from(p.keys()));
+    
     if (initData) {
       console.log('[NEW AUTH] Запускаем (даже если parentCode есть)', { initData: initData.substring(0, 50) + '...' });
       setIsAuthLoading(true);
