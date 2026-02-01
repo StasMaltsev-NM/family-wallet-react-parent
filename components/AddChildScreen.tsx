@@ -12,7 +12,7 @@ const AddChildScreen: React.FC<Props> = ({ onCancel, onAdd }) => {
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
   const [age, setAge] = useState('');
-  const [gender, setGender] = useState('male');
+  const [gender, setGender] = useState<'male' | 'female'>('male');
   const [description, setDescription] = useState('');
 
   const handleCreate = () => {
