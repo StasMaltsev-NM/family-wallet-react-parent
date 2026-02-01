@@ -821,26 +821,6 @@ if (!code) {
 
           <div className="flex gap-4 items-center">
             <button
-              onClick={async () => {
-                console.log("[LOGOUT] identityKey:", identityKey);
-                console.log("[LOGOUT] INVITE_KEY:", INVITE_KEY);
-
-                // Очистить Cloud Storage
-                if (identityKey && INVITE_KEY) {
-                  await tgCloudDel(INVITE_KEY);
-                  console.log("[LOGOUT] Удалён ключ:", INVITE_KEY);
-                }
-                
-                // Очистить state
-                handleLogout();
-              }}
-              className="p-2.5 rounded-full bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-all border border-red-500/30"
-              title="Выход"
-            >
-              <LogOut size={20} />
-            </button>
-
-            <button
               onClick={toggleTheme}
               className="p-2.5 rounded-full bg-white/5 text-[var(--text-muted)] hover:text-[var(--primary)] transition-all border border-white/5"
               title="Сменить тему"
