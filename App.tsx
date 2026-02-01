@@ -333,6 +333,7 @@ if (!code) {
         ...kid,
         apiChildId: kid.id,
         inviteCode: kid.invite_code || "",
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(kid.name || kid.id)}`,
         balance: {
           confirmed: kid.balance || 0,
           pending: kid.pending_balance || 0
