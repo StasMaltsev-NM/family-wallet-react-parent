@@ -327,14 +327,18 @@ if (!code) {
       setApiChildren(nextKids);
       setChildren(nextKids as any);
 
-      // Установить первого ребёнка, если ничего не выбрано
-      setSelectedChildId((prev) => {
-        if (nextKids.length > 0 && !prev) {
-          console.log('[auto-refresh] ВЫБРАН РЕБЁНОК:', nextKids[0].id);
-          return nextKids[0].id;
+      // Установить первого ребёнка ВСЕГДА (если не выбран вручную)
+      if (nextKids.length > 0) {
+        const currentSelected = selectedChildId;
+        const firstKid = nextKids[0].id;
+        
+        console.log('[auto-refresh] currentSelected:', currentSelected, 'firstKid:', firstKid);
+        
+        if (!currentSelected) {
+          console.log('[auto-refresh] ВЫБИРАЕМ ПЕРВОГО:', firstKid);
+          setSelectedChildId(firstKid);
         }
-        return prev;
-      });
+      }
 
       const resp = await parentApi.getTasks(code);
 
