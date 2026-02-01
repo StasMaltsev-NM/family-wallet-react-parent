@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Child } from '../types';
 import { ArrowLeft, User, MessageSquare, Calendar, Users, X, ShieldCheck } from 'lucide-react';
 
@@ -14,6 +14,13 @@ const AddChildScreen: React.FC<Props> = ({ onCancel, onAdd }) => {
   const [age, setAge] = useState('');
   const [gender, setGender] = useState<'male' | 'female'>('male');
   const [description, setDescription] = useState('');
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
 
   const handleCreate = () => {
     if (!name) return;
@@ -47,7 +54,8 @@ const AddChildScreen: React.FC<Props> = ({ onCancel, onAdd }) => {
       />
       
       {/* Modal Content */}
-      <div className="relative bg-[var(--bg-card)] w-full max-w-xl max-h-[95vh] overflow-y-auto no-scrollbar rounded-[3.5rem] p-8 sm:p-12 border border-white/10 shadow-[0_0_100px_rgba(0,0,0,1)] animate-in zoom-in-95 duration-500">
+      <div className="relative bg-[var(--bg-card)] w-full max-w-xl max-h-[95vh] overflow-hidden rounded-[3.5rem] border border-white/10 shadow-[0_0_100px_rgba(0,0,0,1)] animate-in zoom-in-95 duration-500">
+        <div className="overflow-y-auto no-scrollbar max-h-[95vh] p-8 sm:p-12">
         
         {/* Decorative Light */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-[var(--primary)]/10 blur-[100px] -mr-32 -mt-32 pointer-events-none" />
@@ -82,7 +90,7 @@ const AddChildScreen: React.FC<Props> = ({ onCancel, onAdd }) => {
             <div className="relative">
               <input 
                 type="text" 
-                placeholder="Например: Тигрёнок, Принцесса" 
+                placeholder="Тигрёнок, Принцесса" 
                 className="w-full h-16 rounded-[2.2rem] px-8 bg-white/5 border border-white/5 font-bold text-lg outline-none transition-all focus:ring-2 focus:ring-[var(--primary)] focus:bg-black/40"
                 value={name}
                 onChange={e => setName(e.target.value)}
@@ -165,7 +173,7 @@ const AddChildScreen: React.FC<Props> = ({ onCancel, onAdd }) => {
             <label className="text-[11px] font-black text-[var(--text-muted)] uppercase tracking-[0.2em] ml-5">О ребенке (для ИИ)</label>
             <div className="relative">
               <textarea 
-                placeholder="Постарайтесь подробно описать ребенка для рекомендаций от искусственного интеллекта (Необязательно)" 
+                placeholder="Опишите ребенка для лучших рекомендаций ИИ (необязательно)" 
                 className="w-full h-44 rounded-[2.8rem] p-8 bg-white/5 border border-white/5 font-medium text-base outline-none transition-all focus:ring-2 focus:ring-[var(--primary)] focus:bg-black/40 resize-none leading-relaxed placeholder:opacity-30"
                 value={description}
                 onChange={e => setDescription(e.target.value)}
@@ -191,6 +199,7 @@ const AddChildScreen: React.FC<Props> = ({ onCancel, onAdd }) => {
               Назад к списку
             </button>
           </div>
+        </div>
         </div>
       </div>
     </div>
