@@ -836,21 +836,6 @@ if (!code) {
             </button>
 
             <button
-              onClick={refreshTasks}
-              className="p-2.5 rounded-full bg-white/5 text-[var(--text-muted)] hover:text-[var(--primary)] transition-all border border-white/5"
-              title="Обновить из API"
-            >
-              ↻
-            </button>
-
-            <span className="text-[10px] text-white/50">
-              build {BUILD_ID}{" "}
-              {lastSyncAt
-                ? `sync ${new Date(lastSyncAt).toLocaleTimeString()}`
-                : "sync -"}
-            </span>
-
-            <button
               onClick={() => setIsSettingsOpen(true)}
               className="p-2.5 rounded-full bg-white/5 text-[var(--text-muted)] hover:text-[var(--primary)] transition-all border border-white/5"
               title="Настройки"
