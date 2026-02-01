@@ -328,9 +328,13 @@ if (!code) {
       setChildren(nextKids as any);
 
       // Установить первого ребёнка, если ничего не выбрано
-      if (nextKids.length > 0 && !selectedChildId) {
-        setSelectedChildId(nextKids[0].id);
-      }
+      setSelectedChildId((prev) => {
+        if (nextKids.length > 0 && !prev) {
+          console.log('[auto-refresh] ВЫБРАН РЕБЁНОК:', nextKids[0].id);
+          return nextKids[0].id;
+        }
+        return prev;
+      });
 
       const resp = await parentApi.getTasks(code);
 
