@@ -12,6 +12,7 @@ const AddChildScreen: React.FC<Props> = ({ onCancel, onAdd }) => {
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
   const [age, setAge] = useState('');
+  const [gender, setGender] = useState('male');
   const [description, setDescription] = useState('');
 
   const handleCreate = () => {
@@ -20,7 +21,8 @@ const AddChildScreen: React.FC<Props> = ({ onCancel, onAdd }) => {
     const newChild: Child = {
       id: Math.random().toString(36).substr(2, 9),
       name,
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${name || 'default'}`,
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${name || 'default'}&gender=${gender}`,
+      gender,
       dream: {
         title: 'Первая мечта...',
         price: 100,
@@ -91,6 +93,35 @@ const AddChildScreen: React.FC<Props> = ({ onCancel, onAdd }) => {
               </div>
             </div>
             <p className="text-[10px] text-emerald-400/60 font-black uppercase tracking-widest ml-5">Совет: используйте псевдонимы, не реальные имена.</p>
+          </div>
+
+          {/* Поле: Пол */}
+          <div className="space-y-3">
+            <label className="text-[11px] font-black text-[var(--text-muted)] uppercase tracking-[0.2em] ml-5">Пол ребёнка</label>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setGender('male')}
+                className={`flex-1 h-16 rounded-[2.2rem] font-black text-sm uppercase tracking-wider transition-all ${
+                  gender === 'male'
+                    ? 'bg-blue-500/20 text-blue-400 border-2 border-blue-500/50'
+                    : 'bg-white/5 text-[var(--text-muted)] border border-white/5 hover:bg-white/10'
+                }`}
+              >
+                👦 Мальчик
+              </button>
+              <button
+                type="button"
+                onClick={() => setGender('female')}
+                className={`flex-1 h-16 rounded-[2.2rem] font-black text-sm uppercase tracking-wider transition-all ${
+                  gender === 'female'
+                    ? 'bg-pink-500/20 text-pink-400 border-2 border-pink-500/50'
+                    : 'bg-white/5 text-[var(--text-muted)] border border-white/5 hover:bg-white/10'
+                }`}
+              >
+                👧 Девочка
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">

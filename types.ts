@@ -60,6 +60,7 @@ export interface Child {
   dream: Dream;
   balance: Balance;
   inviteCode: string;
+  gender?: string; // 'male' | 'female'
   missions: Mission[];
   apiChildId?: string; // <-- связь с backend child_id (child_001, child_002, ...)
   activities: Activity[];

@@ -334,11 +334,8 @@ if (!code) {
         ...kid,
         apiChildId: kid.id,
         inviteCode: kid.invite_code || "",
-        avatar: (() => {
-          const isMale = /сын|внук|племянник|брат/i.test(kid.role || "");
-          const gender = isMale ? "male" : "female";
-          return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(kid.name || kid.id)}&gender=${gender}`;
-        })(),
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(kid.name || kid.id)}&gender=${kid.gender || 'male'}`,
+        gender: kid.gender || 'male',
         balance: {
           confirmed: kid.balance || 0,
           pending: kid.pending_balance || 0
@@ -938,6 +935,7 @@ if (!code) {
                   name: newChild.name,
                   role: "child",
                   age: newChild.age || 10,
+                  gender: newChild.gender || "male",
                   avatar: newChild.avatar,
                   dream_title: newChild.dream?.title || "",
                   dream_price: newChild.dream?.price || 0,
