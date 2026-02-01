@@ -304,9 +304,28 @@ if (!code) {
       setApiError(null);
 
       const kidsResp = await parentApi.listChildren(code);
-      const nextKids = kidsResp?.children ?? [];
+      const rawKids = kidsResp?.children ?? [];
+
+      // ТРАНСФОРМАЦИЯ: добавляем dream, missions, activities
+      const nextKids = rawKids.map((kid: any) => ({
+        ...kid,
+        apiChildId: kid.id,
+        balance: {
+          confirmed: kid.balance || 0,
+          pending: kid.pending_balance || 0
+        },
+        dream: {
+          title: "Мечта",
+          image: "https://api.dicebear.com/7.x/shapes/svg?seed=dream",
+          current: kid.balance || 0,
+          price: 1000
+        },
+        missions: [],
+        activities: []
+      }));
+
       setApiChildren(nextKids);
-      setChildren(nextKids as any);  // ← КРИТИЧНО!
+      setChildren(nextKids as any);
 
       // Установить первого ребёнка, если ничего не выбрано
       if (nextKids.length > 0 && !selectedChildId) {
