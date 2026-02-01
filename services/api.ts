@@ -202,7 +202,7 @@ export const parentApi = {
     }, inviteCode);
   },
 
-getHistory(inviteCode: string) {
+  getHistory(inviteCode: string) {
   console.log("[getHistory] CALLING API...");  // ← ДОБАВЬ ЭТО!
   return request<any>("/api/history", { method: "GET" }, inviteCode)
     .then(r => {
@@ -214,6 +214,20 @@ getHistory(inviteCode: string) {
       throw e;
     });
 },
+
+  getFamilyCodes(inviteCode: string) {
+    return request<{
+      parentCode: string;
+      partnerCode: string | null;
+      friendCodes: string[];
+    }>(
+      "/api/family/codes",
+      {
+        method: "GET",
+      },
+      inviteCode
+    );
+  },
 };
 
 // --- Kid API ---

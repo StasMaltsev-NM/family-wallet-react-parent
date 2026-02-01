@@ -9,9 +9,13 @@ interface Props {
   onDeleteChild: (id: string) => void;
   onClose: () => void;
   onOpenAddChild: () => void;
+  parentCode: string;
+  partnerCode?: string;
+  friendCodes: string[];
+  onLogout: () => void;
 }
 
-const SettingsModal: React.FC<Props> = ({ children, setChildren, onDeleteChild, onClose, onOpenAddChild }) => {
+const SettingsModal: React.FC<Props> = ({ children, setChildren, onDeleteChild, onClose, onOpenAddChild, parentCode, partnerCode, friendCodes, onLogout }) => {
   const [copiedId, setCopiedId] = React.useState<string | null>(null);
 
   const copyCode = (code: string, id: string) => {
@@ -19,12 +23,6 @@ const SettingsModal: React.FC<Props> = ({ children, setChildren, onDeleteChild, 
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
-
-  const inviteCodes = [
-    { id: 'f1', code: 'PRO-GIFT-X10', status: 'active' },
-    { id: 'f2', code: 'KIDS-SAFE-77', status: 'activated' },
-    { id: 'f3', code: 'FAM-DASH-99', status: 'active' },
-  ];
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -50,8 +48,8 @@ const SettingsModal: React.FC<Props> = ({ children, setChildren, onDeleteChild, 
               <p className="text-[12px] font-black text-[var(--text-muted)] uppercase tracking-[0.3em]">Коды управления</p>
             </div>
             <div className="grid gap-4">
-              <CodeRow label="Ваш уникальный код родителя" code="P-ADMIN-772-K" onCopy={() => copyCode("P-ADMIN-772-K", "p1")} isCopied={copiedId === "p1"} />
-              <CodeRow label="Код для входа второго родителя" code="P-PARTNER-440-S" onCopy={() => copyCode("P-PARTNER-440-S", "p2")} isCopied={copiedId === "p2"} />
+              <CodeRow label="Ваш уникальный код родителя" code={parentCode} onCopy={() => copyCode(parentCode, "p1")} isCopied={copiedId === "p1"} />
+              <CodeRow label="Код для входа второго родителя" code={partnerCode || "Генерируется..."} onCopy={() => partnerCode && copyCode(partnerCode, "p2")} isCopied={copiedId === "p2"} />
             </div>
           </section>
 
@@ -63,22 +61,18 @@ const SettingsModal: React.FC<Props> = ({ children, setChildren, onDeleteChild, 
             </div>
             <p className="text-[11px] text-[var(--text-muted)] px-3 -mt-2 leading-relaxed font-medium">Поделитесь этими кодами с друзьями, чтобы они тоже могли управлять финансами своей семьи.</p>
             <div className="grid gap-4">
-              {inviteCodes.map(f => (
-                <div key={f.id} className="flex items-center justify-between p-5 bg-white/[0.02] rounded-3xl border border-white/5 shadow-inner transition-all hover:bg-white/[0.04]">
+              {friendCodes.map((code, index) => {
+                const id = `f${index}`;
+                return (
+                <div key={id} className="flex items-center justify-between p-5 bg-white/[0.02] rounded-3xl border border-white/5 shadow-inner transition-all hover:bg-white/[0.04]">
                   <div className="flex flex-col">
-                    <code className="text-lg font-mono font-black tracking-[0.15em] text-white/90">{f.code}</code>
-                    <div className="flex items-center gap-1.5 mt-2">
-                      <span className={`w-2 h-2 rounded-full ${f.status === 'active' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-rose-600'}`} />
-                      <span className={`text-[10px] font-black uppercase tracking-widest ${f.status === 'active' ? 'text-emerald-400' : 'text-rose-500/80'}`}>
-                        {f.status === 'active' ? 'Активен' : 'Использован'}
-                      </span>
-                    </div>
+                    <code className="text-lg font-mono font-black tracking-[0.15em] text-white/90">{code}</code>
                   </div>
-                  <button onClick={() => copyCode(f.code, f.id)} className={`p-4 rounded-2xl transition-all shadow-lg ${copiedId === f.id ? 'bg-emerald-500 scale-95' : 'bg-white/5 hover:bg-white/10 active:scale-95'}`}>
-                    {copiedId === f.id ? <Check size={20} className="text-white" /> : <Copy size={20} className="text-[var(--text-muted)]" />}
+                  <button onClick={() => copyCode(code, id)} className={`p-4 rounded-2xl transition-all shadow-lg ${copiedId === id ? 'bg-emerald-500 scale-95' : 'bg-white/5 hover:bg-white/10 active:scale-95'}`}>
+                    {copiedId === id ? <Check size={20} className="text-white" /> : <Copy size={20} className="text-[var(--text-muted)]" />}
                   </button>
                 </div>
-              ))}
+              )})}
             </div>
           </section>
 
@@ -96,7 +90,19 @@ const SettingsModal: React.FC<Props> = ({ children, setChildren, onDeleteChild, 
                       <img src={child.avatar} className="w-14 h-14 rounded-2xl object-cover grayscale opacity-50 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-500" />
                       <div className="absolute inset-0 bg-rose-500/10 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
-                    <span className="font-black text-xl text-white/80 group-hover:text-white transition-colors">{child.name}</span>
+                    <div className="flex flex-col">
+                      <span className="font-black text-xl text-white/80 group-hover:text-white transition-colors">{child.name}</span>
+                      <div className="flex items-center gap-2 mt-1">
+                        <code className="text-[11px] font-mono font-black tracking-[0.2em] text-white/60">{child.invite_code}</code>
+                        <button
+                          onClick={() => copyCode(child.invite_code, `child-${child.id}`)}
+                          className={`p-2 rounded-xl transition-all ${copiedId === `child-${child.id}` ? 'bg-emerald-500/90' : 'bg-white/5 hover:bg-white/10 active:scale-95'}`}
+                          title="Скопировать код ребёнка"
+                        >
+                          {copiedId === `child-${child.id}` ? <Check size={14} className="text-white" /> : <Copy size={14} className="text-[var(--text-muted)]" />}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                   <button 
                     onClick={() => onDeleteChild(child.id)} 
@@ -116,12 +122,8 @@ const SettingsModal: React.FC<Props> = ({ children, setChildren, onDeleteChild, 
               <UserPlus size={28} /> Добавить ребенка
             </button>
             <div className="flex flex-col gap-4">
-               <div className="grid grid-cols-2 gap-4">
-                <button className="flex items-center justify-center gap-3 py-4 bg-white/5 rounded-2xl font-black text-[11px] uppercase tracking-widest border border-white/5 hover:bg-white/10 transition-colors"><Download size={18} />Бекап</button>
-                <button className="flex items-center justify-center gap-3 py-4 bg-white/5 rounded-2xl font-black text-[11px] uppercase tracking-widest border border-white/5 hover:bg-white/10 transition-colors"><Upload size={18} />Импорт</button>
-              </div>
-              <button className="w-full py-5 bg-rose-600/10 text-rose-500/80 rounded-[2rem] font-black text-[12px] uppercase tracking-[0.2em] hover:bg-rose-600/20 hover:text-rose-500 transition-all border border-rose-500/10 flex items-center justify-center gap-3">
-                <Power size={18} /> Удалить профиль родителя
+              <button onClick={onLogout} className="w-full py-5 bg-rose-600/10 text-rose-500/80 rounded-[2rem] font-black text-[12px] uppercase tracking-[0.2em] hover:bg-rose-600/20 hover:text-rose-500 transition-all border border-rose-500/10 flex items-center justify-center gap-3">
+                <Power size={18} /> Выход
               </button>
             </div>
           </div>

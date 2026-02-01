@@ -144,6 +144,8 @@ const App: React.FC = () => {
 
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [parentCode, setParentCode] = useState<string>("");
+  const [partnerCode, setPartnerCode] = useState<string | undefined>(undefined);
+  const [friendCodes, setFriendCodes] = useState<string[]>([]);
   const [codeDraft, setCodeDraft] = useState<string>("");
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -243,6 +245,16 @@ useEffect(() => {
           
           // ПЕРЕЗАГРУЗИТЬ ДАННЫЕ НОВОЙ СЕМЬИ!
           setTimeout(() => refreshTasks(), 1000);
+
+          // Загрузить коды семьи
+          try {
+            const codes = await parentApi.getFamilyCodes(newCode);
+            setPartnerCode(codes.partnerCode || undefined);
+            setFriendCodes(codes.friendCodes);
+            console.log('[FAMILY CODES]', codes);
+          } catch (err) {
+            console.error('[FAMILY CODES] ERROR:', err);
+          }
         } else if (result.status === 'needs_invite') {
           setIsInviteModalOpen(true);
         }
@@ -575,6 +587,17 @@ if (!code) {
     }
   };
 
+  const handleLogout = () => {
+    setParentCode("");
+    setPartnerCode(undefined);
+    setFriendCodes([]);
+    setCodeDraft("");
+    setIsInviteModalOpen(true);
+    setChildren([]);
+    setApiChildren([]);
+    setSelectedChildId("");
+  };
+
   const renderContent = () => {
     // ЗАЩИТА ОТ NULL!
     if (!selectedChild && uiChildren.length === 0) {
@@ -787,21 +810,19 @@ if (!code) {
           <h1 className="text-2xl font-black tracking-tighter">Family Wallet</h1>
 
           <div className="flex gap-4 items-center">
-                        <button
+            <button
               onClick={async () => {
-                console.log('[LOGOUT] identityKey:', identityKey);
-                console.log('[LOGOUT] INVITE_KEY:', INVITE_KEY);
-                
+                console.log("[LOGOUT] identityKey:", identityKey);
+                console.log("[LOGOUT] INVITE_KEY:", INVITE_KEY);
+
                 // Очистить Cloud Storage
                 if (identityKey && INVITE_KEY) {
                   await tgCloudDel(INVITE_KEY);
-                  console.log('[LOGOUT] Удалён ключ:', INVITE_KEY);
+                  console.log("[LOGOUT] Удалён ключ:", INVITE_KEY);
                 }
                 
                 // Очистить state
-                setParentCode("");
-                setCodeDraft("");
-                setIsInviteModalOpen(true);
+                handleLogout();
               }}
               className="p-2.5 rounded-full bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-all border border-red-500/30"
               title="Выход"
@@ -895,6 +916,10 @@ if (!code) {
             setIsSettingsOpen(false);
             setIsAddChildOpen(true);
           }}
+          parentCode={parentCode}
+          partnerCode={partnerCode}
+          friendCodes={friendCodes}
+          onLogout={handleLogout}
         />
       )}
 
