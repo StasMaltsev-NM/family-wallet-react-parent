@@ -131,6 +131,7 @@ const App: React.FC = () => {
   const [selectedChildId, setSelectedChildId] = useState<string>(
     INITIAL_CHILDREN[0]?.id ?? ""
   );
+  const selectedChildIdRef = useRef<string>(selectedChildId);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAddChildOpen, setIsAddChildOpen] = useState(false);
@@ -357,7 +358,7 @@ if (!code) {
 
       // Установить первого ребёнка ВСЕГДА (если не выбран вручную)
       if (nextKids.length > 0) {
-        const currentSelected = selectedChildId;
+        const currentSelected = selectedChildIdRef.current;
         const firstKid = nextKids[0].id;
         
         console.log('[auto-refresh] currentSelected:', currentSelected, 'firstKid:', firstKid);
@@ -365,6 +366,7 @@ if (!code) {
         if (!currentSelected || !nextKids.find(k => k.id === currentSelected)) {
           console.log('[auto-refresh] ВЫБИРАЕМ ПЕРВОГО (нет выбранного или не найден):', firstKid);
           setSelectedChildId(firstKid);
+          selectedChildIdRef.current = firstKid;
         }
       }
 
@@ -592,7 +594,9 @@ if (!code) {
 
       // ЕСЛИ УДАЛИЛИ ВЫБРАННОГО → ВЫБРАТЬ ПЕРВОГО (ИЛИ NULL)
       if (selectedChildId === id) {
-        setSelectedChildId(newChildren[0]?.id ?? "");
+        const nextId = newChildren[0]?.id ?? "";
+        setSelectedChildId(nextId);
+        selectedChildIdRef.current = nextId;
       }
 
       // ПЕРЕЗАГРУЗИТЬ ДАННЫЕ
@@ -612,6 +616,7 @@ if (!code) {
     setChildren([]);
     setApiChildren([]);
     setSelectedChildId("");
+    selectedChildIdRef.current = "";
   };
 
   const renderContent = () => {
@@ -862,7 +867,10 @@ if (!code) {
         <ChildSwitcher
           children={uiChildren}
           selectedId={selectedChildId}
-          onSelect={setSelectedChildId}
+          onSelect={(id: string) => {
+            setSelectedChildId(id);
+            selectedChildIdRef.current = id;
+          }}
           onAdd={() => setIsAddChildOpen(true)}
           childPurchases={childPurchases}
         />
@@ -945,6 +953,7 @@ if (!code) {
                 };
                 setChildren((prev) => [...prev, childWithApiId] as any);
                 setSelectedChildId(childWithApiId.id);
+                selectedChildIdRef.current = childWithApiId.id;
 
                 // ПЕРЕЗАГРУЗИТЬ ДАННЫЕ
                 setTimeout(() => refreshTasks(), 500);
