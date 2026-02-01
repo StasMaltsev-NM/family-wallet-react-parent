@@ -232,9 +232,14 @@ useEffect(() => {
         console.log('[NEW AUTH] SUCCESS:', result);
         
         if (result.status === 'authenticated' && result.invite_code) {
-          setParentCode(result.invite_code);
+          const newCode = result.invite_code;
+          
+          // УСТАНОВИТЬ КОД СРАЗУ!
+          setParentCode(newCode);
+          parentCodeRef.current = newCode;  // ← КРИТИЧНО!
+          
           setIsInviteModalOpen(false);
-          await tgCloudSet(INVITE_KEY, result.invite_code); // Сохраняем в Cloud
+          await tgCloudSet(INVITE_KEY, newCode); // Сохраняем в Cloud
           
           // ПЕРЕЗАГРУЗИТЬ ДАННЫЕ НОВОЙ СЕМЬИ!
           setTimeout(() => refreshTasks(), 1000);
