@@ -131,6 +131,7 @@ export const parentApi = {
     name: string;
     role: string;
     age: number;
+    gender?: string;
     avatar: string;
     dream_title?: string;
     dream_price?: number;
