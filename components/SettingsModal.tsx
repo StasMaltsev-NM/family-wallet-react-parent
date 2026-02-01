@@ -2,6 +2,7 @@
 import React, { useRef } from 'react';
 import { Child } from '../types';
 import { X, Copy, Check, Download, Upload, ShieldCheck, UserPlus, Trash2, Users, Heart, Power, Trash } from 'lucide-react';
+import { GenderIcon } from './GenderIcon';
 
 interface Props {
   children: Child[];
@@ -87,7 +88,9 @@ const SettingsModal: React.FC<Props> = ({ children, setChildren, onDeleteChild, 
                 <div key={child.id} className="group flex items-center justify-between p-5 bg-white/[0.02] rounded-3xl border border-rose-500/10 hover:border-rose-500/30 transition-all duration-300">
                   <div className="flex items-center gap-5">
                     <div className="relative">
-                      <img src={child.avatar} className="w-14 h-14 rounded-2xl object-cover grayscale opacity-50 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-500" />
+                      <div className="w-14 h-14 rounded-2xl flex items-center justify-center">
+                        <GenderIcon gender={child.gender || 'male'} size={56} />
+                      </div>
                       <div className="absolute inset-0 bg-rose-500/10 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
                     <div className="flex flex-col">

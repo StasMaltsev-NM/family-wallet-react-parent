@@ -21,6 +21,7 @@ import {
   LocateFixed
 } from 'lucide-react';
 import { editImageWithAI } from '../services/gemini';
+import { GenderIcon } from './GenderIcon';
 
 interface Props {
   child: Child;
@@ -355,7 +356,9 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
             <div className="relative">
               <div className="absolute inset-0 bg-indigo-500 blur-xl opacity-50 animate-pulse" />
               <div className="w-12 h-12 rounded-full border-4 border-indigo-500 p-0.5 bg-black relative z-10">
-                <img src={child.avatar} alt={child.name} className="w-full h-full rounded-full" />
+                <div className="w-full h-full flex items-center justify-center rounded-full">
+                  <GenderIcon gender={child.gender || 'male'} size={40} />
+                </div>
               </div>
             </div>
             <div className="mt-2 px-3 py-1 bg-indigo-500 text-white text-[10px] font-black uppercase tracking-widest rounded-full shadow-lg">
@@ -402,7 +405,9 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
                 <div className="absolute inset-0 bg-indigo-500/40 rounded-full scale-[3] animate-ping" />
                 <div className="absolute inset-0 bg-indigo-500 blur-2xl opacity-40 scale-150" />
                 <div className="w-16 h-16 rounded-full border-4 border-indigo-500 p-0.5 bg-black relative z-10 shadow-2xl">
-                  <img src={child.avatar} alt={child.name} className="w-full h-full rounded-full" />
+                <div className="w-full h-full flex items-center justify-center">
+                  <GenderIcon gender={child.gender || 'male'} size={40} />
+                </div>
                 </div>
                 <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap px-4 py-2 bg-black/90 backdrop-blur-md border border-white/20 rounded-2xl text-white text-xs font-black uppercase tracking-widest shadow-2xl">
                   {child.name} • 5 мин назад

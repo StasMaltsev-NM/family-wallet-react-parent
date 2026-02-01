@@ -334,7 +334,6 @@ if (!code) {
         ...kid,
         apiChildId: kid.id,
         inviteCode: kid.invite_code || "",
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(kid.name || kid.id)}&gender=${kid.gender || 'male'}`,
         gender: kid.gender || 'male',
         balance: {
           confirmed: kid.balance || 0,

@@ -2,6 +2,7 @@
 import React from 'react';
 import { Child } from '../types';
 import { Plus } from 'lucide-react';
+import { GenderIcon } from './GenderIcon';
 
 interface Props {
   children: Child[];
@@ -51,12 +52,10 @@ const ChildSwitcher: React.FC<Props> = ({ children, selectedId, onSelect, onAdd,
               `}>
                 
                 {/* Аватар ребенка */}
-                <div className="w-[calc(100%-6px)] h-[calc(100%-6px)] rounded-full overflow-hidden">
-                  <img 
-                    src={child.avatar} 
-                    alt={child.name} 
-                    className={`w-full h-full object-cover bg-white/10 transition-all duration-500 
-                      ${isSelected ? 'grayscale-0 opacity-100' : 'grayscale opacity-50'}`} 
+                <div className="w-[calc(100%-6px)] h-[calc(100%-6px)] rounded-full overflow-hidden flex items-center justify-center">
+                  <GenderIcon 
+                    gender={child.gender || 'male'} 
+                    size={48}
                   />
                 </div>
               </div>
