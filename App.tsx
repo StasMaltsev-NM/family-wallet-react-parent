@@ -333,7 +333,11 @@ if (!code) {
         ...kid,
         apiChildId: kid.id,
         inviteCode: kid.invite_code || "",
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(kid.name || kid.id)}`,
+        avatar: (() => {
+          const isMale = /сын|внук|племянник|брат/i.test(kid.role || "");
+          const gender = isMale ? "male" : "female";
+          return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(kid.name || kid.id)}&gender=${gender}`;
+        })(),
         balance: {
           confirmed: kid.balance || 0,
           pending: kid.pending_balance || 0
@@ -358,8 +362,8 @@ if (!code) {
         
         console.log('[auto-refresh] currentSelected:', currentSelected, 'firstKid:', firstKid);
         
-        if (!currentSelected) {
-          console.log('[auto-refresh] ВЫБИРАЕМ ПЕРВОГО:', firstKid);
+        if (!currentSelected || !nextKids.find(k => k.id === currentSelected)) {
+          console.log('[auto-refresh] ВЫБИРАЕМ ПЕРВОГО (нет выбранного или не найден):', firstKid);
           setSelectedChildId(firstKid);
         }
       }
