@@ -510,8 +510,14 @@ if (!code) {
     try {
       // УДАЛИТЬ ИЗ API!
       if (parentCode) {
-        await parentApi.deleteChild(parentCode, id);
-        console.log("[DELETE CHILD] Успешно удалён:", id);
+        // НАЙТИ РЕБЁНКА ПО ID
+        const childToDelete = children.find((c: any) => c.id === id);
+        const apiId = childToDelete?.apiChildId || childToDelete?.id || id;
+
+        console.log("[DELETE CHILD] Удаляем:", { localId: id, apiId });
+
+        await parentApi.deleteChild(parentCode, apiId);
+        console.log("[DELETE CHILD] Успешно удалён:", apiId);
       }
 
       // УДАЛИТЬ ИЗ STATE
