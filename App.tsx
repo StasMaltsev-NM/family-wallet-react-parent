@@ -206,6 +206,16 @@ const App: React.FC = () => {
       if (saved) {
         setParentCode(saved);
         setIsInviteModalOpen(false);
+
+        // Загрузить коды семьи
+        try {
+          const codes = await parentApi.getFamilyCodes(saved);
+          setPartnerCode(codes.partnerCode || undefined);
+          setFriendCodes(codes.friendCodes);
+          console.log('[FAMILY CODES] (restored)', codes);
+        } catch (err) {
+          console.error('[FAMILY CODES] ERROR:', err);
+        }
       } else {
         setParentCode("");
         setIsInviteModalOpen(true);
