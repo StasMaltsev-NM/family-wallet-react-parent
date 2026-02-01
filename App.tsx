@@ -306,6 +306,12 @@ if (!code) {
       const kidsResp = await parentApi.listChildren(code);
       const nextKids = kidsResp?.children ?? [];
       setApiChildren(nextKids);
+      setChildren(nextKids as any);  // ← КРИТИЧНО!
+
+      // Установить первого ребёнка, если ничего не выбрано
+      if (nextKids.length > 0 && !selectedChildId) {
+        setSelectedChildId(nextKids[0].id);
+      }
 
       const resp = await parentApi.getTasks(code);
 
