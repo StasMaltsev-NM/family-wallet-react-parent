@@ -674,9 +674,15 @@ if (!code) {
                   console.log('[INVITE MODAL] AUTH RESULT:', result);
                   
                   if (result.status === 'authenticated' && result.invite_code) {
-                    // ТОЛЬКО ЕСЛИ УСПЕШНО — СОХРАНЯЕМ!
-                    await tgCloudSet(INVITE_KEY, result.invite_code);
-                    setParentCode(result.invite_code);
+                    const newCode = result.invite_code;
+                    
+                    // УСТАНОВИТЬ КОД СРАЗУ!
+                    setParentCode(newCode);
+                    parentCodeRef.current = newCode;  // ← КРИТИЧНО!
+                    
+                    // СОХРАНЯЕМ В CLOUD!
+                    await tgCloudSet(INVITE_KEY, newCode);
+                    
                     setIsInviteModalOpen(false);
                     setAuthError(null);
                     setCodeDraft("");
