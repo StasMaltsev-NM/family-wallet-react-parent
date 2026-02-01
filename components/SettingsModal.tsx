@@ -93,9 +93,9 @@ const SettingsModal: React.FC<Props> = ({ children, setChildren, onDeleteChild, 
                     <div className="flex flex-col">
                       <span className="font-black text-xl text-white/80 group-hover:text-white transition-colors">{child.name}</span>
                       <div className="flex items-center gap-2 mt-1">
-                        <code className="text-[11px] font-mono font-black tracking-[0.2em] text-white/60">{child.invite_code}</code>
+                        <code className="text-[11px] font-mono font-black tracking-[0.2em] text-white/60">{child.inviteCode}</code>
                         <button
-                          onClick={() => copyCode(child.invite_code, `child-${child.id}`)}
+                          onClick={() => copyCode(child.inviteCode, `child-${child.id}`)}
                           className={`p-2 rounded-xl transition-all ${copiedId === `child-${child.id}` ? 'bg-emerald-500/90' : 'bg-white/5 hover:bg-white/10 active:scale-95'}`}
                           title="Скопировать код ребёнка"
                         >
