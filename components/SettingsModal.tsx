@@ -122,6 +122,16 @@ const SettingsModal: React.FC<Props> = ({ children, setChildren, onDeleteChild, 
               <UserPlus size={28} /> Добавить ребенка
             </button>
             <div className="flex flex-col gap-4">
+              <button 
+                onClick={() => {
+                  if (window.confirm('Вы уверены? Это удалит всю семью и все данные!')) {
+                    alert('Функция в разработке');
+                  }
+                }} 
+                className="w-full py-5 bg-rose-600/10 text-rose-500/80 rounded-[2rem] font-black text-[12px] uppercase tracking-[0.2em] hover:bg-rose-600/20 hover:text-rose-500 transition-all border border-rose-500/10 flex items-center justify-center gap-3"
+              >
+                <Trash size={18} /> Удалить семью
+              </button>
               <button onClick={onLogout} className="w-full py-5 bg-rose-600/10 text-rose-500/80 rounded-[2rem] font-black text-[12px] uppercase tracking-[0.2em] hover:bg-rose-600/20 hover:text-rose-500 transition-all border border-rose-500/10 flex items-center justify-center gap-3">
                 <Power size={18} /> Выход
               </button>

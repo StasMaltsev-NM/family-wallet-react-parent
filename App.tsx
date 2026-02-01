@@ -332,6 +332,7 @@ if (!code) {
       const nextKids = rawKids.map((kid: any) => ({
         ...kid,
         apiChildId: kid.id,
+        inviteCode: kid.invite_code || "",
         balance: {
           confirmed: kid.balance || 0,
           pending: kid.pending_balance || 0
