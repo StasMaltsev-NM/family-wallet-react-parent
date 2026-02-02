@@ -104,14 +104,20 @@ const AIAssistant: React.FC<Props> = ({ child, parentCode }) => {
           child_id: child.apiChildId,
           title: idea.title,
           description: idea.description,
-          price_stars: idea.price_stars
+          price_stars: idea.price_stars,
+          external_link: idea.shop_url,
+          image_url: idea.image_url,
+          real_price_rub: idea.real_price_rub,
+          shop_name: idea.shop_name
         })
       });
       
       if (!response.ok) throw new Error('Ошибка создания');
       
-      // ✅ ПЕРЕЗАГРУЗКА СТРАНИЦЫ ДЛЯ ОБНОВЛЕНИЯ МАГАЗИНА
-      window.location.reload();
+      // ✅ ПОКАЗАТЬ УСПЕХ (БЕЗ ПЕРЕЗАГРУЗКИ)
+      // Родительский компонент должен обновить список наград
+      // Пока просто убираем карточку из UI
+      setPrizeIdeas((prev: any[]) => prev.filter((p: any) => p.title !== idea.title));
     } catch (err) {
       console.error('Ошибка добавления награды:', err);
       alert('❌ Не удалось добавить награду');
