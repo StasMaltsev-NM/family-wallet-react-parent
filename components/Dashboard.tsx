@@ -172,7 +172,7 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
 
       {/* 3. Дашборд миссий */}
       <div className={`bg-[var(--bg-card)] rounded-[2.5rem] border transition-all duration-300 ${isMissionsExpanded ? 'border-amber-400/50 shadow-xl' : 'border-[var(--border)] shadow-lg'}`}>
-        <button onClick={() => setIsMissionsExpanded(!isMissionsExpanded)} className="w-full flex items-center justify-between p-7">
+        <button onClick={() => setIsMissionsExpanded(!isMissionsExpanded)} className="w-full flex items-center justify-center p-7">
           <div className="flex items-center gap-5">
             <div className={`p-3.5 rounded-2xl ${isMissionsExpanded ? 'bg-amber-400/20 text-amber-400 shadow-inner' : 'bg-white/5 text-[var(--text-muted)]'}`}>
               <ClipboardCheck size={26} />
@@ -221,7 +221,7 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
 
       {/* 4. Награды */}
       <div className={`bg-[var(--bg-card)] rounded-[2.5rem] border transition-all duration-300 ${isPrizesExpanded ? 'border-[var(--primary)]/50 shadow-xl' : 'border-[var(--border)] shadow-lg'}`}>
-        <button onClick={() => setIsPrizesExpanded(!isPrizesExpanded)} className="w-full flex items-center justify-between p-7">
+        <button onClick={() => setIsPrizesExpanded(!isPrizesExpanded)} className="w-full flex items-center justify-center p-7">
           <div className="flex items-center gap-5">
             <div className={`p-3.5 rounded-2xl ${isPrizesExpanded ? 'bg-[var(--primary)]/20 text-[var(--primary)] shadow-inner' : 'bg-white/5 text-[var(--text-muted)]'}`}>
               <Gift size={26} />
@@ -267,7 +267,7 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
 
       {/* 5. Активность (Выпадающий список) */}
       <div className={`bg-[var(--bg-card)] rounded-[2.5rem] border transition-all duration-300 ${isActivityExpanded ? 'border-white/20 shadow-xl' : 'border-[var(--border)] shadow-sm'}`}>
-        <button onClick={() => setIsActivityExpanded(!isActivityExpanded)} className="w-full flex items-center justify-between p-7">
+        <button onClick={() => setIsActivityExpanded(!isActivityExpanded)} className="w-full flex items-center justify-center p-7">
           <div className="flex items-center gap-5">
             <div className={`p-3.5 rounded-2xl ${isActivityExpanded ? 'bg-white/10 text-white shadow-inner' : 'bg-white/5 text-[var(--text-muted)]'}`}>
               <History size={26} />
