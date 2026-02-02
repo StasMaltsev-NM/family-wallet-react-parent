@@ -2,7 +2,6 @@
 import React, { useState } from 'react';
 import { Child } from '../types';
 import { Sparkles, TrendingUp, BrainCircuit, Lightbulb, Loader2, RefreshCw, MessageSquareQuote, Target, Gift } from 'lucide-react';
-import { getChildInsights, getAIContent } from '../services/gemini';
 
 interface Props {
   child: Child;
@@ -21,15 +20,27 @@ const AIAssistant: React.FC<Props> = ({ child }) => {
   // Обновление всей основной аналитики
   const handleRefreshMain = async () => {
     setIsMainLoading(true);
-    const context = `${child.name}, миссий: ${child.missions.length}, последнее: ${child.activities[0]?.description || 'старт'}`;
-    
-    const [resInsight, resAdvice] = await Promise.all([
-      getChildInsights(child.name, child.missions.length, child.activities[0]?.description || 'Только начинаем'),
-      getAIContent('advice', context)
-    ]);
-    
-    setInsight(resInsight);
-    setAdvice(resAdvice);
+    try {
+      const response = await fetch('/api/ai/analytics', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Invite-Code': localStorage.getItem('parent_code') || ''
+        },
+        body: JSON.stringify({ child_id: child.apiChildId })
+      });
+      
+      if (!response.ok) throw new Error('AI Error');
+      
+      const data = await response.json();
+      const { growth, trends, goal } = data.analytics;
+      
+      setInsight(`${growth.title}: ${growth.text}`);
+      setAdvice(`${trends.title}: ${trends.text}\n\n${goal.title}: ${goal.text}`);
+    } catch (err) {
+      console.error('AI fetch error:', err);
+      setInsight('Не удалось загрузить аналитику');
+    }
     setIsMainLoading(false);
   };
 
