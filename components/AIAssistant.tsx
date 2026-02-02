@@ -46,15 +46,55 @@ const AIAssistant: React.FC<Props> = ({ child }) => {
 
   const handleRefreshMissions = async () => {
     setIsMissionsLoading(true);
-    const res = await getAIContent('missions', child.name);
-    setMissionIdeas(res);
+    try {
+      const response = await fetch('/api/ai/mission-ideas', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Invite-Code': localStorage.getItem('parent_code') || ''
+        },
+        body: JSON.stringify({ child_id: child.apiChildId })
+      });
+      
+      if (!response.ok) throw new Error('AI Error');
+      
+      const data = await response.json();
+      const formatted = data.mission_ideas.map((m: any) => 
+        `• ${m.title} (${m.reward_stars} ⭐)\n${m.description}`
+      ).join('\n\n');
+      
+      setMissionIdeas(formatted);
+    } catch (err) {
+      console.error('Mission ideas error:', err);
+      setMissionIdeas('Не удалось загрузить идеи миссий');
+    }
     setIsMissionsLoading(false);
   };
 
   const handleRefreshPrizes = async () => {
     setIsPrizesLoading(true);
-    const res = await getAIContent('prizes', child.name);
-    setPrizeIdeas(res);
+    try {
+      const response = await fetch('/api/ai/reward-ideas', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Invite-Code': localStorage.getItem('parent_code') || ''
+        },
+        body: JSON.stringify({ child_id: child.apiChildId })
+      });
+      
+      if (!response.ok) throw new Error('AI Error');
+      
+      const data = await response.json();
+      const formatted = data.reward_ideas.map((r: any) => 
+        `• ${r.title} (${r.price_stars} ⭐)\n${r.description}`
+      ).join('\n\n');
+      
+      setPrizeIdeas(formatted);
+    } catch (err) {
+      console.error('Prize ideas error:', err);
+      setPrizeIdeas('Не удалось загрузить идеи наград');
+    }
     setIsPrizesLoading(false);
   };
 
