@@ -13,9 +13,15 @@ interface Props {
 }
 
 const ChildSwitcher: React.FC<Props> = ({ children, selectedId, onSelect, onAdd, childPurchases }) => {
+  // Сортировка: выбранный профиль → первый
+  const sortedChildren = [
+    ...children.filter(c => c.id === selectedId),
+    ...children.filter(c => c.id !== selectedId)
+  ];
+
   return (
-    <div className="flex overflow-x-auto no-scrollbar gap-6 items-center pt-4 pb-6 px-5 -mx-5">
-      {children.map(child => {
+    <div className="flex overflow-x-auto no-scrollbar gap-6 items-center pt-4 pb-6 px-5 -mx-5 snap-x snap-mandatory">
+      {sortedChildren.map(child => {
         const isSelected = child.id === selectedId;
         
         // Реальные покупки из API
@@ -39,11 +45,12 @@ const ChildSwitcher: React.FC<Props> = ({ children, selectedId, onSelect, onAdd,
           <button
             key={child.id}
             onClick={() => onSelect(child.id)}
-            className={`flex flex-col items-center gap-3 transition-all duration-300 flex-shrink-0 ${isSelected ? 'scale-110' : 'hover:scale-105'}`}
+            className={`flex flex-col items-center gap-3 transition-all duration-300 flex-shrink-0 snap-center ${isSelected ? 'scale-110' : 'hover:scale-105'}`}
           >
             {/* Внешний контейнер (Кольцо Уведомления - Желтое) */}
             <div className={`relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500
               ${hasNotification ? 'ring-[3px] ring-amber-400' : 'ring-1 ring-white/5'}
+              ${isSelected ? 'opacity-100 scale-100' : 'opacity-30 scale-90'}
             `}>
               
               {/* Внутренний контейнер (Кольцо Выбора - Фиолетовое) */}
@@ -52,7 +59,9 @@ const ChildSwitcher: React.FC<Props> = ({ children, selectedId, onSelect, onAdd,
               `}>
                 
                 {/* Аватар ребенка */}
-                <div className="w-[calc(100%-6px)] h-[calc(100%-6px)] rounded-full overflow-hidden flex items-center justify-center">
+                <div className={`w-[calc(100%-6px)] h-[calc(100%-6px)] rounded-full overflow-hidden flex items-center justify-center transition-opacity duration-500
+                  ${isSelected ? '' : 'opacity-50'}
+                `}>
                   <GenderIcon 
                     gender={child.gender || 'male'} 
                     size={48}

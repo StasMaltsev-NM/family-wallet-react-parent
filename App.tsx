@@ -826,7 +826,7 @@ if (!code) {
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-black tracking-tighter">Family Wallet</h1>
 
-          <div className="flex gap-4 items-center">
+          <div className="flex gap-2 items-center">
             <button
               onClick={toggleTheme}
               className="p-2.5 rounded-full bg-white/5 text-[var(--text-muted)] hover:text-[var(--primary)] transition-all border border-white/5"
