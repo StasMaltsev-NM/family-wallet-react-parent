@@ -124,10 +124,7 @@ const App: React.FC = () => {
   console.log("[TG DEBUG] userId=", __tg?.initDataUnsafe?.user?.id);
   console.log("[TG DEBUG] initDataLen=", String(__tg?.initData ?? "").length);
 
-  const [theme, setTheme] = useState<Theme>(() => {
-    const saved = localStorage.getItem('parent-theme');
-    return (saved as Theme) || Theme.DEEP_PURPLE;
-  });
+  const [theme, setTheme] = useState<Theme>(Theme.DEEP_PURPLE);
   const [activeTab, setActiveTab] = useState<Tab>(Tab.DASHBOARD);
 
   const [children, setChildren] = useState<Child[]>(INITIAL_CHILDREN);
@@ -337,16 +334,17 @@ if (!code) {
         ...kid,
         apiChildId: kid.id,
         inviteCode: kid.invite_code || "",
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(kid.name || kid.id)}&gender=${kid.gender || 'male'}`,
         gender: kid.gender || 'male',
         balance: {
           confirmed: kid.balance || 0,
           pending: kid.pending_balance || 0
         },
         dream: {
-          title: kid.dream_title || "Мечта",
+          title: "Мечта",
           image: "https://api.dicebear.com/7.x/shapes/svg?seed=dream",
-          current: kid.dream_current || kid.balance || 0,
-          price: kid.dream_target || 10000
+          current: kid.balance || 0,
+          price: 1000
         },
         missions: [],
         activities: []
@@ -513,8 +511,8 @@ if (!code) {
       const historyKey: string | undefined = apiKid?.id || apiId;
 
       const nextBalance = {
-        confirmed: Number(apiKid?.balance ?? c.balance?.confirmed ?? 0) || 0,
-        pending: Number(apiKid?.pending_balance ?? c.balance?.pending ?? 0) || 0,
+        confirmed: Number(apiKid?.balance ?? c.balance?.confirmed ?? 0),
+        pending: Number(apiKid?.pending_balance ?? c.balance?.pending ?? 0),
       };
 
       const childTasks = Array.isArray(tasks)
@@ -562,14 +560,9 @@ if (!code) {
     : 0;
 
   const toggleTheme = () => {
-    setTheme((prev) => {
-      const themes = [Theme.DEEP_PURPLE, Theme.CLASSIC_DARK, Theme.PASTEL_MINT, Theme.EMERALD_NIGHT];
-      const currentIndex = themes.indexOf(prev);
-      const nextIndex = (currentIndex + 1) % themes.length;
-      const next = themes[nextIndex];
-      localStorage.setItem('parent-theme', next);
-      return next;
-    });
+    setTheme((prev) =>
+      prev === Theme.DEEP_PURPLE ? Theme.CLASSIC_DARK : Theme.PASTEL_MINT
+    );
   };
 
   const handleUpdateChild = (updated: Child) => {
@@ -693,6 +686,7 @@ if (!code) {
       case Tab.AI_ASSISTANT:
         return selectedChild ? (
           <AIAssistant child={selectedChild} parentCode={parentCode} />
+
         ) : (
           <div className="text-center py-12 text-white/60">
             Выберите ребёнка
@@ -830,13 +824,11 @@ if (!code) {
 
   return (
     <div className="h-screen flex flex-col transition-colors duration-500 bg-black text-white">
-      <header className="w-full px-4 pt-5 pb-2 sticky top-0 z-40 bg-black">
+      <header className="max-w-3xl mx-auto px-6 pt-5 pb-2 sticky top-0 z-40 bg-black">
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-3xl font-black tracking-tight text-center">
-            В<span className="text-amber-400">Э</span>Й!
-          </h1>
+          <h1 className="text-2xl font-black tracking-tighter">Family Wallet</h1>
 
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-4 items-center">
             <button
               onClick={toggleTheme}
               className="p-2.5 rounded-full bg-white/5 text-[var(--text-muted)] hover:text-[var(--primary)] transition-all border border-white/5"
@@ -844,6 +836,21 @@ if (!code) {
             >
               <Palette size={20} />
             </button>
+
+            <button
+              onClick={refreshTasks}
+              className="p-2.5 rounded-full bg-white/5 text-[var(--text-muted)] hover:text-[var(--primary)] transition-all border border-white/5"
+              title="Обновить из API"
+            >
+              ↻
+            </button>
+
+            <span className="text-[10px] text-white/50">
+              build {BUILD_ID}{" "}
+              {lastSyncAt
+                ? `sync ${new Date(lastSyncAt).toLocaleTimeString()}`
+                : "sync -"}
+            </span>
 
             <button
               onClick={() => setIsSettingsOpen(true)}
