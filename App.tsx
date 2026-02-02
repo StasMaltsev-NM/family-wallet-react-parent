@@ -692,7 +692,7 @@ if (!code) {
 
       case Tab.AI_ASSISTANT:
         return selectedChild ? (
-          <AIAssistant child={selectedChild} />
+          <AIAssistant child={selectedChild} parentCode={parentCode} />
         ) : (
           <div className="text-center py-12 text-white/60">
             Выберите ребёнка

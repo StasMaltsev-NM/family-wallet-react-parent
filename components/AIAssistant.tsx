@@ -1,13 +1,15 @@
 
 import React, { useState } from 'react';
+import { API_URL } from '../services/api';
 import { Child } from '../types';
 import { Sparkles, TrendingUp, BrainCircuit, Lightbulb, Loader2, RefreshCw, MessageSquareQuote, Target, Gift } from 'lucide-react';
 
 interface Props {
   child: Child;
+  parentCode: string;
 }
 
-const AIAssistant: React.FC<Props> = ({ child }) => {
+const AIAssistant: React.FC<Props> = ({ child, parentCode }) => {
   const [insight, setInsight] = useState<string>('');
   const [advice, setAdvice] = useState<string>('');
   const [missionIdeas, setMissionIdeas] = useState<string>('');
@@ -21,11 +23,11 @@ const AIAssistant: React.FC<Props> = ({ child }) => {
   const handleRefreshMain = async () => {
     setIsMainLoading(true);
     try {
-      const response = await fetch('/api/ai/analytics', {
+      const response = await fetch(`${API_URL}/api/ai/analytics`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Invite-Code': localStorage.getItem('parent_code') || ''
+          'X-Invite-Code': parentCode
         },
         body: JSON.stringify({ child_id: child.apiChildId })
       });
@@ -47,11 +49,11 @@ const AIAssistant: React.FC<Props> = ({ child }) => {
   const handleRefreshMissions = async () => {
     setIsMissionsLoading(true);
     try {
-      const response = await fetch('/api/ai/mission-ideas', {
+      const response = await fetch(`${API_URL}/api/ai/mission-ideas`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Invite-Code': localStorage.getItem('parent_code') || ''
+          'X-Invite-Code': parentCode
         },
         body: JSON.stringify({ child_id: child.apiChildId })
       });
@@ -74,11 +76,11 @@ const AIAssistant: React.FC<Props> = ({ child }) => {
   const handleRefreshPrizes = async () => {
     setIsPrizesLoading(true);
     try {
-      const response = await fetch('/api/ai/reward-ideas', {
+      const response = await fetch(`${API_URL}/api/ai/reward-ideas`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Invite-Code': localStorage.getItem('parent_code') || ''
+          'X-Invite-Code': parentCode
         },
         body: JSON.stringify({ child_id: child.apiChildId })
       });

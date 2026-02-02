@@ -1,4 +1,4 @@
-const API_URL =
+export const API_URL =
   import.meta.env.VITE_API_URL ||
   "https://family-wallet-api.maltsevstas21.workers.dev";
 console.log("[api.ts loaded] API_URL =", API_URL);
