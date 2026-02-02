@@ -822,7 +822,7 @@ if (!code) {
 
   return (
     <div className="h-screen flex flex-col transition-colors duration-500 bg-black text-white">
-      <header className="max-w-3xl mx-auto px-6 pt-5 pb-2 sticky top-0 z-40 bg-black">
+      <header className="max-w-3xl mx-auto px-4 pt-5 pb-2 sticky top-0 z-40 bg-black">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-black tracking-tighter">Family Wallet</h1>
 
