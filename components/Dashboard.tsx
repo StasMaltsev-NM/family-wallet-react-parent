@@ -223,7 +223,9 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
           <div className={`p-3.5 rounded-2xl ${isPrizesExpanded ? 'bg-[var(--primary)]/20 text-[var(--primary)] shadow-inner' : 'bg-white/5 text-[var(--text-muted)]'}`}>
             <Gift size={26} />
           </div>
-          <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white flex-1 text-center">Вручить награды</h4>
+          <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white flex-1 text-center leading-tight">
+            Вручить<br/>награды
+          </h4>
           {pendingPurchases.length > 0 && <span className="bg-[var(--primary)] text-black text-[12px] font-black px-3 py-1.5 rounded-full shadow-lg mr-2">{pendingPurchases.length}</span>}
           <ChevronDown size={24} className={`text-[var(--text-muted)] transition-transform duration-500 ${isPrizesExpanded ? 'rotate-180' : ''}`} />
         </button>
