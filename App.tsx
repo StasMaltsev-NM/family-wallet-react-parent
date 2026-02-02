@@ -832,7 +832,7 @@ if (!code) {
     <div className="h-screen flex flex-col transition-colors duration-500 bg-black text-white">
       <header className="w-full px-4 pt-5 pb-2 sticky top-0 z-40 bg-black">
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-black tracking-tighter">
+          <h1 className="text-3xl font-black tracking-tight text-center">
             В<span className="text-amber-400">Э</span>Й!
           </h1>
 
