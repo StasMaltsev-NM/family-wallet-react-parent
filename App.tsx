@@ -340,10 +340,10 @@ if (!code) {
           pending: kid.pending_balance || 0
         },
         dream: {
-          title: "Мечта",
+          title: kid.dream_title || "Мечта",
           image: "https://api.dicebear.com/7.x/shapes/svg?seed=dream",
-          current: kid.balance || 0,
-          price: 1000
+          current: kid.dream_current || kid.balance || 0,
+          price: kid.dream_target || 10000
         },
         missions: [],
         activities: []
