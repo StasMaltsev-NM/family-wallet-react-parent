@@ -172,14 +172,12 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
 
       {/* 3. Дашборд миссий */}
       <div className={`bg-[var(--bg-card)] rounded-[2.5rem] border transition-all duration-300 ${isMissionsExpanded ? 'border-amber-400/50 shadow-xl' : 'border-[var(--border)] shadow-lg'}`}>
-        <button onClick={() => setIsMissionsExpanded(!isMissionsExpanded)} className="w-full flex items-center justify-center p-7">
-          <div className="flex items-center gap-5">
-            <div className={`p-3.5 rounded-2xl ${isMissionsExpanded ? 'bg-amber-400/20 text-amber-400 shadow-inner' : 'bg-white/5 text-[var(--text-muted)]'}`}>
-              <ClipboardCheck size={26} />
-            </div>
-            <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white">Миссии на проверку</h4>
-            {pendingMissions.length > 0 && <span className="bg-amber-400 text-black text-[12px] font-black px-3 py-1.5 rounded-full shadow-lg">{pendingMissions.length}</span>}
+        <button onClick={() => setIsMissionsExpanded(!isMissionsExpanded)} className="w-full flex items-center justify-between p-7">
+          <div className={`p-3.5 rounded-2xl ${isMissionsExpanded ? 'bg-amber-400/20 text-amber-400 shadow-inner' : 'bg-white/5 text-[var(--text-muted)]'}`}>
+            <ClipboardCheck size={26} />
           </div>
+          <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white flex-1 text-center">Миссии на проверку</h4>
+          {pendingMissions.length > 0 && <span className="bg-amber-400 text-black text-[12px] font-black px-3 py-1.5 rounded-full shadow-lg mr-2">{pendingMissions.length}</span>}
           <ChevronDown size={24} className={`text-[var(--text-muted)] transition-transform duration-500 ${isMissionsExpanded ? 'rotate-180' : ''}`} />
         </button>
 
@@ -221,14 +219,12 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
 
       {/* 4. Награды */}
       <div className={`bg-[var(--bg-card)] rounded-[2.5rem] border transition-all duration-300 ${isPrizesExpanded ? 'border-[var(--primary)]/50 shadow-xl' : 'border-[var(--border)] shadow-lg'}`}>
-        <button onClick={() => setIsPrizesExpanded(!isPrizesExpanded)} className="w-full flex items-center justify-center p-7">
-          <div className="flex items-center gap-5">
-            <div className={`p-3.5 rounded-2xl ${isPrizesExpanded ? 'bg-[var(--primary)]/20 text-[var(--primary)] shadow-inner' : 'bg-white/5 text-[var(--text-muted)]'}`}>
-              <Gift size={26} />
-            </div>
-            <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white">Вручить награды</h4>
-            {pendingPurchases.length > 0 && <span className="bg-[var(--primary)] text-black text-[12px] font-black px-3 py-1.5 rounded-full shadow-lg">{pendingPurchases.length}</span>}
+        <button onClick={() => setIsPrizesExpanded(!isPrizesExpanded)} className="w-full flex items-center justify-between p-7">
+          <div className={`p-3.5 rounded-2xl ${isPrizesExpanded ? 'bg-[var(--primary)]/20 text-[var(--primary)] shadow-inner' : 'bg-white/5 text-[var(--text-muted)]'}`}>
+            <Gift size={26} />
           </div>
+          <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white flex-1 text-center">Вручить награды</h4>
+          {pendingPurchases.length > 0 && <span className="bg-[var(--primary)] text-black text-[12px] font-black px-3 py-1.5 rounded-full shadow-lg mr-2">{pendingPurchases.length}</span>}
           <ChevronDown size={24} className={`text-[var(--text-muted)] transition-transform duration-500 ${isPrizesExpanded ? 'rotate-180' : ''}`} />
         </button>
         
@@ -267,13 +263,11 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
 
       {/* 5. Активность (Выпадающий список) */}
       <div className={`bg-[var(--bg-card)] rounded-[2.5rem] border transition-all duration-300 ${isActivityExpanded ? 'border-white/20 shadow-xl' : 'border-[var(--border)] shadow-sm'}`}>
-        <button onClick={() => setIsActivityExpanded(!isActivityExpanded)} className="w-full flex items-center justify-center p-7">
-          <div className="flex items-center gap-5">
-            <div className={`p-3.5 rounded-2xl ${isActivityExpanded ? 'bg-white/10 text-white shadow-inner' : 'bg-white/5 text-[var(--text-muted)]'}`}>
-              <History size={26} />
-            </div>
-            <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white">Активность</h4>
+        <button onClick={() => setIsActivityExpanded(!isActivityExpanded)} className="w-full flex items-center justify-between p-7">
+          <div className={`p-3.5 rounded-2xl ${isActivityExpanded ? 'bg-white/10 text-white shadow-inner' : 'bg-white/5 text-[var(--text-muted)]'}`}>
+            <History size={26} />
           </div>
+          <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white flex-1 text-center">Активность</h4>
           <ChevronDown size={24} className={`text-[var(--text-muted)] transition-transform duration-500 ${isActivityExpanded ? 'rotate-180' : ''}`} />
         </button>
 

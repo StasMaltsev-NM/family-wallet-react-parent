@@ -14,7 +14,7 @@ interface Props {
 
 const ChildSwitcher: React.FC<Props> = ({ children, selectedId, onSelect, onAdd, childPurchases }) => {
   return (
-    <div className="flex overflow-x-auto no-scrollbar gap-6 items-center pt-4 pb-6 px-5 -mx-5 snap-x snap-mandatory">
+    <div className="flex overflow-x-auto no-scrollbar gap-6 items-center pt-4 pb-6 pl-5 pr-20 -mx-5 snap-x snap-mandatory">
       {children.map(child => {
         const isSelected = child.id === selectedId;
         
