@@ -110,7 +110,8 @@ const AIAssistant: React.FC<Props> = ({ child, parentCode }) => {
       
       if (!response.ok) throw new Error('Ошибка создания');
       
-      alert(`✅ Награда "${idea.title}" добавлена в магазин!`);
+      // ✅ ПЕРЕЗАГРУЗКА СТРАНИЦЫ ДЛЯ ОБНОВЛЕНИЯ МАГАЗИНА
+      window.location.reload();
     } catch (err) {
       console.error('Ошибка добавления награды:', err);
       alert('❌ Не удалось добавить награду');
@@ -280,19 +281,52 @@ const IdeaCard = ({ icon, title, ideas, isLoading, onRefresh, onAddToShop }: any
         <div className="grid grid-cols-1 gap-3">
           {ideas.map((idea: any, idx: number) => (
             <div key={idx} className="bg-white/5 rounded-2xl p-5 border border-white/10 space-y-3">
+              {/* Изображение товара (если есть) */}
+              {idea.image_url && (
+                <img 
+                  src={idea.image_url} 
+                  alt={idea.title}
+                  className="w-full h-40 object-cover rounded-xl"
+                />
+              )}
+              
               <div className="flex items-start justify-between">
-                <h5 className="font-black text-white/90 text-base">{idea.title}</h5>
-                <span className="px-3 py-1 bg-amber-500/20 text-amber-400 rounded-full text-xs font-black">
-                  {idea.price_stars || idea.reward_stars} ⭐
-                </span>
+                <div className="flex-1">
+                  <h5 className="font-black text-white/90 text-base">{idea.title}</h5>
+                  {idea.shop_name && (
+                    <p className="text-xs text-white/50 mt-1">{idea.shop_name}</p>
+                  )}
+                </div>
+                <div className="text-right">
+                  <span className="px-3 py-1 bg-amber-500/20 text-amber-400 rounded-full text-xs font-black block">
+                    {idea.price_stars || idea.reward_stars} ⭐
+                  </span>
+                  {idea.real_price_rub && (
+                    <p className="text-[10px] text-white/40 mt-1">{idea.real_price_rub} ₽</p>
+                  )}
+                </div>
               </div>
+              
               <p className="text-sm text-white/70 leading-relaxed">{idea.description}</p>
-              <button 
-                onClick={() => onAddToShop?.(idea)}
-                className="w-full py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-xl text-white font-black text-sm hover:scale-[1.02] transition-transform"
-              >
-                ✅ Добавить в магазин
-              </button>
+              
+              <div className="flex gap-2">
+                {idea.shop_url && (
+                  <a 
+                    href={idea.shop_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex-1 py-2.5 bg-white/10 rounded-xl text-white font-bold text-sm hover:bg-white/20 transition-colors text-center"
+                  >
+                    🔗 Посмотреть
+                  </a>
+                )}
+                <button 
+                  onClick={() => onAddToShop?.(idea)}
+                  className="flex-1 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-xl text-white font-black text-sm hover:scale-[1.02] transition-transform"
+                >
+                  ✅ Добавить
+                </button>
+              </div>
             </div>
           ))}
         </div>
