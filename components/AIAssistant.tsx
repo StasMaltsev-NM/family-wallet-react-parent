@@ -12,8 +12,8 @@ interface Props {
 const AIAssistant: React.FC<Props> = ({ child, parentCode }) => {
   const [insight, setInsight] = useState<string>('');
   const [advice, setAdvice] = useState<string>('');
-  const [missionIdeas, setMissionIdeas] = useState<string>('');
-  const [prizeIdeas, setPrizeIdeas] = useState<string>('');
+  const [missionIdeas, setMissionIdeas] = useState<any>(null);
+  const [prizeIdeas, setPrizeIdeas] = useState<any>(null);
   
   const [isMainLoading, setIsMainLoading] = useState(false);
   const [isMissionsLoading, setIsMissionsLoading] = useState(false);
@@ -61,11 +61,7 @@ const AIAssistant: React.FC<Props> = ({ child, parentCode }) => {
       if (!response.ok) throw new Error('AI Error');
       
       const data = await response.json();
-      const formatted = data.mission_ideas.map((m: any) => 
-        `• ${m.title} (${m.reward_stars} ⭐)\n${m.description}`
-      ).join('\n\n');
-      
-      setMissionIdeas(formatted);
+      setMissionIdeas(data.mission_ideas); // ✅ ПЕРЕДАЁМ МАССИВ ОБЪЕКТОВ!
     } catch (err) {
       console.error('Mission ideas error:', err);
       setMissionIdeas('Не удалось загрузить идеи миссий');
@@ -88,16 +84,37 @@ const AIAssistant: React.FC<Props> = ({ child, parentCode }) => {
       if (!response.ok) throw new Error('AI Error');
       
       const data = await response.json();
-      const formatted = data.reward_ideas.map((r: any) => 
-        `• ${r.title} (${r.price_stars} ⭐)\n${r.description}`
-      ).join('\n\n');
-      
-      setPrizeIdeas(formatted);
+      setPrizeIdeas(data.reward_ideas); // ✅ ПЕРЕДАЁМ МАССИВ ОБЪЕКТОВ!
     } catch (err) {
       console.error('Prize ideas error:', err);
       setPrizeIdeas('Не удалось загрузить идеи наград');
     }
     setIsPrizesLoading(false);
+  };
+
+  const handleAddToShop = async (idea: any) => {
+    try {
+      const response = await fetch(`${API_URL}/api/rewards/create-from-ai`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Invite-Code': parentCode
+        },
+        body: JSON.stringify({ 
+          child_id: child.apiChildId,
+          title: idea.title,
+          description: idea.description,
+          price_stars: idea.price_stars
+        })
+      });
+      
+      if (!response.ok) throw new Error('Ошибка создания');
+      
+      alert(`✅ Награда "${idea.title}" добавлена в магазин!`);
+    } catch (err) {
+      console.error('Ошибка добавления награды:', err);
+      alert('❌ Не удалось добавить награду');
+    }
   };
 
   return (
@@ -192,6 +209,7 @@ const AIAssistant: React.FC<Props> = ({ child, parentCode }) => {
           ideas={missionIdeas}
           isLoading={isMissionsLoading}
           onRefresh={handleRefreshMissions}
+          onAddToShop={handleAddToShop}
         />
         <IdeaCard 
           icon={<Gift size={22} className="text-orange-400" />}
@@ -199,6 +217,7 @@ const AIAssistant: React.FC<Props> = ({ child, parentCode }) => {
           ideas={prizeIdeas}
           isLoading={isPrizesLoading}
           onRefresh={handleRefreshPrizes}
+          onAddToShop={handleAddToShop}
         />
       </div>
     </div>
@@ -232,7 +251,8 @@ const InsightCard = ({ icon, title, value, description, isLoading }: any) => (
 );
 
 /* Компонент: Карточка идей с кнопкой Sparkles */
-const IdeaCard = ({ icon, title, ideas, isLoading, onRefresh }: any) => (
+const IdeaCard = ({ icon, title, ideas, isLoading, onRefresh, onAddToShop }: any) => {
+  return (
   <div className="bg-[var(--bg-card)] rounded-[2.5rem] p-8 border border-[var(--border)] relative overflow-hidden group">
     <div className="flex items-center justify-between mb-6">
       <div className="flex items-center gap-4">
@@ -256,9 +276,29 @@ const IdeaCard = ({ icon, title, ideas, isLoading, onRefresh }: any) => (
           <div className="h-4 bg-white/5 rounded-full animate-pulse w-3/4" />
           <div className="h-4 bg-white/5 rounded-full animate-pulse w-1/2" />
         </div>
+      ) : Array.isArray(ideas) ? (
+        <div className="grid grid-cols-1 gap-3">
+          {ideas.map((idea: any, idx: number) => (
+            <div key={idx} className="bg-white/5 rounded-2xl p-5 border border-white/10 space-y-3">
+              <div className="flex items-start justify-between">
+                <h5 className="font-black text-white/90 text-base">{idea.title}</h5>
+                <span className="px-3 py-1 bg-amber-500/20 text-amber-400 rounded-full text-xs font-black">
+                  {idea.price_stars || idea.reward_stars} ⭐
+                </span>
+              </div>
+              <p className="text-sm text-white/70 leading-relaxed">{idea.description}</p>
+              <button 
+                onClick={() => onAddToShop?.(idea)}
+                className="w-full py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-xl text-white font-black text-sm hover:scale-[1.02] transition-transform"
+              >
+                ✅ Добавить в магазин
+              </button>
+            </div>
+          ))}
+        </div>
       ) : ideas ? (
         <ul className="grid grid-cols-1 gap-3">
-          {ideas.split(',').map((item: string, idx: number) => (
+          {String(ideas).split(',').map((item: string, idx: number) => (
             <li key={idx} className="flex items-center gap-3 text-white/80 font-bold text-sm bg-white/[0.02] p-3 rounded-xl border border-white/5">
               <span className="w-6 h-6 rounded-lg bg-[var(--primary)]/20 text-[var(--primary)] flex items-center justify-center text-[10px] font-black">{idx + 1}</span>
               {item.trim()}
@@ -270,6 +310,7 @@ const IdeaCard = ({ icon, title, ideas, isLoading, onRefresh }: any) => (
       )}
     </div>
   </div>
-);
+  );
+};
 
 export default AIAssistant;
