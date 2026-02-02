@@ -98,6 +98,7 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
     <div className="space-y-5 animate-in fade-in slide-in-from-bottom-6 duration-700 pb-20">
       
       {/* 1. Блок «Детская мечта» */}
+      {child.dream.title && child.dream.title !== "Мечта" && (
       <div className="bg-[var(--bg-card)] rounded-[2.5rem] overflow-hidden border border-[var(--primary)]/30 shadow-2xl flex flex-row items-stretch h-40 group">
         <div className="relative w-40 flex-shrink-0 overflow-hidden">
           <img 
@@ -142,6 +143,7 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
           </div>
         </div>
       </div>
+      )}
 
       {/* 2. Баланс */}
       <div className="grid grid-cols-2 gap-5">
