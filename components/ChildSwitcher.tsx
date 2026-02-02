@@ -43,8 +43,8 @@ const ChildSwitcher: React.FC<Props> = ({ children, selectedId, onSelect, onAdd,
           >
             {/* Внешний контейнер (Кольцо Уведомления - Желтое) */}
             <div className={`relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500
-              ${hasNotification ? 'ring-[3px] ring-amber-400' : 'ring-1 ring-white/5'}
-              ${isSelected ? 'opacity-100 scale-100' : 'opacity-30 scale-90'}
+              ${hasNotification ? 'ring-[3px] ring-amber-400 animate-pulse' : 'ring-1 ring-white/5'}
+              ${isSelected ? 'opacity-100 scale-100' : 'scale-90'}
             `}>
               
               {/* Внутренний контейнер (Кольцо Выбора - Фиолетовое) */}

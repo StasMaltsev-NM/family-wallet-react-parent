@@ -124,7 +124,10 @@ const App: React.FC = () => {
   console.log("[TG DEBUG] userId=", __tg?.initDataUnsafe?.user?.id);
   console.log("[TG DEBUG] initDataLen=", String(__tg?.initData ?? "").length);
 
-  const [theme, setTheme] = useState<Theme>(Theme.DEEP_PURPLE);
+  const [theme, setTheme] = useState<Theme>(() => {
+    const saved = localStorage.getItem('parent-theme');
+    return (saved as Theme) || Theme.DEEP_PURPLE;
+  });
   const [activeTab, setActiveTab] = useState<Tab>(Tab.DASHBOARD);
 
   const [children, setChildren] = useState<Child[]>(INITIAL_CHILDREN);
@@ -559,9 +562,14 @@ if (!code) {
     : 0;
 
   const toggleTheme = () => {
-    setTheme((prev) =>
-      prev === Theme.DEEP_PURPLE ? Theme.CLASSIC_DARK : Theme.PASTEL_MINT
-    );
+    setTheme((prev) => {
+      const themes = [Theme.DEEP_PURPLE, Theme.CLASSIC_DARK, Theme.PASTEL_MINT, Theme.EMERALD_NIGHT];
+      const currentIndex = themes.indexOf(prev);
+      const nextIndex = (currentIndex + 1) % themes.length;
+      const next = themes[nextIndex];
+      localStorage.setItem('parent-theme', next);
+      return next;
+    });
   };
 
   const handleUpdateChild = (updated: Child) => {
@@ -824,7 +832,9 @@ if (!code) {
     <div className="h-screen flex flex-col transition-colors duration-500 bg-black text-white">
       <header className="w-full px-4 pt-5 pb-2 sticky top-0 z-40 bg-black">
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-black tracking-tighter">Family Wallet</h1>
+          <h1 className="text-2xl font-black tracking-tighter">
+            В<span className="text-amber-400">Э</span>Й!
+          </h1>
 
           <div className="flex gap-2 items-center">
             <button
