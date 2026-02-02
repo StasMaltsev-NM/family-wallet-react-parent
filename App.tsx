@@ -510,8 +510,8 @@ if (!code) {
       const historyKey: string | undefined = apiKid?.id || apiId;
 
       const nextBalance = {
-        confirmed: Number(apiKid?.balance ?? c.balance?.confirmed ?? 0),
-        pending: Number(apiKid?.pending_balance ?? c.balance?.pending ?? 0),
+        confirmed: Number(apiKid?.balance ?? c.balance?.confirmed ?? 0) || 0,
+        pending: Number(apiKid?.pending_balance ?? c.balance?.pending ?? 0) || 0,
       };
 
       const childTasks = Array.isArray(tasks)
