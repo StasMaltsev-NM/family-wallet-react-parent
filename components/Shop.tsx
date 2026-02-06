@@ -137,44 +137,50 @@ const handleCreateReward = async () => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-        {prizes.map(prize => (
-          <div key={prize.id} className="bg-[var(--bg-card)] rounded-[2.5rem] border border-[var(--border)] overflow-hidden flex flex-col group hover:border-[var(--primary)]/30 transition-all shadow-xl">
-            {/* Фото и Прайс-тег */}
-            <div className="relative h-48 sm:h-52 overflow-hidden">
-              <img src={prize.image} alt={prize.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
-              
-              {/* Яркая плашка цены */}
-              <div className="absolute top-4 right-4 px-4 py-2 bg-orange-500 rounded-2xl text-white shadow-2xl flex items-center gap-2 border border-white/20">
-                <span className="text-lg font-black">{prize.cost}</span>
-                <Star size={18} fill="currentColor" className="text-white" />
-              </div>
-              
-              {!prize.isOneTime && (
-                <div className="absolute top-4 left-4 p-2.5 bg-indigo-600/80 backdrop-blur-md rounded-xl text-white border border-white/10" title="Постоянный слот">
-                  <RefreshCcw size={16} className="animate-spin-slow" />
-                </div>
-              )}
-            </div>
-
-            <div className="p-6 flex flex-col flex-1 justify-between gap-4">
-              <div>
-                <h4 className="text-xl font-black text-white leading-tight mb-2 uppercase tracking-tight">{prize.name}</h4>
-                <div className="flex items-center gap-2 text-[var(--text-muted)] text-[10px] font-black uppercase tracking-widest">
-                  {prize.isOneTime ? <Box size={12} /> : <ShoppingCart size={12} />}
-                  <span>{prize.isOneTime ? 'Разовая покупка' : 'Многоразовый слот'}</span>
-                </div>
-              </div>
-
-              <button 
-                onClick={() => handleDeletePrize(prize.id)}
-                className="w-full py-4 bg-rose-500/10 text-rose-500 text-sm font-black uppercase tracking-widest rounded-2xl hover:bg-rose-500 hover:text-white transition-all border border-rose-500/10 flex items-center justify-center gap-2"
-              >
-                <Trash2 size={18} />
-                Удалить
-              </button>
-            </div>
+        {prizes.length === 0 ? (
+          <div className="text-center py-20 bg-[var(--bg-card)] rounded-[2.5rem] border-2 border-dashed border-[var(--border)] opacity-60">
+            <p className="font-black text-[var(--text-muted)] text-[12px] uppercase tracking-widest">АКТИВНЫХ НАГРАД НЕТ</p>
           </div>
-        ))}
+        ) : (
+          prizes.map(prize => (
+            <div key={prize.id} className="bg-[var(--bg-card)] rounded-[2.5rem] border border-[var(--border)] overflow-hidden flex flex-col group hover:border-[var(--primary)]/30 transition-all shadow-xl">
+              {/* Фото и Прайс-тег */}
+              <div className="relative h-48 sm:h-52 overflow-hidden">
+                <img src={prize.image} alt={prize.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                
+                {/* Яркая плашка цены */}
+                <div className="absolute top-4 right-4 px-4 py-2 bg-orange-500 rounded-2xl text-white shadow-2xl flex items-center gap-2 border border-white/20">
+                  <span className="text-lg font-black">{prize.cost}</span>
+                  <Star size={18} fill="currentColor" className="text-white" />
+                </div>
+                
+                {!prize.isOneTime && (
+                  <div className="absolute top-4 left-4 p-2.5 bg-indigo-600/80 backdrop-blur-md rounded-xl text-white border border-white/10" title="Постоянный слот">
+                    <RefreshCcw size={16} className="animate-spin-slow" />
+                  </div>
+                )}
+              </div>
+
+              <div className="p-6 flex flex-col flex-1 justify-between gap-4">
+                <div>
+                  <h4 className="text-xl font-black text-white leading-tight mb-2 uppercase tracking-tight">{prize.name}</h4>
+                  <div className="flex items-center gap-2 text-[var(--text-muted)] text-[10px] font-black uppercase tracking-widest">
+                    {prize.isOneTime ? <Box size={12} /> : <ShoppingCart size={12} />}
+                    <span>{prize.isOneTime ? 'Разовая покупка' : 'Многоразовый слот'}</span>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={() => handleDeletePrize(prize.id)}
+                  className="w-full py-4 bg-rose-500/10 text-rose-500 text-sm font-black uppercase tracking-widest rounded-2xl hover:bg-rose-500 hover:text-white transition-all border border-rose-500/10 flex items-center justify-center gap-2"
+                >
+                  <Trash2 size={18} />
+                  Удалить
+                </button>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       {isAdding && (
