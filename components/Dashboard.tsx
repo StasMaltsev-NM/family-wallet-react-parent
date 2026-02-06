@@ -99,7 +99,7 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
       
       {/* 1. Блок «Детская мечта» */}
       {child.dream.title && child.dream.title !== "Мечта" && (
-      <div className="bg-[var(--bg-card)] rounded-[2.5rem] overflow-hidden border border-[var(--primary)]/30 shadow-2xl flex flex-row items-stretch h-40 group">
+      <div className="bg-[var(--bg-card)] rounded-[2.5rem] overflow-hidden border border-[var(--primary)]/30 shadow-2xl flex flex-row items-stretch h-40 group w-full max-w-full">
         <div className="relative w-40 flex-shrink-0 overflow-hidden">
           <img 
             src={child.dream.image} 
@@ -146,8 +146,8 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
       )}
 
       {/* 2. Баланс */}
-      <div className="grid grid-cols-2 gap-5">
-        <div className="bg-[var(--bg-card)] p-6 rounded-[2.2rem] border border-[var(--border)] shadow-xl flex items-center gap-5">
+      <div className="grid grid-cols-2 gap-5 w-full max-w-full">
+        <div className="bg-[var(--bg-card)] p-6 rounded-[2.2rem] border border-[var(--border)] shadow-xl flex items-center gap-5 w-full max-w-full min-w-0">
           <div className="w-14 h-14 bg-emerald-500/10 rounded-2xl flex items-center justify-center text-emerald-400">
             <ArrowUpRight size={28} />
           </div>
@@ -159,7 +159,7 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
           </div>
         </div>
 
-        <div className="bg-[var(--bg-card)] p-6 rounded-[2.2rem] border border-[var(--border)] shadow-xl flex items-center gap-5">
+        <div className="bg-[var(--bg-card)] p-6 rounded-[2.2rem] border border-[var(--border)] shadow-xl flex items-center gap-5 w-full max-w-full min-w-0">
           <div className="w-14 h-14 bg-amber-500/10 rounded-2xl flex items-center justify-center text-amber-400">
             <Timer size={28} />
           </div>
