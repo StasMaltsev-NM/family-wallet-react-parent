@@ -338,14 +338,11 @@ if (!code) {
         apiChildId: kid.id,
         inviteCode: kid.invite_code || "",
         gender: kid.gender || 'male',
-        balance: {
-          confirmed: kid.balance || 0,
-          pending: kid.pending_balance || 0
-        },
+        balance: kid.balance,
         dream: {
           title: kid.dream_title || "Мечта",
           image: "https://api.dicebear.com/7.x/shapes/svg?seed=dream",
-          current: kid.dream_current || kid.balance || 0,
+          current: kid.dream_current || kid.balance?.confirmed || 0,
           price: kid.dream_target || 10000
         },
         missions: [],
@@ -513,8 +510,8 @@ if (!code) {
       const historyKey: string | undefined = apiKid?.id || apiId;
 
       const nextBalance = {
-        confirmed: Number(apiKid?.balance ?? c.balance?.confirmed ?? 0) || 0,
-        pending: Number(apiKid?.pending_balance ?? c.balance?.pending ?? 0) || 0,
+        confirmed: Number(apiKid?.balance?.confirmed ?? c.balance?.confirmed ?? 0) || 0,
+        pending: Number(apiKid?.balance?.pending ?? c.balance?.pending ?? 0) || 0,
       };
 
       const childTasks = Array.isArray(tasks)
