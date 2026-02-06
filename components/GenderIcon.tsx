@@ -6,9 +6,9 @@ interface GenderIconProps {
 }
 
 export const GenderIcon: React.FC<GenderIconProps> = ({ gender, size = 64 }) => {
-  const isMale = gender === 'male';
-  const color = isMale ? '#00d9ff' : '#ff69b4'; // голубой неон / розовый неон
-  
+  const color = gender === 'male' ? '#00d9ff' : '#ff69b4'; // голубой / розовый
+  const rotation = gender === 'male' ? 'rotate(180deg)' : 'rotate(0deg)'; // вниз / вверх
+
   return (
     <div
       style={{
@@ -17,24 +17,22 @@ export const GenderIcon: React.FC<GenderIconProps> = ({ gender, size = 64 }) => 
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        position: 'relative',
       }}
     >
-      <div
-        style={{
-          width: 0,
-          height: 0,
-          borderLeft: `${size * 0.4}px solid transparent`,
-          borderRight: `${size * 0.4}px solid transparent`,
-          // Мальчик: вершина вниз (borderTop)
-          // Девочка: вершина вверх (borderBottom)
-          ...(isMale 
-            ? { borderTop: `${size * 0.6}px solid ${color}` }
-            : { borderBottom: `${size * 0.6}px solid ${color}` }
-          ),
-          filter: `drop-shadow(0 0 10px ${color}) drop-shadow(0 0 20px ${color})`,
-        }}
-      />
+      <svg
+        width={size * 0.8}
+        height={size * 0.8}
+        viewBox="0 0 100 100"
+        style={{ transform: rotation }}
+      >
+        <polygon
+          points="50,10 90,80 10,80"
+          fill="none"
+          stroke={color}
+          strokeWidth="3"
+          strokeLinejoin="round"
+        />
+      </svg>
     </div>
   );
 };
