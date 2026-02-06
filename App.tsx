@@ -826,8 +826,8 @@ if (!code) {
   }
 
   return (
-    <div className="h-screen flex flex-col transition-colors duration-500 bg-black text-white">
-      <header className="w-full px-4 pt-5 pb-2 sticky top-0 z-40 bg-black">
+    <div className="h-screen flex flex-col transition-colors duration-500 bg-black text-white w-full max-w-full overflow-x-hidden">
+      <header className="w-full px-4 pt-5 pb-2 sticky top-0 z-40 bg-black max-w-full">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-3xl font-black tracking-tight text-center">
             В<span className="text-amber-400">Э</span>Й!
@@ -864,12 +864,12 @@ if (!code) {
         />
       </header>
 
-      <main className="flex-1 overflow-y-auto scrollArea max-w-3xl mx-auto px-6 mt-6 pb-40">
+      <main className="flex-1 overflow-y-auto scrollArea max-w-3xl mx-auto px-4 md:px-6 mt-6 pb-40 w-full max-w-full box-border">
         {renderContent()}
       </main>
 
-      <div className="fixed bottom-8 left-0 right-0 z-50 px-6">
-        <nav className="max-w-3xl mx-auto bg-white/[0.04] backdrop-blur-3xl border border-white/10 rounded-[2.5rem] py-4 px-8 shadow-[0_25px_60px_rgba(0,0,0,0.8)] flex items-center justify-between transition-all duration-500">
+      <div className="fixed bottom-8 left-0 right-0 z-50 px-4 md:px-6 w-full max-w-full box-border">
+        <nav className="max-w-3xl mx-auto bg-white/[0.04] backdrop-blur-3xl border border-white/10 rounded-[2.5rem] py-4 px-6 md:px-8 shadow-[0_25px_60px_rgba(0,0,0,0.8)] flex items-center justify-between transition-all duration-500 w-full max-w-full box-border">
           <NavButton
             active={activeTab === Tab.DASHBOARD}
             onClick={() => setActiveTab(Tab.DASHBOARD)}
