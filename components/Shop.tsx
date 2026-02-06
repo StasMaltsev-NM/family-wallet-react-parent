@@ -30,7 +30,10 @@ const mapped = res.rewards
   .map((r: any) => ({
     id: r.id,
     name: r.title,
+    title: r.title,
     cost: r.price,
+    image_url: r.image_url,
+    icon: r.icon,
     image: r.icon 
       ? `https://em-content.zobj.net/thumbs/120/apple/354/${r.icon.codePointAt(0).toString(16)}.png`
       : `https://picsum.photos/seed/${r.id}/200/200`,
@@ -91,7 +94,10 @@ const handleCreateReward = async () => {
     const mapped = rewardsRes.rewards.map((r: any) => ({
       id: r.id,
       name: r.title,
+      title: r.title,
       cost: r.price,
+      image_url: r.image_url,
+      icon: r.icon,
       image: r.icon 
         ? `https://em-content.zobj.net/thumbs/120/apple/354/${r.icon.codePointAt(0).toString(16)}.png`
         : `https://picsum.photos/seed/${r.id}/200/200`,
@@ -145,11 +151,19 @@ const handleCreateReward = async () => {
           prizes.map(prize => (
             <div key={prize.id} className="bg-[var(--bg-card)] rounded-[2.5rem] border border-[var(--border)] overflow-hidden flex flex-col group hover:border-[var(--primary)]/30 transition-all shadow-xl">
               {/* Фото и Прайс-тег */}
-              <div className="relative h-48 sm:h-52 overflow-hidden">
-                <img src={prize.image} alt={prize.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
-                
-                {/* Яркая плашка цены */}
-                <div className="absolute top-4 right-4 px-4 py-2 bg-orange-500 rounded-2xl text-white shadow-2xl flex items-center gap-2 border border-white/20">
+            <div className="relative h-48 sm:h-52 overflow-hidden flex items-center justify-center">
+              {prize.image_url ? (
+                <img 
+                  src={prize.image_url} 
+                  alt={prize.title || prize.name}
+                  className="w-16 h-16 object-contain rounded"
+                />
+              ) : (
+                <div className="text-4xl">{prize.icon || '🎁'}</div>
+              )}
+              
+              {/* Яркая плашка цены */}
+              <div className="absolute top-4 right-4 px-4 py-2 bg-orange-500 rounded-2xl text-white shadow-2xl flex items-center gap-2 border border-white/20">
                   <span className="text-lg font-black">{prize.cost}</span>
                   <Star size={18} fill="currentColor" className="text-white" />
                 </div>
