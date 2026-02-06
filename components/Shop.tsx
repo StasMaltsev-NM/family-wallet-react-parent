@@ -67,7 +67,14 @@ const handleCreateReward = async () => {
   
   try {
     // Создаём награду для КАЖДОГО выбранного ребёнка
-    for (const childId of selectedChildIds) {
+    for (const localId of selectedChildIds) {
+      const child = allChildren.find(c => (c.apiChildId || c.id) === localId);
+      if (!child?.apiChildId) {
+        console.error('[SHOP] Child not found or missing apiChildId:', localId);
+        continue;
+      }
+      
+      const childId = child.apiChildId;
       console.log('[SHOP] Creating reward for child:', childId);
       
       await parentApi.createReward(
