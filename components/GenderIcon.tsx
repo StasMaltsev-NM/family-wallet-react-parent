@@ -7,28 +7,34 @@ interface GenderIconProps {
 
 export const GenderIcon: React.FC<GenderIconProps> = ({ gender, size = 64 }) => {
   const isMale = gender === 'male';
-  const color = isMale ? '#00d9ff' : '#ff69b4'; // синий неон / розовый неон
-  const symbol = isMale ? '♂' : '♀';
-
+  const color = isMale ? '#00d9ff' : '#ff69b4'; // голубой неон / розовый неон
+  
   return (
     <div
       style={{
         width: size,
         height: size,
-        borderRadius: '50%',
-        background: `radial-gradient(circle, ${color}22 0%, transparent 70%)`,
-        border: `2px solid ${color}`,
-        boxShadow: `0 0 20px ${color}, inset 0 0 20px ${color}33`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: size * 0.6,
-        color: color,
-        fontWeight: 'bold',
-        textShadow: `0 0 10px ${color}, 0 0 20px ${color}`,
+        position: 'relative',
       }}
     >
-      {symbol}
+      <div
+        style={{
+          width: 0,
+          height: 0,
+          borderLeft: `${size * 0.4}px solid transparent`,
+          borderRight: `${size * 0.4}px solid transparent`,
+          // Мальчик: вершина вниз (borderTop)
+          // Девочка: вершина вверх (borderBottom)
+          ...(isMale 
+            ? { borderTop: `${size * 0.6}px solid ${color}` }
+            : { borderBottom: `${size * 0.6}px solid ${color}` }
+          ),
+          filter: `drop-shadow(0 0 10px ${color}) drop-shadow(0 0 20px ${color})`,
+        }}
+      />
     </div>
   );
 };
