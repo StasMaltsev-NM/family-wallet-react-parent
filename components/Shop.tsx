@@ -17,34 +17,29 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>([]);
   const [prizes, setPrizes] = useState<Prize[]>(PRIZES);
 useEffect(() => {
-  console.log('[Shop] currentChild:', currentChild);
-  parentApi.listRewards(inviteCode).then(res => {
-    console.log('[Shop] loaded rewards:', res.rewards);
-    
-const mapped = res.rewards
-.filter((r: any) => {
-  if (!currentChild) return true;
-  // Фильтруем только по apiChildId (backend id)
-  return r.child_id === currentChild.apiChildId;
-})
-  .map((r: any) => ({
-    id: r.id,
-    name: r.title,
-    title: r.title,
-    cost: r.price,
-    image_url: r.image_url,
-    icon: r.icon,
-    image: r.icon 
-      ? `https://em-content.zobj.net/thumbs/120/apple/354/${r.icon.codePointAt(0).toString(16)}.png`
-      : `https://picsum.photos/seed/${r.id}/200/200`,
-    isOneTime: r.is_permanent === 0
-  }));
-    
-    setPrizes(mapped);
-  }).catch(err => {
-    console.error('[Shop] listRewards error:', err);
-  });
-}, [inviteCode, currentChild]);
+  const loadRewards = async () => {
+    try {
+      const { rewards } = await parentApi.listRewards(inviteCode);
+      const mapped = rewards.map((r: any) => ({
+        id: r.id,
+        name: r.title,
+        title: r.title,
+        cost: r.price,
+        image_url: r.image_url,
+        icon: r.icon,
+        image: r.icon 
+          ? `https://em-content.zobj.net/thumbs/120/apple/354/${r.icon.codePointAt(0).toString(16)}.png`
+          : `https://picsum.photos/seed/${r.id}/200/200`,
+        isOneTime: r.is_permanent === 0
+      }));
+      setPrizes(mapped);
+    } catch (err) {
+      console.error('[SHOP LOAD] error:', err);
+    }
+  };
+
+  loadRewards();
+}, [inviteCode]);
 
   const toggleChildSelection = (id: string) => {
     setSelectedChildIds(prev => 
