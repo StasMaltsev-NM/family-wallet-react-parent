@@ -1,4 +1,4 @@
-/* global Telegram */
+ /* global Telegram */
 // App.tsx (FW-REACT-PARENT-COPY)
 
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
