@@ -210,9 +210,13 @@ const App: React.FC = () => {
       console.log('[APP] identityKey:', identityKey);
       console.log('[APP] INVITE_KEY:', INVITE_KEY);
 
-      // ФИКС: если сохранён TEST_BROWSER — игнорируем
-      if (saved === 'TEST_BROWSER') {
-        console.log('[APP] Ignoring TEST_BROWSER, opening invite modal');
+      // ФИКС: если сохранён TEST_BROWSER или пустой код — игнорируем
+      if (saved === 'TEST_BROWSER' || !saved) {
+        console.log('[APP] Invalid/empty code in cloud, clearing and opening modal');
+
+        // ОЧИСТИТЬ Cloud Storage
+        await tgCloudSet(INVITE_KEY, '');
+
         setParentCode("");
         setIsInviteModalOpen(true);
         return;
