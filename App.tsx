@@ -1011,3 +1011,4 @@ const NavButton: React.FC<NavButtonProps> = ({
 );
 
 export default App;
+// Force rebuild Sat Feb  7 20:40:45 MSK 2026
