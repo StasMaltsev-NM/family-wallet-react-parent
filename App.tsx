@@ -206,9 +206,13 @@ const App: React.FC = () => {
       }
 
       const saved = await tgCloudGet(INVITE_KEY);
+      console.log('[APP] Cloud storage parentCode:', saved);
+      console.log('[APP] identityKey:', identityKey);
+      console.log('[APP] INVITE_KEY:', INVITE_KEY);
 
       if (saved) {
         setParentCode(saved);
+        console.log('[APP] parentCode SET from cloud:', saved);
         setIsInviteModalOpen(false);
 
         // Загрузить коды семьи
@@ -679,6 +683,7 @@ if (!code) {
         );
 
       case Tab.SHOP:
+        console.log('[APP] Rendering Shop with parentCode:', parentCode);
         return (
           <Shop
             allChildren={uiChildren}
