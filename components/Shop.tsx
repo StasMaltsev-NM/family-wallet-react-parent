@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Child, Prize } from '../types';
 import { PRIZES } from '../constants';
 import { parentApi } from '../services/api';
-import { Plus, ShoppingCart, Lock, Box, Check, Star, Trash2, Info } from 'lucide-react';
+import { Plus, ShoppingCart, Lock, Box, Check, Star, Trash2, Info, Repeat } from 'lucide-react';
 
 interface Props {
   allChildren: Child[];
@@ -16,30 +16,57 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   const [newPrize, setNewPrize] = useState({ name: '', cost: '', isPermanent: true });
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>([]);
   const [prizes, setPrizes] = useState<Prize[]>(PRIZES);
-useEffect(() => {
-  const loadRewards = async () => {
-    try {
-      const { rewards } = await parentApi.listRewards(inviteCode);
-      const mapped = rewards.map((r: any) => ({
-        id: r.id,
-        name: r.title,
-        title: r.title,
-        cost: r.price,
-        image_url: r.image_url,
-        icon: r.icon,
-        image: r.icon 
-          ? `https://em-content.zobj.net/thumbs/120/apple/354/${r.icon.codePointAt(0).toString(16)}.png`
-          : `https://picsum.photos/seed/${r.id}/200/200`,
-        isOneTime: r.is_permanent === 0
-      }));
-      setPrizes(mapped);
-    } catch (err) {
-      console.error('[SHOP LOAD] error:', err);
+
+  const mapRewards = (rewards: any[]) =>
+    rewards.map((r: any) => ({
+      id: r.id,
+      name: r.title,
+      title: r.title,
+      cost: r.price,
+      image_url: r.image_url,
+      icon: r.icon,
+      image: r.icon 
+        ? `https://em-content.zobj.net/thumbs/120/apple/354/${r.icon.codePointAt(0).toString(16)}.png`
+        : `https://picsum.photos/seed/${r.id}/200/200`,
+      isOneTime: r.is_permanent === 0
+    }));
+
+  const refreshRewards = async () => {
+    if (!inviteCode) return [];
+    const { rewards } = await parentApi.listRewards(inviteCode);
+    const mapped = mapRewards(rewards);
+    setPrizes(mapped);
+    return rewards;
+  };
+
+  const waitForImages = async (rewardIds: string[], attempts = 6, delayMs = 5000) => {
+    if (!rewardIds.length) return;
+    for (let i = 0; i < attempts; i += 1) {
+      try {
+        const rewards = await refreshRewards();
+        const allReady = rewardIds.every((id) =>
+          rewards.find((r: any) => r.id === id && r.image_url)
+        );
+        if (allReady) return;
+      } catch (err) {
+        console.error('[SHOP POLL] error:', err);
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
   };
 
-  loadRewards();
-}, [inviteCode]);
+  useEffect(() => {
+    const loadRewards = async () => {
+      try {
+        await refreshRewards();
+      } catch (err) {
+        console.error('[SHOP LOAD] error:', err);
+      }
+    };
+
+    loadRewards();
+  }, [inviteCode]);
 
   const toggleChildSelection = (id: string) => {
     setSelectedChildIds(prev => 
@@ -67,6 +94,7 @@ const handleCreateReward = async () => {
   
   try {
     // Создаём награду для КАЖДОГО выбранного ребёнка
+    const createdRewardIds: string[] = [];
     for (const localId of selectedChildIds) {
       const child = allChildren.find(c => (c.apiChildId || c.id) === localId);
       if (!child?.apiChildId) {
@@ -77,7 +105,7 @@ const handleCreateReward = async () => {
       const childId = child.apiChildId;
       console.log('[SHOP] Creating reward for child:', childId);
       
-      await parentApi.createReward(
+      const res = await parentApi.createReward(
         inviteCode,
         childId,
         newPrize.name,
@@ -85,6 +113,7 @@ const handleCreateReward = async () => {
         '',
         newPrize.isPermanent
       );
+      if (res?.reward_id) createdRewardIds.push(res.reward_id);
     }
     
     console.log('[SHOP] Rewards created successfully!');
@@ -92,20 +121,8 @@ const handleCreateReward = async () => {
     // Перезагрузим список наград
     const rewardsRes = await parentApi.listRewards(inviteCode);
     console.log('[SHOP] Loaded rewards:', rewardsRes);
-    
-    const mapped = rewardsRes.rewards.map((r: any) => ({
-      id: r.id,
-      name: r.title,
-      title: r.title,
-      cost: r.price,
-      image_url: r.image_url,
-      icon: r.icon,
-      image: r.icon 
-        ? `https://em-content.zobj.net/thumbs/120/apple/354/${r.icon.codePointAt(0).toString(16)}.png`
-        : `https://picsum.photos/seed/${r.id}/200/200`,
-      isOneTime: r.is_permanent === 0
-    }));
-    setPrizes(mapped);
+    setPrizes(mapRewards(rewardsRes.rewards));
+    await waitForImages(createdRewardIds);
     
     // Закроем форму и сбросим
     setIsAdding(false);
@@ -153,17 +170,23 @@ const handleCreateReward = async () => {
           prizes.map(prize => (
             <div key={prize.id} className="bg-[var(--bg-card)] rounded-[2.5rem] border border-[var(--border)] overflow-hidden flex flex-col group hover:border-[var(--primary)]/30 transition-all shadow-xl">
               {/* Фото и Прайс-тег */}
-            <div className="relative h-48 sm:h-52 overflow-hidden flex items-center justify-center">
-              <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-2xl bg-white/5 border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.35)] flex items-center justify-center overflow-hidden">
+            <div className="relative h-56 sm:h-60 overflow-hidden flex items-center justify-center">
+              <div className="relative w-36 h-36 sm:w-40 sm:h-40 rounded-[1.75rem] bg-gradient-to-br from-white/10 via-white/5 to-white/0 border border-white/15 shadow-[0_25px_80px_rgba(0,0,0,0.45)] flex items-center justify-center overflow-hidden">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.35),rgba(255,255,255,0.05)_40%,rgba(0,0,0,0)_70%)]" />
                 {prize.image_url ? (
                   <img 
                     src={prize.image_url} 
                     alt={prize.title || prize.name}
-                    className="w-full h-full object-contain drop-shadow-[0_10px_30px_rgba(0,0,0,0.35)]"
+                    className="relative w-full h-full object-contain drop-shadow-[0_12px_35px_rgba(0,0,0,0.45)]"
                   />
                 ) : (
-                  <div className="text-5xl">{prize.icon || '🎁'}</div>
+                  <div className="relative text-6xl opacity-90">{prize.icon || '🎁'}</div>
                 )}
+                {!prize.image_url ? (
+                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[9px] font-black uppercase tracking-[0.2em] text-white/60 bg-black/40 px-2.5 py-1 rounded-full border border-white/10">
+                    Генерация...
+                  </div>
+                ) : null}
               </div>
               
               {/* Яркая плашка цены */}
@@ -174,7 +197,7 @@ const handleCreateReward = async () => {
                 
                 {!prize.isOneTime && (
                   <div className="absolute top-4 left-4 p-2.5 bg-indigo-600/80 backdrop-blur-md rounded-xl text-white border border-white/10" title="Постоянный слот">
-                    <RefreshCcw size={16} className="animate-spin-slow" />
+                    <Repeat size={16} />
                   </div>
                 )}
               </div>
@@ -293,26 +316,5 @@ const handleCreateReward = async () => {
     </div>
   );
 };
-
-// Вспомогательная иконка для многоразовости
-const RefreshCcw = ({ size, className }: { size: number, className?: string }) => (
-  <svg 
-    xmlns="http://www.w3.org/2000/svg" 
-    width={size} 
-    height={size} 
-    viewBox="0 0 24 24" 
-    fill="none" 
-    stroke="currentColor" 
-    strokeWidth="3" 
-    strokeLinecap="round" 
-    strokeLinejoin="round" 
-    className={className}
-  >
-    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-    <path d="M21 3v5h-5" />
-    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-    <path d="M3 21v-5h5" />
-  </svg>
-);
 
 export default Shop;
