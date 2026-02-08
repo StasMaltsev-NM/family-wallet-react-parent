@@ -154,15 +154,17 @@ const handleCreateReward = async () => {
             <div key={prize.id} className="bg-[var(--bg-card)] rounded-[2.5rem] border border-[var(--border)] overflow-hidden flex flex-col group hover:border-[var(--primary)]/30 transition-all shadow-xl">
               {/* Фото и Прайс-тег */}
             <div className="relative h-48 sm:h-52 overflow-hidden flex items-center justify-center">
-              {prize.image_url ? (
-                <img 
-                  src={prize.image_url} 
-                  alt={prize.title || prize.name}
-                  className="w-16 h-16 object-contain rounded"
-                />
-              ) : (
-                <div className="text-4xl">{prize.icon || '🎁'}</div>
-              )}
+              <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-2xl bg-white/5 border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.35)] flex items-center justify-center overflow-hidden">
+                {prize.image_url ? (
+                  <img 
+                    src={prize.image_url} 
+                    alt={prize.title || prize.name}
+                    className="w-full h-full object-contain drop-shadow-[0_10px_30px_rgba(0,0,0,0.35)]"
+                  />
+                ) : (
+                  <div className="text-5xl">{prize.icon || '🎁'}</div>
+                )}
+              </div>
               
               {/* Яркая плашка цены */}
               <div className="absolute top-4 right-4 px-4 py-2 bg-orange-500 rounded-2xl text-white shadow-2xl flex items-center gap-2 border border-white/20">
