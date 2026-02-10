@@ -170,17 +170,17 @@ const handleCreateReward = async () => {
           prizes.map(prize => (
             <div key={prize.id} className="bg-[var(--bg-card)] rounded-[2.5rem] border border-[var(--border)] overflow-hidden flex flex-col group hover:border-[var(--primary)]/30 transition-all shadow-xl">
               {/* Фото и Прайс-тег */}
-            <div className="relative h-60 sm:h-64 overflow-hidden flex items-center justify-center">
-              <div className="relative w-44 h-44 sm:w-48 sm:h-48 rounded-[2rem] bg-gradient-to-br from-white/12 via-white/6 to-white/0 border border-white/15 shadow-[0_30px_90px_rgba(0,0,0,0.5)] flex items-center justify-center overflow-hidden">
+            <div className="relative h-64 sm:h-72 overflow-hidden flex items-center justify-center">
+              <div className="relative w-52 h-52 sm:w-60 sm:h-60 rounded-[2.25rem] bg-gradient-to-br from-white/12 via-white/6 to-white/0 border border-white/15 shadow-[0_35px_100px_rgba(0,0,0,0.55)] flex items-center justify-center overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_35%_25%,rgba(255,255,255,0.4),rgba(255,255,255,0.08)_45%,rgba(0,0,0,0)_75%)]" />
                 {prize.image_url ? (
                   <img 
                     src={prize.image_url} 
                     alt={prize.title || prize.name}
-                    className="relative w-full h-full object-cover"
+                    className="relative w-full h-full object-cover scale-[1.12] transition-transform duration-500"
                   />
                 ) : (
-                  <div className="relative text-7xl opacity-90">{prize.icon || '🎁'}</div>
+                  <div className="relative text-7xl sm:text-8xl opacity-90">{prize.icon || '🎁'}</div>
                 )}
                 {!prize.image_url ? (
                   <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[9px] font-black uppercase tracking-[0.2em] text-white/60 bg-black/40 px-2.5 py-1 rounded-full border border-white/10">
