@@ -25,6 +25,7 @@ import {
 
 import { parentApi } from "./services/api";
 import { authApi } from "./services/api";
+import { makeInviteScopedKey, readSessionCache, writeSessionCache, removeSessionCache } from "./services/cache";
 // TEMP DEBUG
 declare global {
   interface Window {
@@ -156,6 +157,13 @@ const App: React.FC = () => {
   // identityKey: уникально для TG-акка (tg_user_id) или web fallback (fw_web_user_id)
   const [identityKey, setIdentityKey] = useState<string>("");
   const INVITE_KEY = useMemo(() => parentInviteStorageKey(identityKey), [identityKey]);
+  const APP_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+
+  const getAppCacheKey = useCallback((code: string) => makeInviteScopedKey("app-core", code), []);
+  const clearAppCache = useCallback((code: string) => {
+    if (!code) return;
+    removeSessionCache(getAppCacheKey(code));
+  }, [getAppCacheKey]);
 
   // Telegram: ready/expand + layout
   useEffect(() => {
@@ -328,7 +336,29 @@ useEffect(() => {
   const parentCodeRef = useRef<string>("");
   useEffect(() => {
     parentCodeRef.current = parentCode;
-  }, []);
+  }, [parentCode]);
+
+  useEffect(() => {
+    if (!parentCode) return;
+    const snapshot = readSessionCache<{
+      children: any[];
+      tasks: any[];
+      childPurchases: Record<string, any[]>;
+      childHistory: Record<string, any[]>;
+      selectedChildId?: string;
+    }>(getAppCacheKey(parentCode), APP_CACHE_MAX_AGE_MS);
+
+    if (!snapshot) return;
+    setApiChildren(snapshot.children || []);
+    setChildren((snapshot.children || []) as any);
+    setTasks(snapshot.tasks || []);
+    setChildPurchases(snapshot.childPurchases || {});
+    setChildHistory(snapshot.childHistory || {});
+    if (snapshot.selectedChildId) {
+      setSelectedChildId(snapshot.selectedChildId);
+      selectedChildIdRef.current = snapshot.selectedChildId;
+    }
+  }, [parentCode, getAppCacheKey]);
 
   const refreshTasks = useCallback(async () => {
     const code = parentCodeRef.current;
@@ -384,6 +414,9 @@ if (!code) {
 
       const resp = await parentApi.getTasks(code);
 
+      let nextPurchasesMap: Record<string, any[]> = {};
+      let nextHistoryMap: Record<string, any[]> = {};
+
       // purchases
       try {
         const purchasesResp = await parentApi.getFamilyPurchases(code);
@@ -394,9 +427,11 @@ if (!code) {
           if (!purchasesMap[p.child_id]) purchasesMap[p.child_id] = [];
           purchasesMap[p.child_id].push(p);
         }
+        nextPurchasesMap = purchasesMap;
         setChildPurchases(purchasesMap);
       } catch (e) {
         console.error("[purchases] failed:", e);
+        nextPurchasesMap = {};
         setChildPurchases({});
       }
 
@@ -416,14 +451,23 @@ if (!code) {
             date: item.created_at,
           });
         }
+        nextHistoryMap = historyMap;
         setChildHistory(historyMap);
       } catch (e) {
         console.error("[history] FAILED:", e);
+        nextHistoryMap = {};
         setChildHistory({});
       }
 
       const nextTasks = resp?.tasks ?? [];
       setTasks(nextTasks);
+      writeSessionCache(getAppCacheKey(code), {
+        children: nextKids,
+        tasks: nextTasks,
+        childPurchases: nextPurchasesMap,
+        childHistory: nextHistoryMap,
+        selectedChildId: selectedChildIdRef.current || nextKids[0]?.id || "",
+      });
 
       console.log("[auto-refresh] children/tasks:", nextKids.length, nextTasks.length);
     } catch (e: any) {
@@ -433,7 +477,7 @@ if (!code) {
     } finally {
       setLastSyncAt(Date.now());
     }
-  }, []);
+  }, [getAppCacheKey]);
 
   // auto refresh loop
   useEffect(() => {
@@ -450,7 +494,7 @@ if (!code) {
     };
 
     tick();
-    const id = window.setInterval(tick, 3000);
+    const id = window.setInterval(tick, 8000);
 
     return () => {
       alive = false;
@@ -467,14 +511,16 @@ if (!code) {
 
       if (action === "delete") {
         await parentApi.deleteTask(code, taskId);
+        clearAppCache(code);
         await refreshTasks();
         return;
       }
 
       await parentApi.confirmTask(code, taskId, action);
+      clearAppCache(code);
       await refreshTasks();
     },
-    [refreshTasks]
+    [clearAppCache, refreshTasks]
   );
 
   // lock-in apiChildId mapping once found
@@ -603,6 +649,7 @@ if (!code) {
 
         await parentApi.deleteChild(parentCode, apiId);
         console.log("[DELETE CHILD] Успешно удалён:", apiId);
+        clearAppCache(parentCode);
       }
 
       // УДАЛИТЬ ИЗ STATE
@@ -625,6 +672,7 @@ if (!code) {
   };
 
   const handleLogout = () => {
+    clearAppCache(parentCode);
     setParentCode("");
     setPartnerCode(undefined);
     setFriendCodes([]);

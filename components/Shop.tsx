@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Child, Prize } from '../types';
 import { PRIZES } from '../constants';
 import { parentApi } from '../services/api';
+import { makeInviteScopedKey, readSessionCache, writeSessionCache } from '../services/cache';
 import { Plus, ShoppingCart, Lock, Box, Check, Star, Trash2, Info, Repeat } from 'lucide-react';
 
 interface Props {
@@ -12,12 +13,15 @@ interface Props {
 }
 
 const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
+  const REWARDS_CACHE_TTL_MS = 90_000;
+  const REWARDS_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
   const [isAdding, setIsAdding] = useState(false);
   const [newPrize, setNewPrize] = useState({ name: '', cost: '', isPermanent: true });
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>([]);
   const [regeneratingIds, setRegeneratingIds] = useState<string[]>([]);
   const [prizes, setPrizes] = useState<Prize[]>(PRIZES);
   const prizesRef = useRef<Prize[]>(PRIZES);
+  const cacheKey = inviteCode ? makeInviteScopedKey('rewards', inviteCode) : '';
 
   const mapRewards = (rewards: any[]) =>
     rewards.map((r: any) => ({
@@ -38,7 +42,13 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
     const { rewards } = await parentApi.listRewards(inviteCode);
     const mapped = mapRewards(rewards);
     setPrizes(mapped);
+    if (cacheKey) writeSessionCache(cacheKey, mapped);
     return rewards;
+  };
+
+  const updateRewardsCache = (next: Prize[]) => {
+    if (!cacheKey) return;
+    writeSessionCache(cacheKey, next);
   };
 
   const waitForImages = async (rewardIds: string[], attempts = 18, delayMs = 5000) => {
@@ -59,6 +69,12 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   };
 
   useEffect(() => {
+    if (!cacheKey) return;
+    const cached = readSessionCache<Prize[]>(cacheKey, REWARDS_CACHE_MAX_AGE_MS);
+    if (cached?.length) setPrizes(cached);
+  }, [cacheKey]);
+
+  useEffect(() => {
     const loadRewards = async () => {
       try {
         await refreshRewards();
@@ -68,7 +84,7 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
     };
 
     loadRewards();
-  }, [inviteCode]);
+  }, [inviteCode, cacheKey]);
 
   useEffect(() => {
     prizesRef.current = prizes;
@@ -89,7 +105,7 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
       } finally {
         inFlight = false;
       }
-    }, 6000);
+    }, REWARDS_CACHE_TTL_MS);
     return () => {
       isActive = false;
       clearInterval(timer);
@@ -149,7 +165,9 @@ const handleCreateReward = async () => {
     // Перезагрузим список наград
     const rewardsRes = await parentApi.listRewards(inviteCode);
     console.log('[SHOP] Loaded rewards:', rewardsRes);
-    setPrizes(mapRewards(rewardsRes.rewards));
+    const mappedRewards = mapRewards(rewardsRes.rewards);
+    setPrizes(mappedRewards);
+    updateRewardsCache(mappedRewards);
     await waitForImages(createdRewardIds);
     
     // Закроем форму и сбросим
@@ -167,7 +185,11 @@ const handleCreateReward = async () => {
   const handleDeletePrize = async (id: string) => {
     try {
       await parentApi.deleteReward(inviteCode, id);
-      setPrizes(prev => prev.filter(p => p.id !== id));
+      setPrizes(prev => {
+        const next = prev.filter(p => p.id !== id);
+        updateRewardsCache(next);
+        return next;
+      });
     } catch (err) {
       console.error('[Shop DELETE] error:', err);
       alert('Ошибка удаления награды!');
