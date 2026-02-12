@@ -197,6 +197,13 @@ export const parentApi = {
     }, inviteCode);
   },
 
+  regenerateRewardImage(inviteCode: string, rewardId: string) {
+    return request<{ message: string; reward_id: string; title: string }>("/api/rewards/regenerate-image", {
+      method: "POST",
+      body: JSON.stringify({ reward_id: rewardId }),
+    }, inviteCode);
+  },
+
   getFamilyPurchases(inviteCode: string) {
     return request<{ purchases: any[] }>("/api/rewards/purchases/family", {
       method: "GET",

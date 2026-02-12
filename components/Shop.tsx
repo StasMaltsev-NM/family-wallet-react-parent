@@ -15,6 +15,7 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [newPrize, setNewPrize] = useState({ name: '', cost: '', isPermanent: true });
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>([]);
+  const [regeneratingIds, setRegeneratingIds] = useState<string[]>([]);
   const [prizes, setPrizes] = useState<Prize[]>(PRIZES);
   const prizesRef = useRef<Prize[]>(PRIZES);
 
@@ -173,6 +174,20 @@ const handleCreateReward = async () => {
     }
   };
 
+  const handleRegenerateImage = async (id: string) => {
+    try {
+      setRegeneratingIds(prev => (prev.includes(id) ? prev : [...prev, id]));
+      await parentApi.regenerateRewardImage(inviteCode, id);
+      await refreshRewards();
+      await waitForImages([id], 24, 3000);
+    } catch (err: any) {
+      console.error('[Shop REGENERATE] error:', err);
+      alert(`Ошибка перегенерации: ${err?.message || 'Неизвестная ошибка'}`);
+    } finally {
+      setRegeneratingIds(prev => prev.filter((item) => item !== id));
+    }
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
       <div className="flex items-center justify-between">
@@ -223,9 +238,14 @@ const handleCreateReward = async () => {
                 </div>
                 
                 {!prize.isOneTime && (
-                  <div className="absolute top-4 left-4 p-2.5 bg-indigo-600/80 backdrop-blur-md rounded-xl text-white border border-white/10" title="Постоянный слот">
-                    <Repeat size={16} />
-                  </div>
+                  <button
+                    onClick={() => handleRegenerateImage(prize.id)}
+                    disabled={regeneratingIds.includes(prize.id)}
+                    className="absolute top-4 left-4 p-2.5 bg-indigo-600/80 backdrop-blur-md rounded-xl text-white border border-white/10 hover:bg-indigo-500 transition-all disabled:opacity-50"
+                    title="Перегенерировать картинку"
+                  >
+                    <Repeat size={16} className={regeneratingIds.includes(prize.id) ? 'animate-spin' : ''} />
+                  </button>
                 )}
               </div>
 
@@ -238,13 +258,15 @@ const handleCreateReward = async () => {
                   </div>
                 </div>
 
-                <button 
-                  onClick={() => handleDeletePrize(prize.id)}
-                  className="w-full py-4 bg-rose-500/10 text-rose-500 text-sm font-black uppercase tracking-widest rounded-2xl hover:bg-rose-500 hover:text-white transition-all border border-rose-500/10 flex items-center justify-center gap-2"
-                >
-                  <Trash2 size={18} />
-                  Удалить
-                </button>
+                <div className="grid grid-cols-1 gap-3">
+                  <button 
+                    onClick={() => handleDeletePrize(prize.id)}
+                    className="w-full py-4 bg-rose-500/10 text-rose-500 text-xs sm:text-sm font-black uppercase tracking-widest rounded-2xl hover:bg-rose-500 hover:text-white transition-all border border-rose-500/10 flex items-center justify-center gap-2"
+                  >
+                    <Trash2 size={18} />
+                    Удалить
+                  </button>
+                </div>
               </div>
             </div>
           ))
