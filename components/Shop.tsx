@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Child, Prize } from '../types';
 import { PRIZES } from '../constants';
 import { parentApi } from '../services/api';
@@ -16,6 +16,7 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   const [newPrize, setNewPrize] = useState({ name: '', cost: '', isPermanent: true });
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>([]);
   const [prizes, setPrizes] = useState<Prize[]>(PRIZES);
+  const prizesRef = useRef<Prize[]>(PRIZES);
 
   const mapRewards = (rewards: any[]) =>
     rewards.map((r: any) => ({
@@ -39,7 +40,7 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
     return rewards;
   };
 
-  const waitForImages = async (rewardIds: string[], attempts = 6, delayMs = 5000) => {
+  const waitForImages = async (rewardIds: string[], attempts = 18, delayMs = 5000) => {
     if (!rewardIds.length) return;
     for (let i = 0; i < attempts; i += 1) {
       try {
@@ -66,6 +67,32 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
     };
 
     loadRewards();
+  }, [inviteCode]);
+
+  useEffect(() => {
+    prizesRef.current = prizes;
+  }, [prizes]);
+
+  useEffect(() => {
+    if (!inviteCode) return;
+    let isActive = true;
+    let inFlight = false;
+    const timer = setInterval(async () => {
+      if (!isActive || inFlight) return;
+      if (!prizesRef.current.some((p) => !p.image_url)) return;
+      inFlight = true;
+      try {
+        await refreshRewards();
+      } catch (err) {
+        console.error('[SHOP POLL] error:', err);
+      } finally {
+        inFlight = false;
+      }
+    }, 6000);
+    return () => {
+      isActive = false;
+      clearInterval(timer);
+    };
   }, [inviteCode]);
 
   const toggleChildSelection = (id: string) => {
@@ -170,14 +197,14 @@ const handleCreateReward = async () => {
           prizes.map(prize => (
             <div key={prize.id} className="bg-[var(--bg-card)] rounded-[2.5rem] border border-[var(--border)] overflow-hidden flex flex-col group hover:border-[var(--primary)]/30 transition-all shadow-xl">
               {/* Фото и Прайс-тег */}
-            <div className="relative h-64 sm:h-72 overflow-hidden flex items-center justify-center">
-              <div className="relative w-52 h-52 sm:w-60 sm:h-60 rounded-[2.25rem] bg-gradient-to-br from-white/12 via-white/6 to-white/0 border border-white/15 shadow-[0_35px_100px_rgba(0,0,0,0.55)] flex items-center justify-center overflow-hidden">
+            <div className="relative h-72 sm:h-80 overflow-hidden flex items-center justify-center">
+              <div className="relative w-60 h-60 sm:w-72 sm:h-72 rounded-[2.5rem] bg-gradient-to-br from-white/12 via-white/6 to-white/0 border border-white/15 shadow-[0_35px_100px_rgba(0,0,0,0.55)] flex items-center justify-center overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_35%_25%,rgba(255,255,255,0.4),rgba(255,255,255,0.08)_45%,rgba(0,0,0,0)_75%)]" />
                 {prize.image_url ? (
                   <img 
                     src={prize.image_url} 
                     alt={prize.title || prize.name}
-                    className="relative w-full h-full object-cover scale-[1.12] transition-transform duration-500"
+                    className="relative w-full h-full object-cover scale-[1.2] transition-transform duration-500"
                   />
                 ) : (
                   <div className="relative text-7xl sm:text-8xl opacity-90">{prize.icon || '🎁'}</div>
