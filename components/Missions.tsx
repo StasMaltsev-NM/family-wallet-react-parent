@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Child, Mission } from "../types";
 import {
   Plus,
@@ -75,6 +75,16 @@ const Missions: React.FC<Props> = ({ child, allChildren, onUpdateChild, onTaskAc
   });
 
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>([child.id]);
+  useEffect(() => {
+    if (!isAdding) return;
+    if (allChildren.length === 1) {
+      setSelectedChildIds([allChildren[0].id]);
+      return;
+    }
+    if (selectedChildIds.length === 0) {
+      setSelectedChildIds([child.id]);
+    }
+  }, [allChildren, child.id, isAdding, selectedChildIds.length]);
 const sortedMissions: Mission[] = useMemo(() => {
   const list = Array.isArray(child.missions) ? child.missions : [];
 
@@ -181,7 +191,7 @@ const handleAddMission = async () => {
       recurrenceType: "daily",
       selectedDays: [],
     });
-    setSelectedChildIds([child.id]);
+    setSelectedChildIds(allChildren.length === 1 ? [allChildren[0].id] : [child.id]);
   } catch (e) {
     console.error(e);
     alert(String(e));
@@ -433,7 +443,7 @@ const handleAddMission = async () => {
                 disabled={!newMission.title || !newMission.reward}
                 className="btn-primary flex-[2] py-5 text-lg font-black rounded-2xl shadow-xl shadow-[var(--primary)]/30 active:scale-[0.98] disabled:opacity-20 disabled:grayscale transition-all"
               >
-                Создать для {selectedChildIds.length}
+                Создать
               </button>
             </div>
           </div>

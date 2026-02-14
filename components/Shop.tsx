@@ -19,9 +19,14 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   const [newPrize, setNewPrize] = useState({ name: '', cost: '', isPermanent: true });
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>([]);
   const [regeneratingIds, setRegeneratingIds] = useState<string[]>([]);
-  const [prizes, setPrizes] = useState<Prize[]>(PRIZES);
-  const prizesRef = useRef<Prize[]>(PRIZES);
   const cacheKey = inviteCode ? makeInviteScopedKey('rewards', inviteCode) : '';
+  const [prizes, setPrizes] = useState<Prize[]>(() => {
+    if (!cacheKey) return PRIZES;
+    return readSessionCache<Prize[]>(cacheKey, REWARDS_CACHE_MAX_AGE_MS) || PRIZES;
+  });
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(prizes.length === 0);
+  const [isProgressLoading, setIsProgressLoading] = useState<boolean>(false);
+  const prizesRef = useRef<Prize[]>(prizes);
 
   const mapRewards = (rewards: any[]) =>
     rewards.map((r: any) => ({
@@ -37,13 +42,18 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
       isOneTime: r.is_permanent === 0
     }));
 
-  const refreshRewards = async () => {
+  const refreshRewards = async (options?: { showProgress?: boolean }) => {
     if (!inviteCode) return [];
-    const { rewards } = await parentApi.listRewards(inviteCode);
-    const mapped = mapRewards(rewards);
-    setPrizes(mapped);
-    if (cacheKey) writeSessionCache(cacheKey, mapped);
-    return rewards;
+    if (options?.showProgress) setIsProgressLoading(true);
+    try {
+      const { rewards } = await parentApi.listRewards(inviteCode);
+      const mapped = mapRewards(rewards);
+      setPrizes(mapped);
+      if (cacheKey) writeSessionCache(cacheKey, mapped);
+      return rewards;
+    } finally {
+      if (options?.showProgress) setIsProgressLoading(false);
+    }
   };
 
   const updateRewardsCache = (next: Prize[]) => {
@@ -71,20 +81,39 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   useEffect(() => {
     if (!cacheKey) return;
     const cached = readSessionCache<Prize[]>(cacheKey, REWARDS_CACHE_MAX_AGE_MS);
-    if (cached?.length) setPrizes(cached);
+    if (cached?.length) {
+      setPrizes(cached);
+      setIsInitialLoading(false);
+    } else {
+      setIsInitialLoading(true);
+    }
   }, [cacheKey]);
 
   useEffect(() => {
     const loadRewards = async () => {
       try {
-        await refreshRewards();
+        await refreshRewards({ showProgress: true });
       } catch (err) {
         console.error('[SHOP LOAD] error:', err);
+      } finally {
+        setIsInitialLoading(false);
       }
     };
 
     loadRewards();
   }, [inviteCode, cacheKey]);
+
+  useEffect(() => {
+    if (!isAdding) return;
+    if (allChildren.length === 1) {
+      const onlyId = allChildren[0].apiChildId || allChildren[0].id;
+      setSelectedChildIds([onlyId]);
+      return;
+    }
+    if (selectedChildIds.length === 0 && currentChild) {
+      setSelectedChildIds([currentChild.apiChildId || currentChild.id]);
+    }
+  }, [allChildren, currentChild, isAdding, selectedChildIds.length]);
 
   useEffect(() => {
     prizesRef.current = prizes;
@@ -212,6 +241,17 @@ const handleCreateReward = async () => {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+      {isProgressLoading ? (
+        <div className="fixed top-0 left-0 right-0 z-[80] h-1 overflow-hidden bg-white/10">
+          <div className="h-full w-1/3 bg-[var(--primary)] animate-[shopBar_1.2s_linear_infinite]" />
+        </div>
+      ) : null}
+      <style>{`
+        @keyframes shopBar {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(350%); }
+        }
+      `}</style>
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-black text-white">Магазин призов</h2>
@@ -226,7 +266,18 @@ const handleCreateReward = async () => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-        {prizes.length === 0 ? (
+        {isInitialLoading && prizes.length === 0 ? (
+          <>
+            {[1, 2].map((s) => (
+              <div key={s} className="bg-[var(--bg-card)] rounded-[2.5rem] border border-[var(--border)] overflow-hidden p-6 animate-pulse">
+                <div className="h-72 sm:h-80 rounded-[2rem] bg-white/5" />
+                <div className="mt-6 h-8 w-2/3 bg-white/10 rounded-xl" />
+                <div className="mt-3 h-4 w-1/2 bg-white/10 rounded-xl" />
+                <div className="mt-6 h-14 w-full bg-white/10 rounded-2xl" />
+              </div>
+            ))}
+          </>
+        ) : prizes.length === 0 ? (
           <div className="text-center py-20 bg-[var(--bg-card)] rounded-[2.5rem] border-2 border-dashed border-[var(--border)] opacity-60">
             <p className="font-black text-[var(--text-muted)] text-[12px] uppercase tracking-widest">АКТИВНЫХ НАГРАД НЕТ</p>
           </div>
@@ -259,16 +310,14 @@ const handleCreateReward = async () => {
                   <Star size={18} fill="currentColor" className="text-white" />
                 </div>
                 
-                {!prize.isOneTime && (
-                  <button
-                    onClick={() => handleRegenerateImage(prize.id)}
-                    disabled={regeneratingIds.includes(prize.id)}
-                    className="absolute top-4 left-4 p-2.5 bg-indigo-600/80 backdrop-blur-md rounded-xl text-white border border-white/10 hover:bg-indigo-500 transition-all disabled:opacity-50"
-                    title="Перегенерировать картинку"
-                  >
-                    <Repeat size={16} className={regeneratingIds.includes(prize.id) ? 'animate-spin' : ''} />
-                  </button>
-                )}
+                <button
+                  onClick={() => handleRegenerateImage(prize.id)}
+                  disabled={regeneratingIds.includes(prize.id)}
+                  className="absolute top-4 left-4 p-2.5 bg-indigo-600/80 backdrop-blur-md rounded-xl text-white border border-white/10 hover:bg-indigo-500 transition-all disabled:opacity-50"
+                  title="Перегенерировать картинку"
+                >
+                  <Repeat size={16} className={regeneratingIds.includes(prize.id) ? 'animate-spin' : ''} />
+                </button>
               </div>
 
               <div className="p-6 flex flex-col flex-1 justify-between gap-4">
@@ -378,7 +427,7 @@ const handleCreateReward = async () => {
                 disabled={!newPrize.name || !newPrize.cost}
                 className="btn-primary flex-[2] py-5 text-lg font-black rounded-2xl shadow-xl shadow-[var(--primary)]/30 active:scale-[0.98] disabled:opacity-20 transition-all"
               >
-                Создать для {selectedChildIds.length}
+                Создать
               </button>
             </div>
           </div>
