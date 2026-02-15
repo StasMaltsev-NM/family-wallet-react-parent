@@ -174,17 +174,6 @@ const App: React.FC = () => {
     removeSessionCache(getRewardsCacheKey(code));
   }, [getAppCacheKey, getRewardsCacheKey]);
 
-  const getReadableApiError = useCallback((raw: string | null) => {
-    if (!raw) return "";
-    if (raw.startsWith("NETWORK_TIMEOUT:")) {
-      return "Сеть отвечает слишком долго. Проверьте VPN/интернет и нажмите «Повторить загрузку».";
-    }
-    if (raw.startsWith("NETWORK_UNREACHABLE:")) {
-      return "Нет стабильного соединения с API. Проверьте VPN/интернет и нажмите «Повторить загрузку».";
-    }
-    return raw;
-  }, []);
-
   const handleCopyChildCode = useCallback(async () => {
     if (!createdChildInvite?.code) return;
     try {
@@ -512,7 +501,9 @@ if (!code) {
             cost: r.price,
             image_url: r.image_url,
             icon: r.icon,
-            image: `https://picsum.photos/seed/${r.id}/200/200.webp`,
+            image: r.icon
+              ? `https://em-content.zobj.net/thumbs/120/apple/354/${r.icon.codePointAt(0).toString(16)}.png`
+              : `https://picsum.photos/seed/${r.id}/200/200`,
             isOneTime: r.is_permanent === 0,
           }));
           writeSessionCache(getRewardsCacheKey(code), mappedRewards);
@@ -769,7 +760,7 @@ if (!code) {
           <>
             {apiError ? (
               <div className="mb-4 text-sm text-rose-400 whitespace-pre-wrap">
-                API error: {getReadableApiError(apiError)}
+                API error: {apiError}
               </div>
             ) : null}
             {selectedChild ? (
@@ -923,12 +914,6 @@ if (!code) {
           >
             Сбросить код
           </button>
-
-          {authError ? (
-            <div className="mt-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
-              {getReadableApiError(authError)}
-            </div>
-          ) : null}
         </div>
       </div>
     );
@@ -955,7 +940,7 @@ if (!code) {
           </div>
           {apiError ? (
             <div className="mt-5 rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4">
-              <p className="text-sm text-rose-300">Ошибка API: {getReadableApiError(apiError)}</p>
+              <p className="text-sm text-rose-300">Ошибка API: {apiError}</p>
               <button
                 onClick={() => refreshTasks()}
                 className="mt-3 w-full rounded-xl bg-rose-500/20 py-3 text-xs font-black uppercase tracking-widest text-rose-200 hover:bg-rose-500/30"
@@ -1081,31 +1066,18 @@ if (!code) {
                   dream_image: newChild.dream?.image || "",
                 });
                 console.log("[ADD CHILD] Успешно создан:", response);
-                const createdChildId =
-                  (response as any)?.child_id ||
-                  (response as any)?.childId ||
-                  (response as any)?.id ||
-                  "";
                 let createdInviteCode =
                   (response as any)?.invite_code ||
                   (response as any)?.child_invite_code ||
-                  (response as any)?.inviteCode ||
                   "";
 
                 if (!createdInviteCode) {
                   try {
                     const listRes = await parentApi.listChildren(parentCode);
-                    const createdApiChild =
-                      (listRes?.children || []).find(
-                        (kid: any) => String(kid?.id) === String(createdChildId)
-                      ) ||
-                      (listRes?.children || []).find(
-                        (kid: any) =>
-                          String(kid?.name || "").trim().toLowerCase() ===
-                          String(newChild?.name || "").trim().toLowerCase()
-                      );
+                    const createdApiChild = (listRes?.children || []).find(
+                      (kid: any) => String(kid?.id) === String(response.child_id)
+                    );
                     createdInviteCode = createdApiChild?.invite_code || "";
-                    console.log("[ADD CHILD] resolved child for invite:", createdApiChild);
                   } catch (err) {
                     console.error("[ADD CHILD] failed to resolve invite code:", err);
                   }
@@ -1114,8 +1086,8 @@ if (!code) {
                 // ОБНОВИТЬ STATE С ДАННЫМИ ИЗ API
                 const childWithApiId = {
                   ...newChild,
-                  apiChildId: createdChildId,
-                  id: createdChildId,
+                  apiChildId: response.child_id,
+                  id: response.child_id,
                   inviteCode: createdInviteCode || "",
                 };
                 setChildren((prev) => [...prev, childWithApiId] as any);
@@ -1130,12 +1102,6 @@ if (!code) {
                     code: createdInviteCode,
                   });
                   setIsChildCodeCopied(false);
-                } else {
-                  console.warn("[ADD CHILD] invite code not resolved after create", {
-                    createdChildId,
-                    response,
-                  });
-                  alert("Ребёнок создан, но код не получен. Открой Настройки и скопируй код там.");
                 }
               }
               setIsAddChildOpen(false);
@@ -1215,7 +1181,7 @@ const ChildInviteCodeModal: React.FC<ChildInviteCodeModalProps> = ({
       <h3 className="text-xl font-black tracking-tight text-white">Код для ребёнка</h3>
       <p className="mt-3 text-sm font-semibold text-white/70">
         Профиль <span className="text-white">{childName}</span> создан. Введите этот код в приложении ребёнка{" "}
-        <span className="text-[var(--primary)]">@family_wallet_kids_bot</span> на его телефоне.
+        <span className="text-[var(--primary)]">@детскийбот</span> на его телефоне.
       </p>
       <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-center">
         <code className="font-mono text-2xl font-black tracking-[0.22em] text-white">{code}</code>
