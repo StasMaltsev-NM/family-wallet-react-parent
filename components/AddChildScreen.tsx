@@ -34,7 +34,7 @@ const AddChildScreen: React.FC<Props> = ({ onCancel, onAdd }) => {
         title: 'Первая мечта...',
         price: 100,
         current: 0,
-        image: 'https://picsum.photos/seed/gift/400/300'
+        image: 'https://picsum.photos/seed/gift/400/300.webp'
       },
       balance: { confirmed: 0, pending: 0 },
       inviteCode: (Math.random().toString(36).substring(2, 6) + '-' + Math.random().toString(36).substring(2, 6)).toUpperCase(),

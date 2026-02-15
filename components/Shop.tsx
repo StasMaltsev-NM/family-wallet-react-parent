@@ -36,9 +36,7 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
       cost: r.price,
       image_url: r.image_url,
       icon: r.icon,
-      image: r.icon 
-        ? `https://em-content.zobj.net/thumbs/120/apple/354/${r.icon.codePointAt(0).toString(16)}.png`
-        : `https://picsum.photos/seed/${r.id}/200/200`,
+      image: `https://picsum.photos/seed/${r.id}/200/200.webp`,
       isOneTime: r.is_permanent === 0
     }));
 
