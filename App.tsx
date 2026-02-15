@@ -21,6 +21,8 @@ import {
   Settings,
   Palette,
   LogOut,
+  Copy,
+  Check,
 } from "lucide-react";
 
 import { parentApi } from "./services/api";
@@ -144,6 +146,7 @@ const App: React.FC = () => {
   const [apiChildren, setApiChildren] = useState<any[]>([]);
   const [apiError, setApiError] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
+  const [isInitialDataLoading, setIsInitialDataLoading] = useState(true);
   const [childPurchases, setChildPurchases] = useState<Record<string, any[]>>({});
   const [childHistory, setChildHistory] = useState<Record<string, any[]>>({});
 
@@ -154,16 +157,51 @@ const App: React.FC = () => {
   const [codeDraft, setCodeDraft] = useState<string>("");
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [createdChildInvite, setCreatedChildInvite] = useState<{ name: string; code: string } | null>(null);
+  const [isChildCodeCopied, setIsChildCodeCopied] = useState(false);
   // identityKey: уникально для TG-акка (tg_user_id) или web fallback (fw_web_user_id)
   const [identityKey, setIdentityKey] = useState<string>("");
   const INVITE_KEY = useMemo(() => parentInviteStorageKey(identityKey), [identityKey]);
   const APP_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+  const REWARDS_PREFETCH_INTERVAL_MS = 60_000;
+  const rewardsPrefetchAtRef = useRef(0);
 
   const getAppCacheKey = useCallback((code: string) => makeInviteScopedKey("app-core", code), []);
+  const getRewardsCacheKey = useCallback((code: string) => makeInviteScopedKey("rewards", code), []);
   const clearAppCache = useCallback((code: string) => {
     if (!code) return;
     removeSessionCache(getAppCacheKey(code));
-  }, [getAppCacheKey]);
+    removeSessionCache(getRewardsCacheKey(code));
+  }, [getAppCacheKey, getRewardsCacheKey]);
+
+  const getReadableApiError = useCallback((raw: string | null) => {
+    if (!raw) return "";
+    if (raw.startsWith("NETWORK_TIMEOUT:")) {
+      return "Сеть отвечает слишком долго. Проверьте VPN/интернет и нажмите «Повторить загрузку».";
+    }
+    if (raw.startsWith("NETWORK_UNREACHABLE:")) {
+      return "Нет стабильного соединения с API. Проверьте VPN/интернет и нажмите «Повторить загрузку».";
+    }
+    return raw;
+  }, []);
+
+  const handleCopyChildCode = useCallback(async () => {
+    if (!createdChildInvite?.code) return;
+    try {
+      await navigator.clipboard.writeText(createdChildInvite.code);
+      setIsChildCodeCopied(true);
+      setTimeout(() => setIsChildCodeCopied(false), 1800);
+    } catch (err) {
+      console.error("[CHILD CODE] copy failed", err);
+      alert("Не удалось скопировать код. Скопируй вручную.");
+    }
+  }, [createdChildInvite]);
+
+  useEffect(() => {
+    if (!parentCode) return;
+    setIsInitialDataLoading(true);
+    setLastSyncAt(null);
+  }, [parentCode]);
 
   // Telegram: ready/expand + layout
   useEffect(() => {
@@ -461,6 +499,28 @@ if (!code) {
 
       const nextTasks = resp?.tasks ?? [];
       setTasks(nextTasks);
+
+      // Prefetch rewards cache for instant Shop render on first tab open.
+      if (Date.now() - rewardsPrefetchAtRef.current > REWARDS_PREFETCH_INTERVAL_MS) {
+        rewardsPrefetchAtRef.current = Date.now();
+        try {
+          const rewardsResp = await parentApi.listRewards(code);
+          const mappedRewards = (rewardsResp?.rewards ?? []).map((r: any) => ({
+            id: r.id,
+            name: r.title,
+            title: r.title,
+            cost: r.price,
+            image_url: r.image_url,
+            icon: r.icon,
+            image: `https://picsum.photos/seed/${r.id}/200/200.webp`,
+            isOneTime: r.is_permanent === 0,
+          }));
+          writeSessionCache(getRewardsCacheKey(code), mappedRewards);
+        } catch (e) {
+          console.error("[rewards prefetch] failed:", e);
+        }
+      }
+
       writeSessionCache(getAppCacheKey(code), {
         children: nextKids,
         tasks: nextTasks,
@@ -468,6 +528,7 @@ if (!code) {
         childHistory: nextHistoryMap,
         selectedChildId: selectedChildIdRef.current || nextKids[0]?.id || "",
       });
+      setIsInitialDataLoading(false);
 
       console.log("[auto-refresh] children/tasks:", nextKids.length, nextTasks.length);
     } catch (e: any) {
@@ -477,7 +538,7 @@ if (!code) {
     } finally {
       setLastSyncAt(Date.now());
     }
-  }, [getAppCacheKey]);
+  }, [getAppCacheKey, getRewardsCacheKey]);
 
   // auto refresh loop
   useEffect(() => {
@@ -708,7 +769,7 @@ if (!code) {
           <>
             {apiError ? (
               <div className="mb-4 text-sm text-rose-400 whitespace-pre-wrap">
-                API error: {apiError}
+                API error: {getReadableApiError(apiError)}
               </div>
             ) : null}
             {selectedChild ? (
@@ -867,24 +928,40 @@ if (!code) {
     );
   }
 
-  // СТРАХОВКА ОТ КРАША — ЕСЛИ НЕТ ДЕТЕЙ!
-    if (!selectedChild && uiChildren.length === 0 && lastSyncAt === 0) {
+  if (isInitialDataLoading) {
     return (
-      <div style={{ 
-        padding: 24, 
-        color: "#fff", 
-        background: "#1a1a2e", 
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        fontSize: 18,
-        gap: 12
-      }}>
-        <div>🔄 Загрузка профиля...</div>
-        <div style={{ fontSize: 14, opacity: 0.6 }}>
-          {parentCode ? `Код: ${parentCode}` : 'Ожидание авторизации'}
+      <div className="min-h-screen flex items-center justify-center p-6 bg-black text-white">
+        <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white/[0.04] p-7">
+          <div className="h-1 w-full overflow-hidden rounded-full bg-white/10">
+            <div className="h-full w-1/3 bg-[var(--primary)] animate-[appBootBar_1.2s_linear_infinite]" />
+          </div>
+          <style>{`
+            @keyframes appBootBar {
+              0% { transform: translateX(-100%); }
+              100% { transform: translateX(350%); }
+            }
+          `}</style>
+          <div className="mt-5 text-center">
+            <p className="text-lg font-black">Загрузка данных семьи...</p>
+            <p className="mt-2 text-xs uppercase tracking-[0.2em] text-[var(--text-muted)]">
+              Подтягиваем миссии, награды, баланс и историю
+            </p>
+          </div>
+          {apiError ? (
+            <div className="mt-5 rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4">
+              <p className="text-sm text-rose-300">Ошибка API: {getReadableApiError(apiError)}</p>
+              <button
+                onClick={() => refreshTasks()}
+                className="mt-3 w-full rounded-xl bg-rose-500/20 py-3 text-xs font-black uppercase tracking-widest text-rose-200 hover:bg-rose-500/30"
+              >
+                Повторить загрузку
+              </button>
+            </div>
+          ) : (
+            <div className="mt-4 text-center text-[11px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
+              Открываем приложение...
+            </div>
+          )}
         </div>
       </div>
     );
@@ -998,12 +1075,42 @@ if (!code) {
                   dream_image: newChild.dream?.image || "",
                 });
                 console.log("[ADD CHILD] Успешно создан:", response);
+                const createdChildId =
+                  (response as any)?.child_id ||
+                  (response as any)?.childId ||
+                  (response as any)?.id ||
+                  "";
+                let createdInviteCode =
+                  (response as any)?.invite_code ||
+                  (response as any)?.child_invite_code ||
+                  (response as any)?.inviteCode ||
+                  "";
+
+                if (!createdInviteCode) {
+                  try {
+                    const listRes = await parentApi.listChildren(parentCode);
+                    const createdApiChild =
+                      (listRes?.children || []).find(
+                        (kid: any) => String(kid?.id) === String(createdChildId)
+                      ) ||
+                      (listRes?.children || []).find(
+                        (kid: any) =>
+                          String(kid?.name || "").trim().toLowerCase() ===
+                          String(newChild?.name || "").trim().toLowerCase()
+                      );
+                    createdInviteCode = createdApiChild?.invite_code || "";
+                    console.log("[ADD CHILD] resolved child for invite:", createdApiChild);
+                  } catch (err) {
+                    console.error("[ADD CHILD] failed to resolve invite code:", err);
+                  }
+                }
 
                 // ОБНОВИТЬ STATE С ДАННЫМИ ИЗ API
                 const childWithApiId = {
                   ...newChild,
-                  apiChildId: response.child_id,
-                  id: response.child_id,
+                  apiChildId: createdChildId,
+                  id: createdChildId,
+                  inviteCode: createdInviteCode || "",
                 };
                 setChildren((prev) => [...prev, childWithApiId] as any);
                 setSelectedChildId(childWithApiId.id);
@@ -1011,6 +1118,19 @@ if (!code) {
 
                 // ПЕРЕЗАГРУЗИТЬ ДАННЫЕ
                 setTimeout(() => refreshTasks(), 500);
+                if (createdInviteCode) {
+                  setCreatedChildInvite({
+                    name: String(newChild?.name || "Ребёнок"),
+                    code: createdInviteCode,
+                  });
+                  setIsChildCodeCopied(false);
+                } else {
+                  console.warn("[ADD CHILD] invite code not resolved after create", {
+                    createdChildId,
+                    response,
+                  });
+                  alert("Ребёнок создан, но код не получен. Открой Настройки и скопируй код там.");
+                }
               }
               setIsAddChildOpen(false);
             } catch (err: any) {
@@ -1018,6 +1138,16 @@ if (!code) {
               alert(`Ошибка создания ребёнка: ${err.message}`);
             }
           }}
+        />
+      )}
+
+      {createdChildInvite && (
+        <ChildInviteCodeModal
+          childName={createdChildInvite.name}
+          code={createdChildInvite.code}
+          copied={isChildCodeCopied}
+          onClose={() => setCreatedChildInvite(null)}
+          onCopy={handleCopyChildCode}
         />
       )}
     </div>
@@ -1056,6 +1186,55 @@ const NavButton: React.FC<NavButtonProps> = ({
     </div>
     <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>
   </button>
+);
+
+interface ChildInviteCodeModalProps {
+  childName: string;
+  code: string;
+  copied: boolean;
+  onClose: () => void;
+  onCopy: () => void;
+}
+
+const ChildInviteCodeModal: React.FC<ChildInviteCodeModalProps> = ({
+  childName,
+  code,
+  copied,
+  onClose,
+  onCopy,
+}) => (
+  <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+    <div className="absolute inset-0 bg-black/85 backdrop-blur-xl" onClick={onClose} />
+    <div className="relative w-full max-w-md rounded-[2rem] border border-white/10 bg-[#0B0B10] p-6 sm:p-7 shadow-[0_30px_80px_rgba(0,0,0,0.8)]">
+      <h3 className="text-xl font-black tracking-tight text-white">Код для ребёнка</h3>
+      <p className="mt-3 text-sm font-semibold text-white/70">
+        Профиль <span className="text-white">{childName}</span> создан. Введите этот код в приложении ребёнка{" "}
+        <span className="text-[var(--primary)]">@family_wallet_kids_bot</span> на его телефоне.
+      </p>
+      <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-center">
+        <code className="font-mono text-2xl font-black tracking-[0.22em] text-white">{code}</code>
+      </div>
+      <div className="mt-5 flex gap-3">
+        <button
+          type="button"
+          onClick={onCopy}
+          className="flex-1 rounded-2xl bg-[var(--primary)] px-4 py-3 font-black text-white transition-all active:scale-95"
+        >
+          <span className="inline-flex items-center gap-2">
+            {copied ? <Check size={18} /> : <Copy size={18} />}
+            {copied ? "Скопировано" : "Скопировать"}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-2xl border border-white/15 px-4 py-3 font-black text-white/80 transition-all hover:text-white active:scale-95"
+        >
+          Закрыть
+        </button>
+      </div>
+    </div>
+  </div>
 );
 
 export default App;

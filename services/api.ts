@@ -3,6 +3,56 @@ const API_URL =
   "https://family-wallet-api.maltsevstas21.workers.dev";
 console.log("[api.ts loaded] API_URL =", API_URL);
 type Json = Record<string, any>;
+const REQUEST_TIMEOUT_MS = 12000;
+const GET_RETRY_COUNT = 2;
+const RETRY_BASE_DELAY_MS = 700;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === "AbortError";
+}
+
+function isLikelyNetworkError(err: unknown): boolean {
+  if (isAbortError(err)) return true;
+  if (!(err instanceof Error)) return false;
+  const msg = String(err.message || "").toLowerCase();
+  return (
+    msg.includes("load failed") ||
+    msg.includes("fetch failed") ||
+    msg.includes("networkerror") ||
+    msg.includes("network request failed") ||
+    msg.includes("failed to fetch")
+  );
+}
+
+function isRetriableStatus(status: number): boolean {
+  return [408, 425, 429, 500, 502, 503, 504, 520, 522, 524].includes(status);
+}
+
+function makeNetworkError(err: unknown): Error {
+  if (isAbortError(err)) {
+    return new Error(
+      "NETWORK_TIMEOUT: Сервер отвечает слишком долго. Проверьте VPN/сеть и повторите."
+    );
+  }
+  return new Error(
+    "NETWORK_UNREACHABLE: Нет стабильного соединения с API. Проверьте VPN/интернет и повторите."
+  );
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 async function request<T>(
   path: string,
@@ -28,26 +78,48 @@ async function request<T>(
   console.log("[API invite]", inviteCode);
   console.log("[API headers]", Object.fromEntries(headers.entries()));
 
-  let res: Response;
-  try {
-    const method = String(options.method ?? "GET").toUpperCase();
+  const method = String(options.method ?? "GET").toUpperCase();
+  const maxAttempts = method === "GET" ? GET_RETRY_COUNT + 1 : 1;
+  let lastError: unknown = null;
 
-    res = await fetch(url, {
-      ...options,
-      headers,
-      cache: method === "GET" ? "no-store" : options.cache,
-    });
-  } catch (e) {
-    console.error("[API fetch failed]", url, e);
-    throw e;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const res = await fetchWithTimeout(
+        url,
+        {
+          ...options,
+          headers,
+          cache: method === "GET" ? "no-store" : options.cache,
+        },
+        REQUEST_TIMEOUT_MS
+      );
+
+      if (!res.ok) {
+        if (attempt < maxAttempts && isRetriableStatus(res.status)) {
+          await sleep(RETRY_BASE_DELAY_MS * attempt);
+          continue;
+        }
+        const text = await res.text().catch(() => "");
+        throw new Error(`API ${res.status} ${res.statusText}: ${text || url}`);
+      }
+
+      return (await res.json()) as T;
+    } catch (err) {
+      lastError = err;
+      if (attempt < maxAttempts && isLikelyNetworkError(err)) {
+        await sleep(RETRY_BASE_DELAY_MS * attempt);
+        continue;
+      }
+      if (isLikelyNetworkError(err)) {
+        console.error("[API network failed]", url, err);
+        throw makeNetworkError(err);
+      }
+      console.error("[API fetch failed]", url, err);
+      throw err;
+    }
   }
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`API ${res.status} ${res.statusText}: ${text || url}`);
-  }
-
-  return (await res.json()) as T;
+  throw makeNetworkError(lastError);
 }
 
 // --- Parent API ---
