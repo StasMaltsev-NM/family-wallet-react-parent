@@ -65,6 +65,7 @@ function mapApiStatusToUi(status: ApiTask["status"]): "pending" | "active" | "co
 const Missions: React.FC<Props> = ({ child, allChildren, onUpdateChild, onTaskAction, parentCode, onRefresh }) => {
   const [isAdding, setIsAdding] = useState(false);
   const { runInstant, isPending } = useInstantAction();
+  const isCreatingMission = isPending("mission:create");
   const [actionFeedback, setActionFeedback] = useState<{
     type: "success" | "error" | "info";
     message: string;
@@ -221,7 +222,7 @@ const handleAddMission = async () => {
     assignedToNames: newMission.isTeam ? teamNames : undefined,
   };
 
-  setActionFeedback({ type: "info", message: "Создаём миссию..." });
+  setActionFeedback(null);
   setIsAdding(false);
 
   try {
@@ -330,7 +331,19 @@ const handleAddMission = async () => {
       ) : null}
 
       <div className="space-y-5">
-        {sortedMissions.length === 0 ? (
+        {isCreatingMission ? (
+          <div className="p-6 rounded-[2.2rem] border bg-[var(--bg-card)] border-[var(--border)] shadow-xl animate-pulse">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0 space-y-3">
+                <div className="h-8 w-32 rounded-xl bg-white/10" />
+                <div className="h-10 w-52 max-w-[80%] rounded-full bg-white/10" />
+              </div>
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white/10 flex-shrink-0" />
+            </div>
+          </div>
+        ) : null}
+
+        {sortedMissions.length === 0 && !isCreatingMission ? (
           <div className="text-center py-20 bg-[var(--bg-card)] rounded-[2.5rem] border-2 border-dashed border-[var(--border)] opacity-60">
             <p className="font-black text-[var(--text-muted)] text-[12px] uppercase tracking-widest">Активных миссий нет</p>
           </div>

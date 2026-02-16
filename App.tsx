@@ -144,6 +144,7 @@ const App: React.FC = () => {
 
   const [tasks, setTasks] = useState<any[]>([]);
   const [apiChildren, setApiChildren] = useState<any[]>([]);
+  const stickyRemovedTaskIdsRef = useRef<Map<string, number>>(new Map());
   const [apiError, setApiError] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
   const [isInitialDataLoading, setIsInitialDataLoading] = useState(true);
@@ -494,7 +495,26 @@ if (!code) {
         setChildHistory({});
       }
 
-      const nextTasks = resp?.tasks ?? [];
+      const nextTasksRaw = resp?.tasks ?? [];
+      const now = Date.now();
+      const stickyRemoved = stickyRemovedTaskIdsRef.current;
+
+      for (const [taskId, expiresAt] of stickyRemoved.entries()) {
+        if (expiresAt <= now) stickyRemoved.delete(taskId);
+      }
+
+      const nextTasks = nextTasksRaw.filter((task: any) => {
+        const taskId = String(task?.id || "");
+        if (!taskId) return true;
+        return !stickyRemoved.has(taskId);
+      });
+
+      // Как только backend перестал отдавать задачу, снимаем "липкое скрытие".
+      for (const taskId of Array.from(stickyRemoved.keys())) {
+        const stillInApi = nextTasksRaw.some((task: any) => String(task?.id || "") === taskId);
+        if (!stillInApi) stickyRemoved.delete(taskId);
+      }
+
       setTasks(nextTasks);
 
       // NOTE:
@@ -552,10 +572,12 @@ if (!code) {
       if (!code) return;
 
       let optimisticTask: any = null;
+      const stickyRemoved = stickyRemovedTaskIdsRef.current;
       setTasks((prev) => {
         optimisticTask = (prev || []).find((t: any) => String(t?.id) === String(taskId)) || null;
 
         if (action === "delete") {
+          stickyRemoved.set(String(taskId), Date.now() + 30_000);
           return (prev || []).filter((t: any) => String(t?.id) !== String(taskId));
         }
 
@@ -565,6 +587,7 @@ if (!code) {
               String(t?.id) === String(taskId) ? { ...t, status: "IDLE" } : t
             );
           }
+          stickyRemoved.set(String(taskId), Date.now() + 30_000);
           return (prev || []).filter((t: any) => String(t?.id) !== String(taskId));
         }
 
@@ -613,6 +636,7 @@ if (!code) {
         clearAppCache(code);
         await refreshTasks();
       } catch (e) {
+        stickyRemoved.delete(String(taskId));
         // Re-sync state from backend on failure to rollback optimistic UI safely.
         try {
           await refreshTasks();
