@@ -279,7 +279,7 @@ export const parentApi = {
   },
 
   regenerateRewardImage(inviteCode: string, rewardId: string) {
-    return request<{ message: string; reward_id: string; title: string }>("/api/rewards/regenerate-image", {
+    return request<{ message: string; reward_id: string; title: string; image_ready: boolean; previous_image_kept?: boolean }>("/api/rewards/regenerate-image", {
       method: "POST",
       body: JSON.stringify({ reward_id: rewardId }),
     }, inviteCode);
