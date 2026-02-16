@@ -282,7 +282,9 @@ const handleAddMission = async () => {
         });
       }
 
-      setActionFeedback({ type: "success", message: "Миссия создана." });
+      // На успешном create не показываем отдельный баннер:
+      // после skeleton сразу должна появляться карточка миссии.
+      setActionFeedback(null);
     });
     if (started === null) return;
 
