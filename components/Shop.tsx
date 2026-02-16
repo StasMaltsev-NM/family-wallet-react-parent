@@ -237,9 +237,16 @@ const handleCreateReward = async () => {
   const handleRegenerateImage = async (id: string) => {
     try {
       setRegeneratingIds(prev => (prev.includes(id) ? prev : [...prev, id]));
-      await parentApi.regenerateRewardImage(inviteCode, id);
-      await refreshRewards();
-      await waitForImages([id], 24, 3000);
+      const result = await parentApi.regenerateRewardImage(inviteCode, id);
+      await refreshRewards({ showProgress: true });
+
+      if (!result.image_ready) {
+        if (result.previous_image_kept) {
+          alert('Новая картинка пока не сгенерировалась. Старая картинка сохранена — попробуйте позже.');
+        } else {
+          alert('Картинку не удалось сгенерировать. Попробуйте позже.');
+        }
+      }
     } catch (err: any) {
       console.error('[Shop REGENERATE] error:', err);
       alert(`Ошибка перегенерации: ${err?.message || 'Неизвестная ошибка'}`);
