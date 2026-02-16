@@ -13,6 +13,7 @@ import {
   Users,
 } from "lucide-react";
 import { parentApi } from "../services/api";
+import { getErrorMessage, useInstantAction } from "../hooks/useInstantAction";
 interface Props {
   child: Child;
   allChildren: Child[];
@@ -63,6 +64,11 @@ function mapApiStatusToUi(status: ApiTask["status"]): "pending" | "active" | "co
 
 const Missions: React.FC<Props> = ({ child, allChildren, onUpdateChild, onTaskAction, parentCode, onRefresh }) => {
   const [isAdding, setIsAdding] = useState(false);
+  const { runInstant, isPending } = useInstantAction();
+  const [actionFeedback, setActionFeedback] = useState<{
+    type: "success" | "error" | "info";
+    message: string;
+  } | null>(null);
 
   // UI-форма (пока это локальная форма, создание через API сделаем отдельным шагом)
   const [newMission, setNewMission] = useState({
@@ -75,6 +81,12 @@ const Missions: React.FC<Props> = ({ child, allChildren, onUpdateChild, onTaskAc
   });
 
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>([child.id]);
+  useEffect(() => {
+    if (!actionFeedback) return;
+    const timer = setTimeout(() => setActionFeedback(null), 5000);
+    return () => clearTimeout(timer);
+  }, [actionFeedback]);
+
   useEffect(() => {
     if (!isAdding) return;
     if (allChildren.length === 1) {
@@ -100,11 +112,14 @@ const handleAction = async (
   missionId: string,
   action: "confirm" | "reject" | "delete"
 ) => {
+  const key = `task:${action}:${missionId}`;
+  if (isPending(key)) return;
   try {
-    await onTaskAction(missionId, action);
+    const started = await runInstant(key, async () => onTaskAction(missionId, action));
+    if (started === null) return;
   } catch (e) {
     console.error(e);
-    alert(String(e));
+    setActionFeedback({ type: "error", message: getErrorMessage(e, "Не удалось выполнить действие по миссии.") });
   }
 };
 
@@ -123,7 +138,18 @@ const handleAction = async (
   // ВАЖНО: создание миссии пока локальное - чтобы UI не сломать.
   // Реальный create через backend вынесем следующим шагом, когда подтвердим endpoint.
 const handleAddMission = async () => {
-  if (!newMission.title || !newMission.reward || selectedChildIds.length === 0) return;
+  if (isPending("mission:create")) return;
+  if (!newMission.title || !newMission.reward || selectedChildIds.length === 0) {
+    setActionFeedback({ type: "error", message: "Заполните название, награду и выберите ребёнка." });
+    return;
+  }
+
+  const title = newMission.title.trim();
+  const rewardAmount = Number(newMission.reward);
+  if (!title || !Number.isFinite(rewardAmount) || rewardAmount <= 0) {
+    setActionFeedback({ type: "error", message: "Введите корректную награду (число больше 0)." });
+    return;
+  }
 
   // 1) Готовим миссию (локальный fallback, чтобы UI не ломался)
   const teamNames = allChildren
@@ -132,8 +158,8 @@ const handleAddMission = async () => {
 
   const missionToAdd: Mission = {
     id: Math.random().toString(36).substr(2, 9),
-    title: newMission.title,
-    reward: Number(newMission.reward),
+    title,
+    reward: rewardAmount,
     status: "active",
     category: "chores",
     isRecurring: newMission.isRecurring,
@@ -141,45 +167,69 @@ const handleAddMission = async () => {
     assignedToNames: newMission.isTeam ? teamNames : undefined,
   };
 
+  setActionFeedback({ type: "info", message: "Создаём миссию..." });
+  setIsAdding(false);
+
   try {
-    // 2) Если createTask уже есть - создаём в backend по каждому выбранному ребёнку
-    const api: any = parentApi as any;
+    const started = await runInstant("mission:create", async () => {
+      // 2) Если createTask уже есть - создаём в backend по каждому выбранному ребёнку
+      const api: any = parentApi as any;
 
-    if (typeof api?.createTask === "function") {
-      for (const uiId of selectedChildIds) {
-        const uiChild: any = allChildren.find((c: any) => c.id === uiId);
-        const childIdForApi = uiChild?.apiChildId || uiChild?.id;
+      if (typeof api?.createTask === "function") {
+        const createResults = await Promise.allSettled(
+          selectedChildIds.map((uiId) => {
+            const uiChild: any = allChildren.find((c: any) => c.id === uiId);
+            const childIdForApi = uiChild?.apiChildId || uiChild?.id;
 
-        if (!childIdForApi) continue;
+            if (!childIdForApi) {
+              return Promise.reject(new Error("Не найден child_id для выбранного ребёнка."));
+            }
 
-        await api.createTask(parentCode, {
-          child_id: childIdForApi,
-          title: newMission.title,
-          description: null,
-          reward_amount: Number(newMission.reward),
-          icon: "✅",
-          status: "IDLE",
-          recurring: newMission.isRecurring ? true : null,
-          recurring_days:
-            newMission.isRecurring && newMission.recurrenceType === "custom"
-              ? newMission.selectedDays
-              : null,
+            return api.createTask(parentCode, {
+              child_id: childIdForApi,
+              title,
+              description: null,
+              reward_amount: rewardAmount,
+              icon: "✅",
+              status: "IDLE",
+              recurring: newMission.isRecurring ? true : null,
+              recurring_days:
+                newMission.isRecurring && newMission.recurrenceType === "custom"
+                  ? newMission.selectedDays
+                  : null,
+            });
+          })
+        );
+
+        const successCount = createResults.filter((r) => r.status === "fulfilled").length;
+        if (successCount === 0) {
+          throw new Error("Миссия не создана ни для одного ребёнка.");
+        }
+
+        // подтягиваем свежие задачи из API, чтобы миссия появилась из tasks
+        await onRefresh();
+        if (successCount < selectedChildIds.length) {
+          setActionFeedback({
+            type: "info",
+            message: `Создано миссий: ${successCount}. Часть детей не обновилась.`,
+          });
+          return;
+        }
+      } else {
+        // 3) Fallback: если API метода нет - обновляем локально, как раньше
+        allChildren.forEach((c: any) => {
+          if (selectedChildIds.includes(c.id)) {
+            onUpdateChild({
+              ...c,
+              missions: [...(c.missions || []), missionToAdd],
+            });
+          }
         });
       }
 
-      // подтягиваем свежие задачи из API, чтобы миссия появилась из tasks
-      await onRefresh();
-    } else {
-      // 3) Fallback: если API метода нет - обновляем локально, как раньше
-      allChildren.forEach((c: any) => {
-        if (selectedChildIds.includes(c.id)) {
-          onUpdateChild({
-            ...c,
-            missions: [...(c.missions || []), missionToAdd],
-          });
-        }
-      });
-    }
+      setActionFeedback({ type: "success", message: "Миссия создана." });
+    });
+    if (started === null) return;
 
     // 4) Сброс формы
     setIsAdding(false);
@@ -194,7 +244,7 @@ const handleAddMission = async () => {
     setSelectedChildIds(allChildren.length === 1 ? [allChildren[0].id] : [child.id]);
   } catch (e) {
     console.error(e);
-    alert(String(e));
+    setActionFeedback({ type: "error", message: getErrorMessage(e, "Не удалось создать миссию.") });
   }
 };
 
@@ -211,6 +261,19 @@ const handleAddMission = async () => {
           <Trophy size={28} />
         </div>
       </div>
+      {actionFeedback ? (
+        <div
+          className={`rounded-2xl border px-4 py-3 text-sm font-bold ${
+            actionFeedback.type === "error"
+              ? "border-rose-400/40 bg-rose-500/10 text-rose-200"
+              : actionFeedback.type === "success"
+                ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-200"
+                : "border-cyan-400/40 bg-cyan-500/10 text-cyan-100"
+          }`}
+        >
+          {actionFeedback.message}
+        </div>
+      ) : null}
 
       <div className="space-y-5">
         {sortedMissions.length === 0 ? (
@@ -260,12 +323,14 @@ const handleAddMission = async () => {
                   <>
                     <button
                       onClick={() => handleAction(mission.id, "confirm")}
+                      disabled={isPending(`task:confirm:${mission.id}`)}
                       className="w-12 h-12 sm:w-14 sm:h-14 bg-emerald-500 text-black rounded-2xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-xl shadow-emerald-500/20"
                     >
                       <Check size={28} strokeWidth={3} />
                     </button>
                     <button
                       onClick={() => handleAction(mission.id, "reject")}
+                      disabled={isPending(`task:reject:${mission.id}`)}
                       className="w-12 h-12 sm:w-14 sm:h-14 bg-amber-500 text-black rounded-2xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-xl shadow-amber-500/20"
                     >
                       <X size={24} strokeWidth={3} />
@@ -274,6 +339,7 @@ const handleAddMission = async () => {
                 )}
                 <button
                   onClick={() => handleAction(mission.id, "delete")}
+                  disabled={isPending(`task:delete:${mission.id}`)}
                   className="w-12 h-12 sm:w-14 sm:h-14 bg-rose-500/10 text-rose-500 rounded-2xl flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all border border-rose-500/10"
                 >
                   <Trash2 size={22} />
@@ -440,10 +506,10 @@ const handleAddMission = async () => {
               </button>
               <button
                 onClick={handleAddMission}
-                disabled={!newMission.title || !newMission.reward}
+                disabled={isPending("mission:create") || !newMission.title || !newMission.reward}
                 className="btn-primary flex-[2] py-5 text-lg font-black rounded-2xl shadow-xl shadow-[var(--primary)]/30 active:scale-[0.98] disabled:opacity-20 disabled:grayscale transition-all"
               >
-                Создать
+                {isPending("mission:create") ? "Создаём..." : "Создать"}
               </button>
             </div>
           </div>

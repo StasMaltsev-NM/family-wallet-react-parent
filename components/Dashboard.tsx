@@ -18,6 +18,7 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { editImageWithAI } from '../services/gemini';
+import { useInstantAction } from '../hooks/useInstantAction';
 import { GenderIcon } from './GenderIcon';
 
 interface Props {
@@ -30,9 +31,10 @@ interface Props {
 }
 
 const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendingPurchases = [] }) => {
-    const [isEditingDream, setIsEditingDream] = useState(false);
+  const [isEditingDream, setIsEditingDream] = useState(false);
   const [editPrompt, setEditPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const { runInstant, isPending } = useInstantAction();
   
   const pendingMissions = child.missions.filter(m => m.status === 'pending');
   const [isMissionsExpanded, setIsMissionsExpanded] = useState(pendingMissions.length > 0);
@@ -88,6 +90,17 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
     }
 
     onUpdateChild({ ...childCopy, missions: updatedMissions });
+  };
+
+  const runTaskAction = async (missionId: string, action: 'confirm' | 'reject') => {
+    const key = `dashboard-task:${action}:${missionId}`;
+    if (isPending(key)) return;
+    try {
+      const started = await runInstant(key, async () => onTaskAction(missionId, action));
+      if (started === null) return;
+    } catch (err) {
+      console.error('[Dashboard task action] error:', err);
+    }
   };
 
   return (
@@ -192,19 +205,17 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
                   </div>
                   <div className="flex gap-4">
 <button
-  onClick={async () => {
-    await onTaskAction(m.id, "confirm");
-  }}
-  className="w-14 h-14 bg-emerald-500 text-black rounded-[1.3rem] flex items-center justify-center shadow-xl shadow-emerald-500/20 active:scale-95 transition-all"
+  onClick={() => runTaskAction(m.id, "confirm")}
+  disabled={isPending(`dashboard-task:confirm:${m.id}`)}
+  className="w-14 h-14 bg-emerald-500 text-black rounded-[1.3rem] flex items-center justify-center shadow-xl shadow-emerald-500/20 active:scale-95 transition-all disabled:opacity-50"
 >
   <Check size={30} strokeWidth={3} />
 </button>
 
 <button
-  onClick={async () => {
-    await onTaskAction(m.id, "reject");
-  }}
-  className="w-14 h-14 bg-rose-500/10 text-rose-500 rounded-[1.3rem] flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all border border-rose-500/20"
+  onClick={() => runTaskAction(m.id, "reject")}
+  disabled={isPending(`dashboard-task:reject:${m.id}`)}
+  className="w-14 h-14 bg-rose-500/10 text-rose-500 rounded-[1.3rem] flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all border border-rose-500/20 disabled:opacity-50"
 >
   <X size={24} strokeWidth={3} />
 </button>                  </div>

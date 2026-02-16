@@ -4,6 +4,7 @@ import { Child, Prize } from '../types';
 import { PRIZES } from '../constants';
 import { parentApi } from '../services/api';
 import { makeInviteScopedKey, readSessionCache, writeSessionCache } from '../services/cache';
+import { getErrorMessage, useInstantAction } from '../hooks/useInstantAction';
 import { Plus, ShoppingCart, Lock, Box, Check, Star, Trash2, Info, Repeat } from 'lucide-react';
 
 interface Props {
@@ -18,7 +19,6 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [newPrize, setNewPrize] = useState({ name: '', cost: '', isPermanent: true });
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>([]);
-  const [regeneratingIds, setRegeneratingIds] = useState<string[]>([]);
   const cacheKey = inviteCode ? makeInviteScopedKey('rewards', inviteCode) : '';
   const [prizes, setPrizes] = useState<Prize[]>(() => {
     if (!cacheKey) return PRIZES;
@@ -26,12 +26,12 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   });
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(prizes.length === 0);
   const [isProgressLoading, setIsProgressLoading] = useState<boolean>(false);
-  const [isCreatingReward, setIsCreatingReward] = useState<boolean>(false);
   const [createFeedback, setCreateFeedback] = useState<{
     type: 'success' | 'error' | 'info';
     message: string;
   } | null>(null);
   const prizesRef = useRef<Prize[]>(prizes);
+  const { runInstant, isPending } = useInstantAction();
 
   const mapRewards = (rewards: any[]) =>
     rewards.map((r: any) => ({
@@ -165,7 +165,7 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   };
 
 const handleCreateReward = async () => {
-  if (isCreatingReward) return;
+  if (isPending('create-reward')) return;
 
   const title = newPrize.name.trim();
   const price = Number(newPrize.cost);
@@ -199,7 +199,6 @@ const handleCreateReward = async () => {
     return;
   }
 
-  setIsCreatingReward(true);
   setCreateFeedback({ type: 'info', message: 'Создаём награду...' });
 
   // UI реагирует сразу: закрываем модалку и продолжаем запросы в фоне.
@@ -208,64 +207,68 @@ const handleCreateReward = async () => {
   setNewPrize({ name: '', cost: '', isPermanent: true });
 
   try {
-    const createResults = await Promise.allSettled(
-      apiChildIds.map((childId) =>
-        parentApi.createReward(inviteCode, childId, title, Math.round(price), '', isPermanent)
-      )
-    );
+    const started = await runInstant('create-reward', async () => {
+      const createResults = await Promise.allSettled(
+        apiChildIds.map((childId) =>
+          parentApi.createReward(inviteCode, childId, title, Math.round(price), '', isPermanent)
+        )
+      );
 
-    const createdRewardIds: string[] = [];
-    let failedCount = 0;
+      const createdRewardIds: string[] = [];
+      let failedCount = 0;
 
-    createResults.forEach((result) => {
-      if (result.status === 'fulfilled' && result.value?.reward_id) {
-        createdRewardIds.push(result.value.reward_id);
-      } else {
-        failedCount += 1;
+      createResults.forEach((result) => {
+        if (result.status === 'fulfilled' && result.value?.reward_id) {
+          createdRewardIds.push(result.value.reward_id);
+        } else {
+          failedCount += 1;
+        }
+      });
+
+      if (createdRewardIds.length === 0) {
+        setCreateFeedback({
+          type: 'error',
+          message: 'Не удалось создать награду. Проверьте сеть/VPN и попробуйте снова.',
+        });
+        return;
       }
-    });
 
-    if (createdRewardIds.length === 0) {
+      const rewardsRes = await parentApi.listRewards(inviteCode);
+      const mappedRewards = mapRewards(rewardsRes.rewards);
+      setPrizes(mappedRewards);
+      updateRewardsCache(mappedRewards);
+      startBackgroundImageRefresh(createdRewardIds);
+
+      const totalIssueCount = unresolvedCount + failedCount;
+      if (totalIssueCount > 0) {
+        setCreateFeedback({
+          type: 'info',
+          message: `Создано: ${createdRewardIds.length}. Не удалось: ${totalIssueCount}.`,
+        });
+        return;
+      }
+
       setCreateFeedback({
-        type: 'error',
-        message: 'Не удалось создать награду. Проверьте сеть/VPN и попробуйте снова.',
+        type: 'success',
+        message: `Награда создана: ${createdRewardIds.length} шт.`,
       });
-      return;
-    }
-
-    const rewardsRes = await parentApi.listRewards(inviteCode);
-    const mappedRewards = mapRewards(rewardsRes.rewards);
-    setPrizes(mappedRewards);
-    updateRewardsCache(mappedRewards);
-    startBackgroundImageRefresh(createdRewardIds);
-
-    const totalIssueCount = unresolvedCount + failedCount;
-    if (totalIssueCount > 0) {
-      setCreateFeedback({
-        type: 'info',
-        message: `Создано: ${createdRewardIds.length}. Не удалось: ${totalIssueCount}.`,
-      });
-      return;
-    }
-
-    setCreateFeedback({
-      type: 'success',
-      message: `Награда создана: ${createdRewardIds.length} шт.`,
     });
-  } catch (err: any) {
+    if (started === null) return;
+  } catch (err) {
     console.error('[SHOP CREATE] error:', err);
     setCreateFeedback({
       type: 'error',
-      message: `Ошибка создания: ${err?.message || 'Неизвестная ошибка'}`,
+      message: `Ошибка создания: ${getErrorMessage(err)}`,
     });
-  } finally {
-    setIsCreatingReward(false);
   }
 };
 
   const handleDeletePrize = async (id: string) => {
     try {
-      await parentApi.deleteReward(inviteCode, id);
+      const started = await runInstant(`delete:${id}`, async () => {
+        await parentApi.deleteReward(inviteCode, id);
+      });
+      if (started === null) return;
       setPrizes(prev => {
         const next = prev.filter(p => p.id !== id);
         updateRewardsCache(next);
@@ -278,9 +281,11 @@ const handleCreateReward = async () => {
   };
 
   const handleRegenerateImage = async (id: string) => {
+    const key = `regen:${id}`;
+    if (isPending(key)) return;
     try {
-      setRegeneratingIds(prev => (prev.includes(id) ? prev : [...prev, id]));
-      const result = await parentApi.regenerateRewardImage(inviteCode, id);
+      const result = await runInstant(key, async () => parentApi.regenerateRewardImage(inviteCode, id));
+      if (result === null) return;
       await refreshRewards({ showProgress: true });
 
       if (!result.image_ready) {
@@ -293,8 +298,6 @@ const handleCreateReward = async () => {
     } catch (err: any) {
       console.error('[Shop REGENERATE] error:', err);
       alert(`Ошибка перегенерации: ${err?.message || 'Неизвестная ошибка'}`);
-    } finally {
-      setRegeneratingIds(prev => prev.filter((item) => item !== id));
     }
   };
 
@@ -390,11 +393,11 @@ const handleCreateReward = async () => {
                 
                 <button
                   onClick={() => handleRegenerateImage(prize.id)}
-                  disabled={regeneratingIds.includes(prize.id)}
+                  disabled={isPending(`regen:${prize.id}`)}
                   className="absolute top-4 left-4 p-2.5 bg-indigo-600/80 backdrop-blur-md rounded-xl text-white border border-white/10 hover:bg-indigo-500 active:scale-[0.96] transition-all disabled:opacity-50"
                   title="Перегенерировать картинку"
                 >
-                  <Repeat size={16} className={regeneratingIds.includes(prize.id) ? 'animate-spin' : ''} />
+                  <Repeat size={16} className={isPending(`regen:${prize.id}`) ? 'animate-spin' : ''} />
                 </button>
               </div>
 
@@ -410,10 +413,11 @@ const handleCreateReward = async () => {
                 <div className="grid grid-cols-1 gap-3">
                   <button 
                     onClick={() => handleDeletePrize(prize.id)}
+                    disabled={isPending(`delete:${prize.id}`)}
                     className="w-full py-4 bg-rose-500/10 text-rose-500 text-xs sm:text-sm font-black uppercase tracking-widest rounded-2xl hover:bg-rose-500 hover:text-white active:scale-[0.98] transition-all border border-rose-500/10 flex items-center justify-center gap-2"
                   >
                     <Trash2 size={18} />
-                    Удалить
+                    {isPending(`delete:${prize.id}`) ? 'Удаляем...' : 'Удалить'}
                   </button>
                 </div>
               </div>
@@ -502,10 +506,10 @@ const handleCreateReward = async () => {
               <button onClick={() => { setIsAdding(false); setSelectedChildIds([]); }} className="flex-1 py-5 text-sm font-black text-[var(--text-muted)] hover:text-white transition-colors uppercase tracking-widest">Отмена</button>
               <button 
                 onClick={handleCreateReward}
-                disabled={isCreatingReward || !newPrize.name || !newPrize.cost}
+                disabled={isPending('create-reward') || !newPrize.name || !newPrize.cost}
                 className="btn-primary flex-[2] py-5 text-lg font-black rounded-2xl shadow-xl shadow-[var(--primary)]/30 active:scale-[0.98] disabled:opacity-20 transition-all"
               >
-                {isCreatingReward ? 'Создаём...' : 'Создать'}
+                {isPending('create-reward') ? 'Создаём...' : 'Создать'}
               </button>
             </div>
             {createFeedback && isAdding ? (
