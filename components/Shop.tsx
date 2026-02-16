@@ -16,32 +16,75 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   const [newPrize, setNewPrize] = useState({ name: '', cost: '', isPermanent: true });
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>([]);
   const [prizes, setPrizes] = useState<Prize[]>(PRIZES);
-useEffect(() => {
-  console.log('[Shop] currentChild:', currentChild);
-  parentApi.listRewards(inviteCode).then(res => {
+
+  const mapRewardToPrize = (r: any): Prize => {
+    let iconUrl = '';
+    if (typeof r?.icon === 'string' && r.icon.length > 0) {
+      const codePoint = r.icon.codePointAt(0);
+      if (codePoint) {
+        iconUrl = `https://em-content.zobj.net/thumbs/120/apple/354/${codePoint.toString(16)}.png`;
+      }
+    }
+
+    return {
+      id: r.id,
+      name: r.title,
+      cost: r.price,
+      image: r.image_url || iconUrl || `https://picsum.photos/seed/${r.id}/200/200`,
+      isOneTime: r.is_permanent === 0,
+    };
+  };
+
+  const mapRewardsForCurrentChild = (rewards: any[]): Prize[] =>
+    rewards
+      .filter((r: any) => {
+        if (!currentChild) return true;
+        return r.child_id === currentChild.apiChildId;
+      })
+      .map(mapRewardToPrize);
+
+  const refreshRewards = async () => {
+    const res = await parentApi.listRewards(inviteCode);
     console.log('[Shop] loaded rewards:', res.rewards);
-    
-const mapped = res.rewards
-.filter((r: any) => {
-  if (!currentChild) return true;
-  // Фильтруем только по apiChildId (backend id)
-  return r.child_id === currentChild.apiChildId;
-})
-  .map((r: any) => ({
-    id: r.id,
-    name: r.title,
-    cost: r.price,
-    image: r.icon 
-      ? `https://em-content.zobj.net/thumbs/120/apple/354/${r.icon.codePointAt(0).toString(16)}.png`
-      : `https://picsum.photos/seed/${r.id}/200/200`,
-    isOneTime: r.is_permanent === 0
-  }));
-    
+    const mapped = mapRewardsForCurrentChild(res.rewards);
     setPrizes(mapped);
-  }).catch(err => {
-    console.error('[Shop] listRewards error:', err);
-  });
-}, [inviteCode, currentChild]);
+    return res.rewards;
+  };
+
+  const startBackgroundImageRefresh = (rewardIds: string[]) => {
+    if (!rewardIds.length) return;
+
+    let attempt = 0;
+    const maxAttempts = 18;
+    const delayMs = 3000;
+
+    const tick = async () => {
+      attempt += 1;
+      try {
+        const rewards = await refreshRewards();
+        const allReady = rewardIds.every((id) =>
+          rewards.some((r: any) => r.id === id && Boolean(r.image_url))
+        );
+        if (allReady || attempt >= maxAttempts) return;
+      } catch (err) {
+        console.error('[Shop background image refresh] error:', err);
+        return;
+      }
+
+      setTimeout(() => {
+        void tick();
+      }, delayMs);
+    };
+
+    void tick();
+  };
+
+  useEffect(() => {
+    console.log('[Shop] currentChild:', currentChild);
+    void refreshRewards().catch((err) => {
+      console.error('[Shop] listRewards error:', err);
+    });
+  }, [inviteCode, currentChild]);
 
   const toggleChildSelection = (id: string) => {
     setSelectedChildIds(prev => 
@@ -69,10 +112,11 @@ const handleCreateReward = async () => {
   
   try {
     // Создаём награду для КАЖДОГО выбранного ребёнка
+    const createdRewardIds: string[] = [];
     for (const childId of selectedChildIds) {
       console.log('[SHOP] Creating reward for child:', childId);
       
-      await parentApi.createReward(
+      const response = await parentApi.createReward(
         inviteCode,
         childId,
         newPrize.name,
@@ -80,28 +124,20 @@ const handleCreateReward = async () => {
         '',
         newPrize.isPermanent
       );
+      if (response?.reward_id) createdRewardIds.push(response.reward_id);
     }
     
     console.log('[SHOP] Rewards created successfully!');
     
     // Перезагрузим список наград
-    const rewardsRes = await parentApi.listRewards(inviteCode);
-    console.log('[SHOP] Loaded rewards:', rewardsRes);
-    
-    const mapped = rewardsRes.rewards.map((r: any) => ({
-      id: r.id,
-      name: r.title,
-      cost: r.price,
-      image: r.icon 
-        ? `https://em-content.zobj.net/thumbs/120/apple/354/${r.icon.codePointAt(0).toString(16)}.png`
-        : `https://picsum.photos/seed/${r.id}/200/200`,
-      isOneTime: r.is_permanent === 0
-    }));
-    setPrizes(mapped);
+    await refreshRewards();
     
     // Закроем форму и сбросим
     setIsAdding(false);
     setNewPrize({ name: '', cost: '', isPermanent: true });
+
+    // Картинки подтянутся в фоне, UI не блокируется.
+    startBackgroundImageRefresh(createdRewardIds);
     
   } catch (err: any) {
     console.error('[SHOP] CREATE ERROR:', err);
