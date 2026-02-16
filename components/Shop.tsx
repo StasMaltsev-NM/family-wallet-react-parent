@@ -26,6 +26,11 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   });
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(prizes.length === 0);
   const [isProgressLoading, setIsProgressLoading] = useState<boolean>(false);
+  const [isCreatingReward, setIsCreatingReward] = useState<boolean>(false);
+  const [createFeedback, setCreateFeedback] = useState<{
+    type: 'success' | 'error' | 'info';
+    message: string;
+  } | null>(null);
   const prizesRef = useRef<Prize[]>(prizes);
 
   const mapRewards = (rewards: any[]) =>
@@ -126,6 +131,12 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   }, [prizes]);
 
   useEffect(() => {
+    if (!createFeedback) return;
+    const timer = setTimeout(() => setCreateFeedback(null), 5000);
+    return () => clearTimeout(timer);
+  }, [createFeedback]);
+
+  useEffect(() => {
     if (!inviteCode) return;
     let isActive = true;
     let inFlight = false;
@@ -154,69 +165,101 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   };
 
 const handleCreateReward = async () => {
-  console.log('[SHOP] CREATE START:', {
-    selectedChildIds,
-    newPrizeName: newPrize.name,
-    newPrizeCost: newPrize.cost,
-    isPermanent: newPrize.isPermanent
-  });
+  if (isCreatingReward) return;
+
+  const title = newPrize.name.trim();
+  const price = Number(newPrize.cost);
+  const isPermanent = newPrize.isPermanent;
 
   if (selectedChildIds.length === 0) {
-    alert('Выберите хотя бы одного ребёнка!');
+    setCreateFeedback({ type: 'error', message: 'Выберите хотя бы одного ребёнка.' });
     return;
   }
-  
-  if (!newPrize.name || !newPrize.cost) {
-    alert('Заполните название и цену!');
+
+  if (!title || !Number.isFinite(price) || price <= 0) {
+    setCreateFeedback({ type: 'error', message: 'Заполните корректно название и цену.' });
     return;
   }
-  
+
+  const selectedChildren = selectedChildIds
+    .map((localId) => allChildren.find((c) => (c.apiChildId || c.id) === localId))
+    .filter(Boolean) as Child[];
+
+  const apiChildIds = Array.from(
+    new Set(
+      selectedChildren
+        .map((child) => child.apiChildId || child.id)
+        .filter((childId): childId is string => Boolean(childId))
+    )
+  );
+
+  const unresolvedCount = selectedChildIds.length - apiChildIds.length;
+  if (apiChildIds.length === 0) {
+    setCreateFeedback({ type: 'error', message: 'Не удалось определить профиль ребёнка для API.' });
+    return;
+  }
+
+  setIsCreatingReward(true);
+  setCreateFeedback({ type: 'info', message: 'Создаём награду...' });
+
+  // UI реагирует сразу: закрываем модалку и продолжаем запросы в фоне.
+  setIsAdding(false);
+  setSelectedChildIds([]);
+  setNewPrize({ name: '', cost: '', isPermanent: true });
+
   try {
-    // Создаём награду для КАЖДОГО выбранного ребёнка
+    const createResults = await Promise.allSettled(
+      apiChildIds.map((childId) =>
+        parentApi.createReward(inviteCode, childId, title, Math.round(price), '', isPermanent)
+      )
+    );
+
     const createdRewardIds: string[] = [];
-    for (const localId of selectedChildIds) {
-      const child = allChildren.find(c => (c.apiChildId || c.id) === localId);
-      if (!child?.apiChildId) {
-        console.error('[SHOP] Child not found or missing apiChildId:', localId);
-        continue;
+    let failedCount = 0;
+
+    createResults.forEach((result) => {
+      if (result.status === 'fulfilled' && result.value?.reward_id) {
+        createdRewardIds.push(result.value.reward_id);
+      } else {
+        failedCount += 1;
       }
-      
-      const childId = child.apiChildId;
-      console.log('[SHOP] Creating reward for child:', childId);
-      
-      const res = await parentApi.createReward(
-        inviteCode,
-        childId,
-        newPrize.name,
-        parseInt(newPrize.cost),
-        '',
-        newPrize.isPermanent
-      );
-      if (res?.reward_id) createdRewardIds.push(res.reward_id);
+    });
+
+    if (createdRewardIds.length === 0) {
+      setCreateFeedback({
+        type: 'error',
+        message: 'Не удалось создать награду. Проверьте сеть/VPN и попробуйте снова.',
+      });
+      return;
     }
-    
-    console.log('[SHOP] Rewards created successfully!');
-    
-    // Перезагрузим список наград
+
     const rewardsRes = await parentApi.listRewards(inviteCode);
-    console.log('[SHOP] Loaded rewards:', rewardsRes);
     const mappedRewards = mapRewards(rewardsRes.rewards);
     setPrizes(mappedRewards);
     updateRewardsCache(mappedRewards);
-    
-    // Закроем форму и сбросим
-    setIsAdding(false);
-    setSelectedChildIds([]);
-    setNewPrize({ name: '', cost: '', isPermanent: true });
-
-    // Фоновое обновление: карточки видны сразу, картинки подтянутся без блокировки UI.
     startBackgroundImageRefresh(createdRewardIds);
-    
+
+    const totalIssueCount = unresolvedCount + failedCount;
+    if (totalIssueCount > 0) {
+      setCreateFeedback({
+        type: 'info',
+        message: `Создано: ${createdRewardIds.length}. Не удалось: ${totalIssueCount}.`,
+      });
+      return;
+    }
+
+    setCreateFeedback({
+      type: 'success',
+      message: `Награда создана: ${createdRewardIds.length} шт.`,
+    });
   } catch (err: any) {
-    console.error('[SHOP] CREATE ERROR:', err);
-    console.error('[SHOP] ERROR MESSAGE:', err?.message);
-    console.error('[SHOP] ERROR RESPONSE:', err?.response);
-    alert(`Ошибка: ${err?.message || 'Неизвестная ошибка'}`);
+    console.error('[SHOP CREATE] error:', err);
+    setCreateFeedback({
+      type: 'error',
+      message: `Ошибка создания: ${err?.message || 'Неизвестная ошибка'}`,
+    });
+  } finally {
+    setIsCreatingReward(false);
   }
 };
 
@@ -280,11 +323,25 @@ const handleCreateReward = async () => {
         </div>
         <button 
           onClick={() => setIsAdding(true)}
-          className="p-4 bg-[var(--primary)]/10 border border-[var(--primary)]/20 rounded-[1.5rem] text-[var(--primary)] hover:bg-[var(--primary)] hover:text-white transition-all shadow-lg"
+          className="p-4 bg-[var(--primary)]/10 border border-[var(--primary)]/20 rounded-[1.5rem] text-[var(--primary)] hover:bg-[var(--primary)] hover:text-white active:scale-[0.96] transition-all shadow-lg"
         >
           <Plus size={28} />
         </button>
       </div>
+
+      {createFeedback ? (
+        <div
+          className={`rounded-2xl border px-4 py-3 text-sm font-bold ${
+            createFeedback.type === 'error'
+              ? 'border-rose-400/40 bg-rose-500/10 text-rose-200'
+              : createFeedback.type === 'success'
+                ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200'
+                : 'border-cyan-400/40 bg-cyan-500/10 text-cyan-100'
+          }`}
+        >
+          {createFeedback.message}
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
         {isInitialLoading && visiblePrizes.length === 0 ? (
@@ -334,7 +391,7 @@ const handleCreateReward = async () => {
                 <button
                   onClick={() => handleRegenerateImage(prize.id)}
                   disabled={regeneratingIds.includes(prize.id)}
-                  className="absolute top-4 left-4 p-2.5 bg-indigo-600/80 backdrop-blur-md rounded-xl text-white border border-white/10 hover:bg-indigo-500 transition-all disabled:opacity-50"
+                  className="absolute top-4 left-4 p-2.5 bg-indigo-600/80 backdrop-blur-md rounded-xl text-white border border-white/10 hover:bg-indigo-500 active:scale-[0.96] transition-all disabled:opacity-50"
                   title="Перегенерировать картинку"
                 >
                   <Repeat size={16} className={regeneratingIds.includes(prize.id) ? 'animate-spin' : ''} />
@@ -353,7 +410,7 @@ const handleCreateReward = async () => {
                 <div className="grid grid-cols-1 gap-3">
                   <button 
                     onClick={() => handleDeletePrize(prize.id)}
-                    className="w-full py-4 bg-rose-500/10 text-rose-500 text-xs sm:text-sm font-black uppercase tracking-widest rounded-2xl hover:bg-rose-500 hover:text-white transition-all border border-rose-500/10 flex items-center justify-center gap-2"
+                    className="w-full py-4 bg-rose-500/10 text-rose-500 text-xs sm:text-sm font-black uppercase tracking-widest rounded-2xl hover:bg-rose-500 hover:text-white active:scale-[0.98] transition-all border border-rose-500/10 flex items-center justify-center gap-2"
                   >
                     <Trash2 size={18} />
                     Удалить
@@ -445,12 +502,25 @@ const handleCreateReward = async () => {
               <button onClick={() => { setIsAdding(false); setSelectedChildIds([]); }} className="flex-1 py-5 text-sm font-black text-[var(--text-muted)] hover:text-white transition-colors uppercase tracking-widest">Отмена</button>
               <button 
                 onClick={handleCreateReward}
-                disabled={!newPrize.name || !newPrize.cost}
+                disabled={isCreatingReward || !newPrize.name || !newPrize.cost}
                 className="btn-primary flex-[2] py-5 text-lg font-black rounded-2xl shadow-xl shadow-[var(--primary)]/30 active:scale-[0.98] disabled:opacity-20 transition-all"
               >
-                Создать
+                {isCreatingReward ? 'Создаём...' : 'Создать'}
               </button>
             </div>
+            {createFeedback && isAdding ? (
+              <div
+                className={`mt-4 rounded-2xl border px-4 py-3 text-sm font-bold ${
+                  createFeedback.type === 'error'
+                    ? 'border-rose-400/40 bg-rose-500/10 text-rose-200'
+                    : createFeedback.type === 'success'
+                      ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200'
+                      : 'border-cyan-400/40 bg-cyan-500/10 text-cyan-100'
+                }`}
+              >
+                {createFeedback.message}
+              </div>
+            ) : null}
           </div>
         </div>
       )}

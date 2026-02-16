@@ -8,7 +8,7 @@ interface GenderIconProps {
 export const GenderIcon: React.FC<GenderIconProps> = ({ gender, size = 64 }) => {
   const isMale = gender === 'male';
   const color = isMale ? '#00d9ff' : '#ff4db8';
-  const symbol = isMale ? '▼' : '▲';
+  const points = isMale ? '50,76 18,26 82,26' : '50,24 18,74 82,74';
 
   return (
     <div
@@ -16,19 +16,27 @@ export const GenderIcon: React.FC<GenderIconProps> = ({ gender, size = 64 }) => 
         width: size,
         height: size,
         borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.25) 100%)',
-        border: `1.5px solid ${color}66`,
-        boxShadow: `0 0 12px ${color}40, inset 0 0 14px ${color}22`,
+        background: 'rgba(0, 0, 0, 0.55)',
+        border: '1px solid rgba(255, 255, 255, 0.08)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: size * 0.5,
-        color: color,
-        fontWeight: 'bold',
-        textShadow: `0 0 10px ${color}, 0 0 20px ${color}`,
       }}
     >
-      {symbol}
+      <svg
+        width={size * 0.56}
+        height={size * 0.56}
+        viewBox="0 0 100 100"
+        aria-hidden="true"
+      >
+        <polygon
+          points={points}
+          fill="none"
+          stroke={color}
+          strokeWidth="8"
+          strokeLinejoin="round"
+        />
+      </svg>
     </div>
   );
 };
