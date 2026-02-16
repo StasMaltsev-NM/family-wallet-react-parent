@@ -95,6 +95,7 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
   const runTaskAction = async (missionId: string, action: 'confirm' | 'reject') => {
     const key = `dashboard-task:${action}:${missionId}`;
     if (isPending(key)) return;
+    handleMissionAction(missionId, action);
     try {
       const started = await runInstant(key, async () => onTaskAction(missionId, action));
       if (started === null) return;

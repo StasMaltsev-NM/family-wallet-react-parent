@@ -107,6 +107,54 @@ const sortedMissions: Mission[] = useMemo(() => {
   });
 }, [child.missions]);
 
+const applyMissionActionOptimistic = (
+  missionId: string,
+  action: "confirm" | "reject" | "delete"
+) => {
+  const currentMissions = Array.isArray(child.missions) ? [...child.missions] : [];
+  const index = currentMissions.findIndex((m: any) => m.id === missionId);
+  if (index === -1) return;
+
+  const mission: any = currentMissions[index];
+  const nextChild: any = {
+    ...child,
+    balance: { ...child.balance },
+    missions: currentMissions,
+    activities: Array.isArray(child.activities) ? [...child.activities] : [],
+  };
+
+  if (action === "delete") {
+    nextChild.missions.splice(index, 1);
+    onUpdateChild(nextChild);
+    return;
+  }
+
+  if (action === "confirm") {
+    nextChild.balance.confirmed += mission.reward;
+    nextChild.balance.pending = Math.max(0, nextChild.balance.pending - mission.reward);
+
+    const newActivity: any = {
+      id: Math.random().toString(36).slice(2, 11),
+      type: "mission",
+      description: `Миссия: ${mission.title}`,
+      amount: mission.reward,
+      date: "Сейчас",
+    };
+    nextChild.activities = [newActivity, ...nextChild.activities];
+
+    if (mission.isRecurring) {
+      nextChild.missions[index] = { ...mission, status: "active" };
+    } else {
+      nextChild.missions.splice(index, 1);
+    }
+  } else {
+    nextChild.balance.pending = Math.max(0, nextChild.balance.pending - mission.reward);
+    nextChild.missions[index] = { ...mission, status: "active" };
+  }
+
+  onUpdateChild(nextChild);
+};
+
   // --- МОСТ: confirm/reject через API ---
 const handleAction = async (
   missionId: string,
@@ -114,12 +162,18 @@ const handleAction = async (
 ) => {
   const key = `task:${action}:${missionId}`;
   if (isPending(key)) return;
+  applyMissionActionOptimistic(missionId, action);
   try {
     const started = await runInstant(key, async () => onTaskAction(missionId, action));
     if (started === null) return;
   } catch (e) {
     console.error(e);
     setActionFeedback({ type: "error", message: getErrorMessage(e, "Не удалось выполнить действие по миссии.") });
+    try {
+      await onRefresh();
+    } catch {
+      // ignore refresh errors, main error already shown above
+    }
   }
 };
 
@@ -499,6 +553,7 @@ const handleAddMission = async () => {
 
             <div className="flex gap-4">
               <button
+                onPointerDown={() => setIsAdding(false)}
                 onClick={() => setIsAdding(false)}
                 className="flex-1 py-5 text-sm font-black text-[var(--text-muted)] hover:text-white transition-colors uppercase tracking-widest"
               >
