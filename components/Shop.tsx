@@ -36,6 +36,7 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
       cost: r.price,
       image_url: r.image_url,
       icon: r.icon,
+      child_id: r.child_id,
       image: `https://picsum.photos/seed/${r.id}/200/200.webp`,
       isOneTime: r.is_permanent === 0
     }));
@@ -113,10 +114,12 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
       setSelectedChildIds([onlyId]);
       return;
     }
-    if (selectedChildIds.length === 0 && currentChild) {
+    if (currentChild) {
       setSelectedChildIds([currentChild.apiChildId || currentChild.id]);
+      return;
     }
-  }, [allChildren, currentChild, isAdding, selectedChildIds.length]);
+    setSelectedChildIds([]);
+  }, [allChildren, currentChild, isAdding]);
 
   useEffect(() => {
     prizesRef.current = prizes;
@@ -203,6 +206,7 @@ const handleCreateReward = async () => {
     
     // Закроем форму и сбросим
     setIsAdding(false);
+    setSelectedChildIds([]);
     setNewPrize({ name: '', cost: '', isPermanent: true });
 
     // Фоновое обновление: карточки видны сразу, картинки подтянутся без блокировки UI.
@@ -244,6 +248,11 @@ const handleCreateReward = async () => {
     }
   };
 
+  const currentChildApiId = currentChild?.apiChildId || currentChild?.id;
+  const visiblePrizes = currentChildApiId
+    ? prizes.filter((prize) => prize.child_id === currentChildApiId)
+    : prizes;
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
       {isProgressLoading ? (
@@ -271,7 +280,7 @@ const handleCreateReward = async () => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-        {isInitialLoading && prizes.length === 0 ? (
+        {isInitialLoading && visiblePrizes.length === 0 ? (
           <>
             {[1, 2].map((s) => (
               <div key={s} className="bg-[var(--bg-card)] rounded-[2.5rem] border border-[var(--border)] overflow-hidden p-6 animate-pulse">
@@ -282,12 +291,12 @@ const handleCreateReward = async () => {
               </div>
             ))}
           </>
-        ) : prizes.length === 0 ? (
+        ) : visiblePrizes.length === 0 ? (
           <div className="text-center py-20 bg-[var(--bg-card)] rounded-[2.5rem] border-2 border-dashed border-[var(--border)] opacity-60">
             <p className="font-black text-[var(--text-muted)] text-[12px] uppercase tracking-widest">АКТИВНЫХ НАГРАД НЕТ</p>
           </div>
         ) : (
-          prizes.map(prize => (
+          visiblePrizes.map(prize => (
             <div key={prize.id} className="bg-[var(--bg-card)] rounded-[2.5rem] border border-[var(--border)] overflow-hidden flex flex-col group hover:border-[var(--primary)]/30 transition-all shadow-xl">
               {/* Фото и Прайс-тег */}
             <div className="relative h-72 sm:h-80 overflow-hidden flex items-center justify-center">
@@ -426,7 +435,7 @@ const handleCreateReward = async () => {
             </div>
 
             <div className="flex gap-4">
-              <button onClick={() => setIsAdding(false)} className="flex-1 py-5 text-sm font-black text-[var(--text-muted)] hover:text-white transition-colors uppercase tracking-widest">Отмена</button>
+              <button onClick={() => { setIsAdding(false); setSelectedChildIds([]); }} className="flex-1 py-5 text-sm font-black text-[var(--text-muted)] hover:text-white transition-colors uppercase tracking-widest">Отмена</button>
               <button 
                 onClick={handleCreateReward}
                 disabled={!newPrize.name || !newPrize.cost}
