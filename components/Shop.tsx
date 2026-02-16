@@ -76,6 +76,11 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
     }
   };
 
+  const startBackgroundImageRefresh = (rewardIds: string[]) => {
+    if (!rewardIds.length) return;
+    void waitForImages(rewardIds, 24, 3000);
+  };
+
   useEffect(() => {
     if (!cacheKey) return;
     const cached = readSessionCache<Prize[]>(cacheKey, REWARDS_CACHE_MAX_AGE_MS);
@@ -195,11 +200,13 @@ const handleCreateReward = async () => {
     const mappedRewards = mapRewards(rewardsRes.rewards);
     setPrizes(mappedRewards);
     updateRewardsCache(mappedRewards);
-    await waitForImages(createdRewardIds);
     
     // Закроем форму и сбросим
     setIsAdding(false);
     setNewPrize({ name: '', cost: '', isPermanent: true });
+
+    // Фоновое обновление: карточки видны сразу, картинки подтянутся без блокировки UI.
+    startBackgroundImageRefresh(createdRewardIds);
     
   } catch (err: any) {
     console.error('[SHOP] CREATE ERROR:', err);
