@@ -551,16 +551,76 @@ if (!code) {
       const code = parentCodeRef.current;
       if (!code) return;
 
-      if (action === "delete") {
-        await parentApi.deleteTask(code, taskId);
-        clearAppCache(code);
-        await refreshTasks();
-        return;
+      let optimisticTask: any = null;
+      setTasks((prev) => {
+        optimisticTask = (prev || []).find((t: any) => String(t?.id) === String(taskId)) || null;
+
+        if (action === "delete") {
+          return (prev || []).filter((t: any) => String(t?.id) !== String(taskId));
+        }
+
+        if (action === "confirm") {
+          if (optimisticTask?.recurring) {
+            return (prev || []).map((t: any) =>
+              String(t?.id) === String(taskId) ? { ...t, status: "IDLE" } : t
+            );
+          }
+          return (prev || []).filter((t: any) => String(t?.id) !== String(taskId));
+        }
+
+        return (prev || []).map((t: any) =>
+          String(t?.id) === String(taskId) ? { ...t, status: "IDLE" } : t
+        );
+      });
+
+      if (optimisticTask && (action === "confirm" || action === "reject")) {
+        const rewardDelta = Number(optimisticTask?.reward_amount ?? 0) || 0;
+        const targetChildId = String(optimisticTask?.child_id || "");
+        if (rewardDelta > 0 && targetChildId) {
+          setApiChildren((prev) =>
+            (prev || []).map((k: any) => {
+              if (String(k?.id) !== targetChildId) return k;
+              const confirmed = Number(k?.balance?.confirmed ?? 0) || 0;
+              const pending = Number(k?.balance?.pending ?? 0) || 0;
+              if (action === "confirm") {
+                return {
+                  ...k,
+                  balance: {
+                    ...k.balance,
+                    confirmed: confirmed + rewardDelta,
+                    pending: Math.max(0, pending - rewardDelta),
+                  },
+                };
+              }
+              return {
+                ...k,
+                balance: {
+                  ...k.balance,
+                  pending: Math.max(0, pending - rewardDelta),
+                },
+              };
+            })
+          );
+        }
       }
 
-      await parentApi.confirmTask(code, taskId, action);
-      clearAppCache(code);
-      await refreshTasks();
+      try {
+        if (action === "delete") {
+          await parentApi.deleteTask(code, taskId);
+        } else {
+          await parentApi.confirmTask(code, taskId, action);
+        }
+        clearAppCache(code);
+        await refreshTasks();
+      } catch (e) {
+        // Re-sync state from backend on failure to rollback optimistic UI safely.
+        try {
+          await refreshTasks();
+        } catch {
+          // ignore secondary refresh error
+        }
+        throw e;
+      }
     },
     [clearAppCache, refreshTasks]
   );
