@@ -163,9 +163,6 @@ const App: React.FC = () => {
   const [identityKey, setIdentityKey] = useState<string>("");
   const INVITE_KEY = useMemo(() => parentInviteStorageKey(identityKey), [identityKey]);
   const APP_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
-  const REWARDS_PREFETCH_INTERVAL_MS = 60_000;
-  const rewardsPrefetchAtRef = useRef(0);
-
   const getAppCacheKey = useCallback((code: string) => makeInviteScopedKey("app-core", code), []);
   const getRewardsCacheKey = useCallback((code: string) => makeInviteScopedKey("rewards", code), []);
   const clearAppCache = useCallback((code: string) => {
@@ -500,26 +497,10 @@ if (!code) {
       const nextTasks = resp?.tasks ?? [];
       setTasks(nextTasks);
 
-      // Prefetch rewards cache for instant Shop render on first tab open.
-      if (Date.now() - rewardsPrefetchAtRef.current > REWARDS_PREFETCH_INTERVAL_MS) {
-        rewardsPrefetchAtRef.current = Date.now();
-        try {
-          const rewardsResp = await parentApi.listRewards(code);
-          const mappedRewards = (rewardsResp?.rewards ?? []).map((r: any) => ({
-            id: r.id,
-            name: r.title,
-            title: r.title,
-            cost: r.price,
-            image_url: r.image_url,
-            icon: r.icon,
-            image: `https://picsum.photos/seed/${r.id}/200/200.webp`,
-            isOneTime: r.is_permanent === 0,
-          }));
-          writeSessionCache(getRewardsCacheKey(code), mappedRewards);
-        } catch (e) {
-          console.error("[rewards prefetch] failed:", e);
-        }
-      }
+      // NOTE:
+      // Rewards prefetch is disabled because payload can be very heavy (base64 images),
+      // which blocks initial app loading in WebView/VPN scenarios.
+      // Shop fetches rewards on demand.
 
       writeSessionCache(getAppCacheKey(code), {
         children: nextKids,
