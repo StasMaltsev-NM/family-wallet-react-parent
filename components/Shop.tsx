@@ -1,9 +1,10 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Child, Prize } from '../types';
 import { PRIZES } from '../constants';
 import { parentApi } from '../services/api';
-import { Plus, ShoppingCart, Lock, Box, Check, Star, Trash2, Info } from 'lucide-react';
+import { makeInviteScopedKey, readSessionCache, writeSessionCache } from '../services/cache';
+import { Plus, ShoppingCart, Lock, Box, Check, Star, Trash2, Info, Repeat } from 'lucide-react';
 
 interface Props {
   allChildren: Child[];
@@ -12,79 +13,136 @@ interface Props {
 }
 
 const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
+  const REWARDS_CACHE_TTL_MS = 90_000;
+  const REWARDS_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
   const [isAdding, setIsAdding] = useState(false);
   const [newPrize, setNewPrize] = useState({ name: '', cost: '', isPermanent: true });
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>([]);
-  const [prizes, setPrizes] = useState<Prize[]>(PRIZES);
+  const [regeneratingIds, setRegeneratingIds] = useState<string[]>([]);
+  const cacheKey = inviteCode ? makeInviteScopedKey('rewards', inviteCode) : '';
+  const [prizes, setPrizes] = useState<Prize[]>(() => {
+    if (!cacheKey) return PRIZES;
+    return readSessionCache<Prize[]>(cacheKey, REWARDS_CACHE_MAX_AGE_MS) || PRIZES;
+  });
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(prizes.length === 0);
+  const [isProgressLoading, setIsProgressLoading] = useState<boolean>(false);
+  const prizesRef = useRef<Prize[]>(prizes);
 
-  const mapRewardToPrize = (r: any): Prize => {
-    let iconUrl = '';
-    if (typeof r?.icon === 'string' && r.icon.length > 0) {
-      const codePoint = r.icon.codePointAt(0);
-      if (codePoint) {
-        iconUrl = `https://em-content.zobj.net/thumbs/120/apple/354/${codePoint.toString(16)}.png`;
-      }
-    }
-
-    return {
+  const mapRewards = (rewards: any[]) =>
+    rewards.map((r: any) => ({
       id: r.id,
       name: r.title,
+      title: r.title,
       cost: r.price,
-      image: r.image_url || iconUrl || `https://picsum.photos/seed/${r.id}/200/200`,
-      isOneTime: r.is_permanent === 0,
-    };
+      image_url: r.image_url,
+      icon: r.icon,
+      image: `https://picsum.photos/seed/${r.id}/200/200.webp`,
+      isOneTime: r.is_permanent === 0
+    }));
+
+  const refreshRewards = async (options?: { showProgress?: boolean }) => {
+    if (!inviteCode) return [];
+    if (options?.showProgress) setIsProgressLoading(true);
+    try {
+      const { rewards } = await parentApi.listRewards(inviteCode);
+      const mapped = mapRewards(rewards);
+      setPrizes(mapped);
+      if (cacheKey) writeSessionCache(cacheKey, mapped);
+      return rewards;
+    } finally {
+      if (options?.showProgress) setIsProgressLoading(false);
+    }
   };
 
-  const mapRewardsForCurrentChild = (rewards: any[]): Prize[] =>
-    rewards
-      .filter((r: any) => {
-        if (!currentChild) return true;
-        return r.child_id === currentChild.apiChildId;
-      })
-      .map(mapRewardToPrize);
+  const updateRewardsCache = (next: Prize[]) => {
+    if (!cacheKey) return;
+    writeSessionCache(cacheKey, next);
+  };
 
-  const refreshRewards = async () => {
-    const res = await parentApi.listRewards(inviteCode);
-    console.log('[Shop] loaded rewards:', res.rewards);
-    const mapped = mapRewardsForCurrentChild(res.rewards);
-    setPrizes(mapped);
-    return res.rewards;
+  const waitForImages = async (rewardIds: string[], attempts = 18, delayMs = 5000) => {
+    if (!rewardIds.length) return;
+    for (let i = 0; i < attempts; i += 1) {
+      try {
+        const rewards = await refreshRewards();
+        const allReady = rewardIds.every((id) =>
+          rewards.find((r: any) => r.id === id && r.image_url)
+        );
+        if (allReady) return;
+      } catch (err) {
+        console.error('[SHOP POLL] error:', err);
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
   };
 
   const startBackgroundImageRefresh = (rewardIds: string[]) => {
     if (!rewardIds.length) return;
-
-    let attempt = 0;
-    const maxAttempts = 18;
-    const delayMs = 3000;
-
-    const tick = async () => {
-      attempt += 1;
-      try {
-        const rewards = await refreshRewards();
-        const allReady = rewardIds.every((id) =>
-          rewards.some((r: any) => r.id === id && Boolean(r.image_url))
-        );
-        if (allReady || attempt >= maxAttempts) return;
-      } catch (err) {
-        console.error('[Shop background image refresh] error:', err);
-        return;
-      }
-
-      setTimeout(() => {
-        void tick();
-      }, delayMs);
-    };
-
-    void tick();
+    void waitForImages(rewardIds, 24, 3000);
   };
 
   useEffect(() => {
-    console.log('[Shop] currentChild:', currentChild);
-    void refreshRewards().catch((err) => {
-      console.error('[Shop] listRewards error:', err);
-    });
-  }, [inviteCode, currentChild]);
+    if (!cacheKey) return;
+    const cached = readSessionCache<Prize[]>(cacheKey, REWARDS_CACHE_MAX_AGE_MS);
+    if (cached?.length) {
+      setPrizes(cached);
+      setIsInitialLoading(false);
+    } else {
+      setIsInitialLoading(true);
+    }
+  }, [cacheKey]);
+
+  useEffect(() => {
+    const loadRewards = async () => {
+      try {
+        await refreshRewards({ showProgress: true });
+      } catch (err) {
+        console.error('[SHOP LOAD] error:', err);
+      } finally {
+        setIsInitialLoading(false);
+      }
+    };
+
+    loadRewards();
+  }, [inviteCode, cacheKey]);
+
+  useEffect(() => {
+    if (!isAdding) return;
+    if (allChildren.length === 1) {
+      const onlyId = allChildren[0].apiChildId || allChildren[0].id;
+      setSelectedChildIds([onlyId]);
+      return;
+    }
+    if (selectedChildIds.length === 0 && currentChild) {
+      setSelectedChildIds([currentChild.apiChildId || currentChild.id]);
+    }
+  }, [allChildren, currentChild, isAdding, selectedChildIds.length]);
+
+  useEffect(() => {
+    prizesRef.current = prizes;
+  }, [prizes]);
+
+  useEffect(() => {
+    if (!inviteCode) return;
+    let isActive = true;
+    let inFlight = false;
+    const timer = setInterval(async () => {
+      if (!isActive || inFlight) return;
+      if (!prizesRef.current.some((p) => !p.image_url)) return;
+      inFlight = true;
+      try {
+        await refreshRewards();
+      } catch (err) {
+        console.error('[SHOP POLL] error:', err);
+      } finally {
+        inFlight = false;
+      }
+    }, REWARDS_CACHE_TTL_MS);
+    return () => {
+      isActive = false;
+      clearInterval(timer);
+    };
+  }, [inviteCode]);
 
   const toggleChildSelection = (id: string) => {
     setSelectedChildIds(prev => 
@@ -113,10 +171,17 @@ const handleCreateReward = async () => {
   try {
     // Создаём награду для КАЖДОГО выбранного ребёнка
     const createdRewardIds: string[] = [];
-    for (const childId of selectedChildIds) {
+    for (const localId of selectedChildIds) {
+      const child = allChildren.find(c => (c.apiChildId || c.id) === localId);
+      if (!child?.apiChildId) {
+        console.error('[SHOP] Child not found or missing apiChildId:', localId);
+        continue;
+      }
+      
+      const childId = child.apiChildId;
       console.log('[SHOP] Creating reward for child:', childId);
       
-      const response = await parentApi.createReward(
+      const res = await parentApi.createReward(
         inviteCode,
         childId,
         newPrize.name,
@@ -124,19 +189,23 @@ const handleCreateReward = async () => {
         '',
         newPrize.isPermanent
       );
-      if (response?.reward_id) createdRewardIds.push(response.reward_id);
+      if (res?.reward_id) createdRewardIds.push(res.reward_id);
     }
     
     console.log('[SHOP] Rewards created successfully!');
     
     // Перезагрузим список наград
-    await refreshRewards();
+    const rewardsRes = await parentApi.listRewards(inviteCode);
+    console.log('[SHOP] Loaded rewards:', rewardsRes);
+    const mappedRewards = mapRewards(rewardsRes.rewards);
+    setPrizes(mappedRewards);
+    updateRewardsCache(mappedRewards);
     
     // Закроем форму и сбросим
     setIsAdding(false);
     setNewPrize({ name: '', cost: '', isPermanent: true });
 
-    // Картинки подтянутся в фоне, UI не блокируется.
+    // Фоновое обновление: карточки видны сразу, картинки подтянутся без блокировки UI.
     startBackgroundImageRefresh(createdRewardIds);
     
   } catch (err: any) {
@@ -150,15 +219,44 @@ const handleCreateReward = async () => {
   const handleDeletePrize = async (id: string) => {
     try {
       await parentApi.deleteReward(inviteCode, id);
-      setPrizes(prev => prev.filter(p => p.id !== id));
+      setPrizes(prev => {
+        const next = prev.filter(p => p.id !== id);
+        updateRewardsCache(next);
+        return next;
+      });
     } catch (err) {
       console.error('[Shop DELETE] error:', err);
       alert('Ошибка удаления награды!');
     }
   };
 
+  const handleRegenerateImage = async (id: string) => {
+    try {
+      setRegeneratingIds(prev => (prev.includes(id) ? prev : [...prev, id]));
+      await parentApi.regenerateRewardImage(inviteCode, id);
+      await refreshRewards();
+      await waitForImages([id], 24, 3000);
+    } catch (err: any) {
+      console.error('[Shop REGENERATE] error:', err);
+      alert(`Ошибка перегенерации: ${err?.message || 'Неизвестная ошибка'}`);
+    } finally {
+      setRegeneratingIds(prev => prev.filter((item) => item !== id));
+    }
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+      {isProgressLoading ? (
+        <div className="fixed top-0 left-0 right-0 z-[80] h-1 overflow-hidden bg-white/10">
+          <div className="h-full w-1/3 bg-[var(--primary)] animate-[shopBar_1.2s_linear_infinite]" />
+        </div>
+      ) : null}
+      <style>{`
+        @keyframes shopBar {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(350%); }
+        }
+      `}</style>
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-black text-white">Магазин призов</h2>
@@ -173,44 +271,82 @@ const handleCreateReward = async () => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-        {prizes.map(prize => (
-          <div key={prize.id} className="bg-[var(--bg-card)] rounded-[2.5rem] border border-[var(--border)] overflow-hidden flex flex-col group hover:border-[var(--primary)]/30 transition-all shadow-xl">
-            {/* Фото и Прайс-тег */}
-            <div className="relative h-48 sm:h-52 overflow-hidden">
-              <img src={prize.image} alt={prize.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+        {isInitialLoading && prizes.length === 0 ? (
+          <>
+            {[1, 2].map((s) => (
+              <div key={s} className="bg-[var(--bg-card)] rounded-[2.5rem] border border-[var(--border)] overflow-hidden p-6 animate-pulse">
+                <div className="h-72 sm:h-80 rounded-[2rem] bg-white/5" />
+                <div className="mt-6 h-8 w-2/3 bg-white/10 rounded-xl" />
+                <div className="mt-3 h-4 w-1/2 bg-white/10 rounded-xl" />
+                <div className="mt-6 h-14 w-full bg-white/10 rounded-2xl" />
+              </div>
+            ))}
+          </>
+        ) : prizes.length === 0 ? (
+          <div className="text-center py-20 bg-[var(--bg-card)] rounded-[2.5rem] border-2 border-dashed border-[var(--border)] opacity-60">
+            <p className="font-black text-[var(--text-muted)] text-[12px] uppercase tracking-widest">АКТИВНЫХ НАГРАД НЕТ</p>
+          </div>
+        ) : (
+          prizes.map(prize => (
+            <div key={prize.id} className="bg-[var(--bg-card)] rounded-[2.5rem] border border-[var(--border)] overflow-hidden flex flex-col group hover:border-[var(--primary)]/30 transition-all shadow-xl">
+              {/* Фото и Прайс-тег */}
+            <div className="relative h-72 sm:h-80 overflow-hidden flex items-center justify-center">
+              <div className="relative w-60 h-60 sm:w-72 sm:h-72 rounded-[2.5rem] bg-gradient-to-br from-white/12 via-white/6 to-white/0 border border-white/15 shadow-[0_35px_100px_rgba(0,0,0,0.55)] flex items-center justify-center overflow-hidden">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_35%_25%,rgba(255,255,255,0.4),rgba(255,255,255,0.08)_45%,rgba(0,0,0,0)_75%)]" />
+                {prize.image_url ? (
+                  <img 
+                    src={prize.image_url} 
+                    alt={prize.title || prize.name}
+                    className="relative w-full h-full object-cover scale-[1.2] transition-transform duration-500"
+                  />
+                ) : (
+                  <div className="relative text-7xl sm:text-8xl opacity-90">{prize.icon || '🎁'}</div>
+                )}
+                {!prize.image_url ? (
+                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[9px] font-black uppercase tracking-[0.2em] text-white/60 bg-black/40 px-2.5 py-1 rounded-full border border-white/10">
+                    Генерация...
+                  </div>
+                ) : null}
+              </div>
               
               {/* Яркая плашка цены */}
               <div className="absolute top-4 right-4 px-4 py-2 bg-orange-500 rounded-2xl text-white shadow-2xl flex items-center gap-2 border border-white/20">
-                <span className="text-lg font-black">{prize.cost}</span>
-                <Star size={18} fill="currentColor" className="text-white" />
-              </div>
-              
-              {!prize.isOneTime && (
-                <div className="absolute top-4 left-4 p-2.5 bg-indigo-600/80 backdrop-blur-md rounded-xl text-white border border-white/10" title="Постоянный слот">
-                  <RefreshCcw size={16} className="animate-spin-slow" />
+                  <span className="text-lg font-black">{prize.cost}</span>
+                  <Star size={18} fill="currentColor" className="text-white" />
                 </div>
-              )}
-            </div>
-
-            <div className="p-6 flex flex-col flex-1 justify-between gap-4">
-              <div>
-                <h4 className="text-xl font-black text-white leading-tight mb-2 uppercase tracking-tight">{prize.name}</h4>
-                <div className="flex items-center gap-2 text-[var(--text-muted)] text-[10px] font-black uppercase tracking-widest">
-                  {prize.isOneTime ? <Box size={12} /> : <ShoppingCart size={12} />}
-                  <span>{prize.isOneTime ? 'Разовая покупка' : 'Многоразовый слот'}</span>
-                </div>
+                
+                <button
+                  onClick={() => handleRegenerateImage(prize.id)}
+                  disabled={regeneratingIds.includes(prize.id)}
+                  className="absolute top-4 left-4 p-2.5 bg-indigo-600/80 backdrop-blur-md rounded-xl text-white border border-white/10 hover:bg-indigo-500 transition-all disabled:opacity-50"
+                  title="Перегенерировать картинку"
+                >
+                  <Repeat size={16} className={regeneratingIds.includes(prize.id) ? 'animate-spin' : ''} />
+                </button>
               </div>
 
-              <button 
-                onClick={() => handleDeletePrize(prize.id)}
-                className="w-full py-4 bg-rose-500/10 text-rose-500 text-sm font-black uppercase tracking-widest rounded-2xl hover:bg-rose-500 hover:text-white transition-all border border-rose-500/10 flex items-center justify-center gap-2"
-              >
-                <Trash2 size={18} />
-                Удалить
-              </button>
+              <div className="p-6 flex flex-col flex-1 justify-between gap-4">
+                <div>
+                  <h4 className="text-xl font-black text-white leading-tight mb-2 uppercase tracking-tight">{prize.name}</h4>
+                  <div className="flex items-center gap-2 text-[var(--text-muted)] text-[10px] font-black uppercase tracking-widest">
+                    {prize.isOneTime ? <Box size={12} /> : <ShoppingCart size={12} />}
+                    <span>{prize.isOneTime ? 'Разовая покупка' : 'Многоразовый слот'}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3">
+                  <button 
+                    onClick={() => handleDeletePrize(prize.id)}
+                    className="w-full py-4 bg-rose-500/10 text-rose-500 text-xs sm:text-sm font-black uppercase tracking-widest rounded-2xl hover:bg-rose-500 hover:text-white transition-all border border-rose-500/10 flex items-center justify-center gap-2"
+                  >
+                    <Trash2 size={18} />
+                    Удалить
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
       {isAdding && (
@@ -296,7 +432,7 @@ const handleCreateReward = async () => {
                 disabled={!newPrize.name || !newPrize.cost}
                 className="btn-primary flex-[2] py-5 text-lg font-black rounded-2xl shadow-xl shadow-[var(--primary)]/30 active:scale-[0.98] disabled:opacity-20 transition-all"
               >
-                Создать для {selectedChildIds.length}
+                Создать
               </button>
             </div>
           </div>
@@ -305,26 +441,5 @@ const handleCreateReward = async () => {
     </div>
   );
 };
-
-// Вспомогательная иконка для многоразовости
-const RefreshCcw = ({ size, className }: { size: number, className?: string }) => (
-  <svg 
-    xmlns="http://www.w3.org/2000/svg" 
-    width={size} 
-    height={size} 
-    viewBox="0 0 24 24" 
-    fill="none" 
-    stroke="currentColor" 
-    strokeWidth="3" 
-    strokeLinecap="round" 
-    strokeLinejoin="round" 
-    className={className}
-  >
-    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-    <path d="M21 3v5h-5" />
-    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-    <path d="M3 21v-5h5" />
-  </svg>
-);
 
 export default Shop;

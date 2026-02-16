@@ -40,8 +40,11 @@ export interface Mission {
 export interface Prize {
   id: string;
   name: string;
+  title?: string;
   cost: number;
   image: string;
+  image_url?: string;
+  icon?: string;
   isOneTime: boolean;
 }
 

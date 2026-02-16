@@ -15,10 +15,7 @@ import {
   History, 
   Hourglass,
   MapPin,
-  Maximize2,
-  Navigation,
-  ShieldCheck,
-  LocateFixed
+  ShieldCheck
 } from 'lucide-react';
 import { editImageWithAI } from '../services/gemini';
 import { GenderIcon } from './GenderIcon';
@@ -41,7 +38,6 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
   const [isMissionsExpanded, setIsMissionsExpanded] = useState(pendingMissions.length > 0);
   const [isPrizesExpanded, setIsPrizesExpanded] = useState(pendingPurchases.length > 0);
   const [isActivityExpanded, setIsActivityExpanded] = useState(false);
-  const [isMapFullscreen, setIsMapFullscreen] = useState(false);
 
   const progress = Math.min(100, (child.dream.current / child.dream.price) * 100);
 
@@ -99,7 +95,7 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
       
       {/* 1. Блок «Детская мечта» */}
       {child.dream.title && child.dream.title !== "Мечта" && (
-      <div className="bg-[var(--bg-card)] rounded-[2.5rem] overflow-hidden border border-[var(--primary)]/30 shadow-2xl flex flex-row items-stretch h-40 group">
+      <div className="bg-[var(--bg-card)] rounded-[2.5rem] overflow-hidden border border-[var(--primary)]/30 shadow-2xl flex flex-row items-stretch h-40 group w-full max-w-full">
         <div className="relative w-40 flex-shrink-0 overflow-hidden">
           <img 
             src={child.dream.image} 
@@ -146,8 +142,8 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
       )}
 
       {/* 2. Баланс */}
-      <div className="grid grid-cols-2 gap-5">
-        <div className="bg-[var(--bg-card)] p-6 rounded-[2.2rem] border border-[var(--border)] shadow-xl flex items-center gap-5">
+      <div className="grid grid-cols-2 gap-5 w-full max-w-full">
+        <div className="bg-[var(--bg-card)] p-6 rounded-[2.2rem] border border-[var(--border)] shadow-xl flex items-center gap-5 w-full max-w-full min-w-0">
           <div className="w-14 h-14 bg-emerald-500/10 rounded-2xl flex items-center justify-center text-emerald-400">
             <ArrowUpRight size={28} />
           </div>
@@ -159,7 +155,7 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
           </div>
         </div>
 
-        <div className="bg-[var(--bg-card)] p-6 rounded-[2.2rem] border border-[var(--border)] shadow-xl flex items-center gap-5">
+        <div className="bg-[var(--bg-card)] p-6 rounded-[2.2rem] border border-[var(--border)] shadow-xl flex items-center gap-5 w-full max-w-full min-w-0">
           <div className="w-14 h-14 bg-amber-500/10 rounded-2xl flex items-center justify-center text-amber-400">
             <Timer size={28} />
           </div>
@@ -319,112 +315,38 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
         )}
       </div>
 
-      {/* 6. Где мой ребенок (Карта) */}
-      <div 
-        onClick={() => setIsMapFullscreen(true)}
-        className="bg-[var(--bg-card)] rounded-[2.5rem] border border-[var(--border)] overflow-hidden shadow-xl cursor-pointer hover:border-[var(--primary)]/50 transition-all group relative"
-      >
-        <div className="p-7 flex items-center justify-between bg-black/20 relative z-10">
-          <div className="flex items-center gap-5">
-            <div className="p-3.5 rounded-2xl bg-indigo-500/10 text-indigo-400">
-              <MapPin size={26} />
-            </div>
-            <div>
-              <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white">Где мой ребенок</h4>
-              <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mt-1 flex items-center gap-1.5">
-                <ShieldCheck size={12} /> В безопасной зоне
-              </p>
-            </div>
-          </div>
-          <Maximize2 size={20} className="text-[var(--text-muted)] group-hover:text-white transition-colors" />
-        </div>
-
-        {/* Мини-карта превью */}
-        <div className="h-48 w-full relative">
-          <iframe 
-            src="https://www.google.com/maps/embed?pb=!1m14!1m12!1m3!1d20000!2d37.6176!3d55.7558!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!5e0!3m2!1sru!2sru!4v1700000000000!5m2!1sru!2sru&dark_mode=true"
-            className="w-full h-full border-0 grayscale invert contrast-125 opacity-40 group-hover:opacity-60 transition-opacity"
-            loading="lazy"
-            title="Map Preview"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-[var(--bg-card)] via-transparent to-transparent pointer-events-none" />
-          
-          {/* Кастомный маркер */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-            <div className="relative">
-              <div className="absolute inset-0 bg-indigo-500 blur-xl opacity-50 animate-pulse" />
-              <div className="w-12 h-12 rounded-full border-4 border-indigo-500 p-0.5 bg-black relative z-10">
-                <div className="w-full h-full flex items-center justify-center rounded-full">
-                  <GenderIcon gender={child.gender || 'male'} size={40} />
-                </div>
+      {/* 6. Где мой ребенок (Скоро) */}
+      <div className="bg-[var(--bg-card)] rounded-[2.5rem] border border-[var(--border)] overflow-hidden shadow-xl relative">
+        <div className="p-7 bg-black/20">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-5">
+              <div className="p-3.5 rounded-2xl bg-indigo-500/10 text-indigo-400">
+                <MapPin size={26} />
+              </div>
+              <div>
+                <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white">Где мой ребенок</h4>
+                <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mt-1">
+                  Геолокация и маршрут скоро появятся
+                </p>
               </div>
             </div>
-            <div className="mt-2 px-3 py-1 bg-indigo-500 text-white text-[10px] font-black uppercase tracking-widest rounded-full shadow-lg">
-              {child.name}
+            <span className="px-3 py-1.5 rounded-full bg-indigo-500/15 text-indigo-300 text-[10px] font-black uppercase tracking-widest border border-indigo-400/30">
+              Скоро
+            </span>
+          </div>
+        </div>
+
+        <div className="px-7 pb-7 pt-3">
+          <div className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-indigo-500/10 via-black/20 to-black/40 px-5 py-6">
+            <div className="flex items-start gap-3">
+              <ShieldCheck size={18} className="text-emerald-400 mt-0.5 flex-shrink-0" />
+              <p className="text-sm leading-relaxed text-white/80">
+                Мы готовим безопасный модуль геолокации для родителей: текущая точка ребенка, история перемещений и уведомления о выходе из безопасной зоны.
+              </p>
             </div>
           </div>
         </div>
       </div>
-
-      {/* Полноэкранная карта */}
-      {isMapFullscreen && (
-        <div className="fixed inset-0 z-[200] flex flex-col bg-black animate-in fade-in slide-in-from-bottom-10 duration-500">
-          <div className="p-6 flex items-center justify-between bg-black/80 backdrop-blur-xl border-b border-white/10 z-20">
-            <div className="flex items-center gap-4">
-              <button 
-                onClick={() => setIsMapFullscreen(false)}
-                className="p-3 bg-white/5 rounded-2xl text-white hover:bg-white/10 transition-colors"
-              >
-                <ChevronDown size={28} className="rotate-90" />
-              </button>
-              <div>
-                <h3 className="text-xl font-black text-white">{child.name} сейчас</h3>
-                <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest">Обновлено: только что</p>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <button className="p-4 bg-[var(--primary)] text-black rounded-2xl shadow-lg shadow-[var(--primary)]/20">
-                <LocateFixed size={24} />
-              </button>
-            </div>
-          </div>
-
-          <div className="flex-1 relative">
-            <iframe 
-              src="https://www.google.com/maps/embed?pb=!1m14!1m12!1m3!1d40000!2d37.6176!3d55.7558!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!5e0!3m2!1sru!2sru!4v1700000000000!5m2!1sru!2sru"
-              className="w-full h-full border-0 grayscale invert brightness-75 contrast-125"
-              loading="lazy"
-              title="Full Map"
-            />
-            
-            {/* Анимированный пин на большой карте */}
-            <div className="absolute top-[45%] left-[52%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-              <div className="relative group/pin">
-                <div className="absolute inset-0 bg-indigo-500/40 rounded-full scale-[3] animate-ping" />
-                <div className="absolute inset-0 bg-indigo-500 blur-2xl opacity-40 scale-150" />
-                <div className="w-16 h-16 rounded-full border-4 border-indigo-500 p-0.5 bg-black relative z-10 shadow-2xl">
-                <div className="w-full h-full flex items-center justify-center">
-                  <GenderIcon gender={child.gender || 'male'} size={40} />
-                </div>
-                </div>
-                <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap px-4 py-2 bg-black/90 backdrop-blur-md border border-white/20 rounded-2xl text-white text-xs font-black uppercase tracking-widest shadow-2xl">
-                  {child.name} • 5 мин назад
-                </div>
-              </div>
-            </div>
-
-            {/* Контролы сбоку */}
-            <div className="absolute right-6 bottom-32 flex flex-col gap-4">
-              <button className="w-16 h-16 bg-black/80 backdrop-blur-md border border-white/10 rounded-2xl flex items-center justify-center text-white shadow-2xl">
-                <Navigation size={28} />
-              </button>
-              <button className="w-16 h-16 bg-black/80 backdrop-blur-md border border-white/10 rounded-2xl flex items-center justify-center text-white shadow-2xl">
-                <Maximize2 size={24} />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {isEditingDream && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-2xl">

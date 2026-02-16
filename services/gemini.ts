@@ -6,7 +6,7 @@ import { GoogleGenAI } from "@google/genai";
  * Создаем экземпляр GoogleGenAI непосредственно перед вызовом для актуальности ключа.
  */
 export const getChildInsights = async (childName: string, missionsCount: number, recentActivity: string): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY as string });
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -28,7 +28,7 @@ export const getChildInsights = async (childName: string, missionsCount: number,
  * Генерация специализированного контента для карточек.
  */
 export const getAIContent = async (type: 'advice' | 'missions' | 'prizes', childContext: string): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY as string });
   const prompts = {
     advice: "Дай один практический совет по воспитанию или обучению на основе контекста: " + childContext,
     missions: "Предложи 5 конкретных идей миссий для ребенка. Формат: только список через запятую. Контекст: " + childContext,
@@ -53,7 +53,7 @@ export const getAIContent = async (type: 'advice' | 'missions' | 'prizes', child
  * Используется gemini-2.5-flash-image для редактирования на основе исходного изображения и промпта.
  */
 export const editImageWithAI = async (imageSource: string, prompt: string): Promise<string | null> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY as string });
   
   try {
     let base64Data = '';
