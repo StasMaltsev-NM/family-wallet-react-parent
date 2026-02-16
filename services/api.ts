@@ -3,7 +3,9 @@ const API_URL =
   "https://family-wallet-api.maltsevstas21.workers.dev";
 console.log("[api.ts loaded] API_URL =", API_URL);
 type Json = Record<string, any>;
-const REQUEST_TIMEOUT_MS = 12000;
+const GET_REQUEST_TIMEOUT_MS = 12000;
+const WRITE_REQUEST_TIMEOUT_MS = 30000;
+const REGENERATE_IMAGE_TIMEOUT_MS = 120000;
 const GET_RETRY_COUNT = 2;
 const RETRY_BASE_DELAY_MS = 700;
 
@@ -54,6 +56,12 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
   }
 }
 
+function getRequestTimeoutMs(path: string, method: string): number {
+  if (path === "/api/rewards/regenerate-image") return REGENERATE_IMAGE_TIMEOUT_MS;
+  if (method === "GET") return GET_REQUEST_TIMEOUT_MS;
+  return WRITE_REQUEST_TIMEOUT_MS;
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -92,7 +100,7 @@ async function request<T>(
           headers,
           cache: method === "GET" ? "no-store" : options.cache,
         },
-        REQUEST_TIMEOUT_MS
+        getRequestTimeoutMs(path, method)
       );
 
       if (!res.ok) {

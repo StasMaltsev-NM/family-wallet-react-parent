@@ -45,6 +45,7 @@ export interface Prize {
   image: string;
   image_url?: string;
   icon?: string;
+  child_id?: string;
   isOneTime: boolean;
 }
 
