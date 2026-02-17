@@ -144,6 +144,7 @@ const App: React.FC = () => {
 
   const [tasks, setTasks] = useState<any[]>([]);
   const [apiChildren, setApiChildren] = useState<any[]>([]);
+  const [pendingDreamsByChild, setPendingDreamsByChild] = useState<Record<string, any>>({});
   const stickyRemovedTaskIdsRef = useRef<Map<string, number>>(new Map());
   const [apiError, setApiError] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
@@ -379,6 +380,7 @@ useEffect(() => {
     const snapshot = readSessionCache<{
       children: any[];
       tasks: any[];
+      pendingDreamsByChild?: Record<string, any>;
       childPurchases: Record<string, any[]>;
       childHistory: Record<string, any[]>;
       selectedChildId?: string;
@@ -388,6 +390,7 @@ useEffect(() => {
     setApiChildren(snapshot.children || []);
     setChildren((snapshot.children || []) as any);
     setTasks(snapshot.tasks || []);
+    setPendingDreamsByChild(snapshot.pendingDreamsByChild || {});
     setChildPurchases(snapshot.childPurchases || {});
     setChildHistory(snapshot.childHistory || {});
     if (snapshot.selectedChildId) {
@@ -402,6 +405,7 @@ useEffect(() => {
 if (!code) {
   setApiChildren([]);
   setTasks([]);
+  setPendingDreamsByChild({});
   setChildPurchases({});
   // childHistory сбросится только при явном logout
   return;
@@ -450,8 +454,28 @@ if (!code) {
 
       const resp = await parentApi.getTasks(code);
 
+      let nextPendingDreamsByChild: Record<string, any> = {};
       let nextPurchasesMap: Record<string, any[]> = {};
       let nextHistoryMap: Record<string, any[]> = {};
+
+      // pending dreams (нужны для родительского одобрения новой мечты)
+      try {
+        const pendingDreamsResp = await parentApi.getPendingDreams(code);
+        const pendingDreams = pendingDreamsResp?.dreams ?? [];
+
+        const pendingDreamsMap: Record<string, any> = {};
+        for (const dream of pendingDreams) {
+          const childId = String(dream?.child_id || "");
+          if (!childId) continue;
+          pendingDreamsMap[childId] = dream;
+        }
+        nextPendingDreamsByChild = pendingDreamsMap;
+        setPendingDreamsByChild(pendingDreamsMap);
+      } catch (e) {
+        console.error("[dreams/pending] FAILED:", e);
+        nextPendingDreamsByChild = {};
+        setPendingDreamsByChild({});
+      }
 
       // purchases
       try {
@@ -525,6 +549,7 @@ if (!code) {
       writeSessionCache(getAppCacheKey(code), {
         children: nextKids,
         tasks: nextTasks,
+        pendingDreamsByChild: nextPendingDreamsByChild,
         childPurchases: nextPurchasesMap,
         childHistory: nextHistoryMap,
         selectedChildId: selectedChildIdRef.current || nextKids[0]?.id || "",
@@ -745,6 +770,24 @@ if (!code) {
   const pendingMissionsCount = selectedChild
     ? ((selectedChild as any).missions?.filter((m: any) => m.status === "pending")?.length ?? 0)
     : 0;
+  const selectedPendingDream = selectedChild
+    ? (pendingDreamsByChild[(selectedChild as any)?.apiChildId || ""] ||
+      pendingDreamsByChild[(selectedChild as any)?.id || ""] ||
+      null)
+    : null;
+
+  const handleSetDreamGoal = useCallback(
+    async (dreamId: string, targetAmount: number) => {
+      const code = parentCodeRef.current;
+      if (!code) {
+        throw new Error("Код родителя не найден.");
+      }
+      await parentApi.setDreamGoal(code, dreamId, targetAmount);
+      clearAppCache(code);
+      await refreshTasks();
+    },
+    [clearAppCache, refreshTasks]
+  );
 
   const toggleTheme = () => {
     setTheme((prev) => {
@@ -806,6 +849,7 @@ if (!code) {
     setIsInviteModalOpen(true);
     setChildren([]);
     setApiChildren([]);
+    setPendingDreamsByChild({});
     setSelectedChildId("");
     selectedChildIdRef.current = "";
   };
@@ -843,6 +887,8 @@ if (!code) {
                 onUpdateChild={handleUpdateChild}
                 onTaskAction={onTaskAction as any}
                 pendingPurchases={childPurchases[apiChildId] || []}
+                pendingDream={selectedPendingDream}
+                onSetDreamGoal={handleSetDreamGoal}
               />
             ) : (
               <div className="text-center py-12 text-white/60">
@@ -893,6 +939,8 @@ if (!code) {
             child={selectedChild}
             onUpdateChild={handleUpdateChild}
             onTaskAction={onTaskAction as any}
+            pendingDream={selectedPendingDream}
+            onSetDreamGoal={handleSetDreamGoal}
           />
         ) : (
           <div className="text-center py-12 text-white/60">

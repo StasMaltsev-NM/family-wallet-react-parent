@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Child, Activity } from '../types';
 import { 
   Sparkles, 
@@ -19,7 +19,15 @@ import {
 } from 'lucide-react';
 import { editImageWithAI } from '../services/gemini';
 import { useInstantAction } from '../hooks/useInstantAction';
-import { GenderIcon } from './GenderIcon';
+
+type PendingDream = {
+  id: string;
+  title: string;
+  child_id: string;
+  child_name?: string;
+  status?: string;
+  created_at?: string;
+};
 
 interface Props {
   child: Child;
@@ -28,12 +36,24 @@ interface Props {
   // API-экшен из App.tsx
   onTaskAction: (taskId: string, action: "confirm" | "reject") => Promise<void>;
   pendingPurchases?: any[];
+  pendingDream?: PendingDream | null;
+  onSetDreamGoal?: (dreamId: string, targetAmount: number) => Promise<void>;
 }
 
-const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendingPurchases = [] }) => {
+const Dashboard: React.FC<Props> = ({
+  child,
+  onUpdateChild,
+  onTaskAction,
+  pendingPurchases = [],
+  pendingDream = null,
+  onSetDreamGoal,
+}) => {
   const [isEditingDream, setIsEditingDream] = useState(false);
   const [editPrompt, setEditPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [dreamGoalInput, setDreamGoalInput] = useState('');
+  const [dreamGoalError, setDreamGoalError] = useState<string | null>(null);
+  const [isDreamGoalSaving, setIsDreamGoalSaving] = useState(false);
   const { runInstant, isPending } = useInstantAction();
   
   const pendingMissions = child.missions.filter(m => m.status === 'pending');
@@ -45,6 +65,15 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
   const dreamPrice = Math.max(1, Number(child?.dream?.price ?? 0) || 0);
   const dreamRemaining = Math.max(0, dreamPrice - dreamCurrent);
   const progress = Math.min(100, (dreamCurrent / dreamPrice) * 100);
+  const hasPendingDream = Boolean(pendingDream?.id);
+
+  useEffect(() => {
+    if (hasPendingDream) {
+      setDreamGoalInput('');
+      setDreamGoalError(null);
+      setIsEditingDream(false);
+    }
+  }, [hasPendingDream, pendingDream?.id]);
 
   const handleAIEdit = async () => {
     if (!editPrompt) return;
@@ -107,55 +136,108 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
     }
   };
 
+  const handleDreamGoalSubmit = async () => {
+    if (!pendingDream?.id || !onSetDreamGoal || isDreamGoalSaving) return;
+    const amount = Number(dreamGoalInput);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setDreamGoalError('Введите сумму цели больше 0.');
+      return;
+    }
+    setDreamGoalError(null);
+    setIsDreamGoalSaving(true);
+    try {
+      await onSetDreamGoal(pendingDream.id, Math.round(amount));
+    } catch (err: any) {
+      setDreamGoalError(err?.message || 'Не удалось установить сумму мечты.');
+    } finally {
+      setIsDreamGoalSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-5 animate-in fade-in slide-in-from-bottom-6 duration-700 pb-20">
       
-      {/* 1. Блок «Детская мечта» */}
-      {child.dream.title && child.dream.title !== "Мечта" && (
-      <div className="bg-[var(--bg-card)] rounded-[2.5rem] overflow-hidden border border-[var(--primary)]/30 shadow-2xl flex flex-row items-stretch h-40 group w-full max-w-full">
-        <div className="relative w-40 flex-shrink-0 overflow-hidden">
-          <img 
-            src={child.dream.image} 
-            alt={child.dream.title} 
-            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000"
-          />
-          <div className="absolute inset-0 bg-black/30" />
-          <button 
-            onClick={() => setIsEditingDream(true)}
-            className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-lg p-2.5 rounded-xl text-white/90 hover:text-white transition-all border border-white/10"
-          >
-            <Sparkles size={20} />
-          </button>
-        </div>
-        
-        <div className="flex-1 p-6 flex flex-col justify-between min-w-0">
-          <div className="flex justify-between items-start gap-3">
-            <div className="flex-1 min-w-0">
-              <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.25em] mb-1">Мечта ребенка</p>
-              <h3 className="text-xl font-black truncate text-white leading-tight">{child.dream.title}</h3>
-            </div>
-            <div className="text-right flex-shrink-0">
-              <p className="text-2xl font-black text-[var(--primary)] flex items-center justify-end gap-1">
-                {dreamRemaining} <Star size={20} fill="currentColor" />
-              </p>
-              <p className="text-[11px] text-[var(--text-muted)] uppercase font-bold tracking-widest">осталось до цели</p>
-            </div>
-          </div>
-
-          <div className="mt-auto">
-            <div className="relative h-2.5 bg-black/50 rounded-full overflow-hidden mb-2.5 border border-white/5">
-              <div 
-                className="absolute h-full bg-gradient-to-r from-[var(--primary)] to-indigo-400 transition-all duration-1000"
-                style={{ width: `${progress}%` }}
+      {/* 1. Блок «Детская мечта» / одобрение новой мечты */}
+      {hasPendingDream ? (
+        <div className="bg-[var(--bg-card)] rounded-[2.5rem] border border-amber-400/40 shadow-2xl p-6 sm:p-7">
+          <p className="text-[10px] font-black uppercase tracking-[0.25em] text-amber-300 mb-2">Новая мечта от ребенка</p>
+          <h3 className="text-2xl font-black text-white leading-tight mb-5 truncate">{pendingDream?.title}</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-start">
+            <div>
+              <input
+                type="number"
+                min={1}
+                inputMode="numeric"
+                placeholder="Введите сумму цели в звёздах"
+                value={dreamGoalInput}
+                onChange={(e) => setDreamGoalInput(e.target.value)}
+                className="w-full rounded-2xl bg-black/50 border border-white/10 px-4 py-3 text-white font-black outline-none focus:border-amber-300/70"
               />
+              {dreamGoalError ? (
+                <p className="mt-2 text-[12px] text-rose-300 font-bold">{dreamGoalError}</p>
+              ) : (
+                <p className="mt-2 text-[11px] uppercase tracking-widest text-[var(--text-muted)] font-bold">Родитель задаёт цель накопления</p>
+              )}
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-[11px] font-black text-[var(--text-muted)] uppercase tracking-[0.15em]">Прогресс до цели</span>
-              <span className="text-lg font-black text-white">{Math.round(progress)}%</span>
-            </div>
+            <button
+              onClick={handleDreamGoalSubmit}
+              disabled={isDreamGoalSaving}
+              className="h-12 px-6 rounded-2xl bg-amber-400 text-black font-black uppercase tracking-wide shadow-xl shadow-amber-500/20 disabled:opacity-60 min-w-[170px]"
+            >
+              {isDreamGoalSaving ? 'Сохраняем…' : 'Установить сумму'}
+            </button>
           </div>
         </div>
-      </div>
+      ) : (
+        child.dream.title && child.dream.title !== "Мечта" && (
+          <div className="bg-[var(--bg-card)] rounded-[2.5rem] overflow-hidden border border-[var(--primary)]/30 shadow-2xl flex flex-row items-stretch h-40 group w-full max-w-full">
+            <div className="relative w-40 flex-shrink-0 overflow-hidden">
+              <img
+                src={child.dream.image}
+                alt={child.dream.title}
+                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000"
+              />
+              <div className="absolute inset-0 bg-black/30" />
+              <button
+                onClick={() => setIsEditingDream(true)}
+                className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-lg p-2.5 rounded-xl text-white/90 hover:text-white transition-all border border-white/10"
+              >
+                <Sparkles size={20} />
+              </button>
+            </div>
+
+            <div className="flex-1 p-6 flex flex-col justify-between min-w-0">
+              <div className="flex justify-between items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.25em] mb-1">Мечта ребенка</p>
+                  <h3 className="text-xl font-black truncate text-white leading-tight">{child.dream.title}</h3>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-2xl font-black text-[var(--primary)] flex items-center justify-end gap-1">
+                    {dreamRemaining} <Star size={20} fill="currentColor" />
+                  </p>
+                  <p className="text-[11px] text-[var(--text-muted)] uppercase font-bold tracking-widest">осталось до цели</p>
+                  <p className="text-[11px] text-[var(--text-muted)] uppercase font-bold tracking-widest mt-1">
+                    сумма мечты: {dreamPrice} ★
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-auto">
+                <div className="relative h-2.5 bg-black/50 rounded-full overflow-hidden mb-2.5 border border-white/5">
+                  <div
+                    className="absolute h-full bg-gradient-to-r from-[var(--primary)] to-indigo-400 transition-all duration-1000"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-[11px] font-black text-[var(--text-muted)] uppercase tracking-[0.15em]">Прогресс до цели</span>
+                  <span className="text-lg font-black text-white">{Math.round(progress)}%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
       )}
 
       {/* 2. Баланс */}
@@ -346,20 +428,22 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
       <div className="bg-[var(--bg-card)] rounded-[2.5rem] border border-[var(--border)] overflow-hidden shadow-xl relative">
         <div className="p-7 bg-black/20">
           <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-5">
+            <div className="basis-[88px] shrink-0 flex justify-start">
               <div className="p-3.5 rounded-2xl bg-indigo-500/10 text-indigo-400">
                 <MapPin size={26} />
               </div>
-              <div>
-                <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white">Где мой ребенок</h4>
-                <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mt-1">
-                  Геолокация и маршрут скоро появятся
-                </p>
-              </div>
             </div>
-            <span className="px-3 py-1.5 rounded-full bg-indigo-500/15 text-indigo-300 text-[10px] font-black uppercase tracking-widest border border-indigo-400/30">
-              Скоро
-            </span>
+            <div className="flex-1 min-w-0 text-center px-2">
+              <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white">Где мой ребенок</h4>
+              <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mt-1 max-w-[320px] mx-auto">
+                Геолокация и маршрут скоро появятся
+              </p>
+            </div>
+            <div className="basis-[88px] shrink-0 flex justify-end">
+              <span className="px-3 py-1.5 rounded-full bg-indigo-500/15 text-indigo-300 text-[10px] font-black uppercase tracking-widest border border-indigo-400/30">
+                Скоро
+              </span>
+            </div>
           </div>
         </div>
 

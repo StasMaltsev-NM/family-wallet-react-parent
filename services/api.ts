@@ -317,6 +317,30 @@ export const parentApi = {
       inviteCode
     );
   },
+
+  getPendingDreams(inviteCode: string) {
+    return request<{ dreams: any[] }>(
+      "/api/dreams/pending",
+      {
+        method: "GET",
+      },
+      inviteCode
+    );
+  },
+
+  setDreamGoal(inviteCode: string, dreamId: string, targetAmount: number) {
+    return request<{ message: string }>(
+      "/api/dreams/set-goal",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          dream_id: dreamId,
+          target_amount: targetAmount,
+        }),
+      },
+      inviteCode
+    );
+  },
 };
 
 // --- Kid API ---
