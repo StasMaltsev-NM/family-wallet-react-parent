@@ -418,14 +418,16 @@ useEffect(() => {
   const refreshTasks = useCallback(async () => {
     const code = parentCodeRef.current;
 
-if (!code) {
-  setApiChildren([]);
-  setTasks([]);
-  setPendingDreamsByChild({});
-  setChildPurchases({});
-  // childHistory сбросится только при явном logout
-  return;
-}
+    if (!code) {
+      setApiChildren([]);
+      setTasks([]);
+      setPendingDreamsByChild({});
+      setChildPurchases({});
+      // childHistory сбросится только при явном logout
+      setIsInitialDataLoading(false);
+      setLastSyncAt(Date.now());
+      return;
+    }
 
     try {
       console.log("[auto-refresh] tick", new Date().toLocaleTimeString());
@@ -536,43 +538,14 @@ if (!code) {
         const purchasesResp = await parentApi.getFamilyPurchases(code);
         const allPurchases = purchasesResp?.purchases ?? [];
 
-        let rewards = [] as any[];
-        try {
-          const rewardsResp = await parentApi.listRewards(code);
-          rewards = rewardsResp?.rewards ?? [];
-        } catch (rewardsErr) {
-          console.error("[rewards/list] FAILED while enriching purchases:", rewardsErr);
-        }
-
-        const rewardImageByStrictKey = new Map<string, string>();
-        const rewardImageByChildTitle = new Map<string, string>();
-        for (const reward of rewards) {
-          const image = String(reward?.image_url || "").trim();
-          if (!image) continue;
-          const childId = String(reward?.child_id || "");
-          const title = normalizeLookupText(reward?.title);
-          const price = Number(reward?.price ?? 0) || 0;
-          if (childId && title) {
-            rewardImageByChildTitle.set(`${childId}__${title}`, image);
-            if (price > 0) rewardImageByStrictKey.set(`${childId}__${title}__${price}`, image);
-          }
-        }
-
         const purchasesMap: Record<string, any[]> = {};
         for (const p of allPurchases) {
-          const childId = String(p?.child_id || "");
-          const title = normalizeLookupText(p?.reward_title);
-          const price = Number(p?.price ?? 0) || 0;
-          const strictKey = `${childId}__${title}__${price}`;
-          const softKey = `${childId}__${title}`;
-          const rewardImageUrl =
-            rewardImageByStrictKey.get(strictKey) ||
-            rewardImageByChildTitle.get(softKey) ||
-            "";
-
           const normalizedPurchase = {
             ...p,
-            reward_image_url: rewardImageUrl || String(p?.reward_image_url || "").trim() || "",
+            reward_image_url:
+              String(p?.reward_image_url || "").trim() ||
+              String(p?.image_url || "").trim() ||
+              "",
           };
 
           if (!purchasesMap[p.child_id]) purchasesMap[p.child_id] = [];
@@ -636,23 +609,33 @@ if (!code) {
       // Rewards prefetch is disabled because payload can be very heavy (base64 images),
       // which blocks initial app loading in WebView/VPN scenarios.
       // Shop fetches rewards on demand.
+      const compactPurchasesMap: Record<string, any[]> = {};
+      for (const [childId, purchases] of Object.entries(nextPurchasesMap)) {
+        compactPurchasesMap[childId] = (purchases || []).map((p: any) => {
+          const image = String(p?.reward_image_url || "").trim();
+          return {
+            ...p,
+            reward_image_url: image.startsWith("data:") ? "" : image,
+          };
+        });
+      }
 
       writeSessionCache(getAppCacheKey(code), {
-        children: nextKids,
+        children: hydratedKids,
         tasks: nextTasks,
         pendingDreamsByChild: nextPendingDreamsByChild,
-        childPurchases: nextPurchasesMap,
+        childPurchases: compactPurchasesMap,
         childHistory: nextHistoryMap,
-        selectedChildId: selectedChildIdRef.current || nextKids[0]?.id || "",
+        selectedChildId: selectedChildIdRef.current || hydratedKids[0]?.id || "",
       });
-      setIsInitialDataLoading(false);
 
-      console.log("[auto-refresh] children/tasks:", nextKids.length, nextTasks.length);
+      console.log("[auto-refresh] children/tasks:", hydratedKids.length, nextTasks.length);
     } catch (e: any) {
       const msg = e?.message || String(e);
       setApiError(msg);
       console.error("PARENT API FAIL:", e);
     } finally {
+      setIsInitialDataLoading(false);
       setLastSyncAt(Date.now());
     }
   }, [getAppCacheKey, getRewardsCacheKey]);
