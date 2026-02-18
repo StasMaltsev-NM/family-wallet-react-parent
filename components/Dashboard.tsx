@@ -428,7 +428,7 @@ const Dashboard: React.FC<Props> = ({
             </div>
           </div>
           <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white flex-1 text-center px-2">Активность</h4>
-          <div className="basis-[88px] shrink-0 flex items-center justify-end gap-2">
+          <div className="basis-[88px] shrink-0 flex items-center justify-end gap-2 pr-3">
             <span
               className="inline-flex items-center justify-center min-w-11 h-11 bg-[var(--primary)] text-black text-[12px] font-black px-3 py-1.5 rounded-full shadow-lg opacity-0 pointer-events-none select-none"
               aria-hidden="true"
