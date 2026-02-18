@@ -60,6 +60,19 @@ function resolvePendingRewardImageSrc(purchase: any): string {
   return '';
 }
 
+function formatCompactStars(value: number): string {
+  const abs = Math.abs(value);
+  const compact = (num: number) => {
+    const shown = num >= 10 ? num.toFixed(0) : num.toFixed(1);
+    return shown.replace(/\.0$/, "");
+  };
+
+  if (abs >= 1_000_000_000) return `${compact(value / 1_000_000_000)} млрд`;
+  if (abs >= 1_000_000) return `${compact(value / 1_000_000)} м`;
+  if (abs >= 1_000) return `${compact(value / 1_000)} к`;
+  return String(Math.trunc(value));
+}
+
 const Dashboard: React.FC<Props> = ({
   child,
   onUpdateChild,
@@ -87,8 +100,8 @@ const Dashboard: React.FC<Props> = ({
   const progress = Math.min(100, (dreamCurrent / dreamPrice) * 100);
   const hasPendingDream = Boolean(pendingDream?.id);
   const dreamImageSrc = resolveDreamImageSrc(child?.dream?.image);
-  const balanceDigits = String(Math.abs(Math.trunc(Number(child?.balance?.confirmed ?? 0)))).length;
-  const balanceValueClass = balanceDigits >= 6 ? 'text-[27px]' : 'text-3xl';
+  const confirmedBalance = Math.trunc(Number(child?.balance?.confirmed ?? 0) || 0);
+  const compactBalance = formatCompactStars(confirmedBalance);
 
   useEffect(() => {
     if (hasPendingDream) {
@@ -231,7 +244,10 @@ const Dashboard: React.FC<Props> = ({
               </button>
             </div>
 
-            <div className="flex-1 p-5 sm:p-6 flex flex-col justify-end min-w-0">
+            <div className="flex-1 p-5 sm:p-6 flex flex-col justify-between min-w-0">
+              <div className="mb-2 min-w-0">
+                <h3 className="text-lg sm:text-xl font-black text-white truncate">{child.dream.title}</h3>
+              </div>
               <div className="flex justify-end mb-3">
                 <p className="text-[22px] sm:text-2xl font-black text-[var(--primary)] flex items-center gap-1.5 whitespace-nowrap">
                   <span>{dreamRemaining}</span>
@@ -259,8 +275,8 @@ const Dashboard: React.FC<Props> = ({
         </div>
         <div className="min-w-0">
           <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.2em] mb-1">Баланс</p>
-          <p className={`${balanceValueClass} leading-none font-black text-white flex items-center gap-2 min-w-0`}>
-            <span className="truncate">{child.balance.confirmed}</span>
+          <p className="text-3xl leading-none font-black text-white flex items-center gap-2 min-w-0">
+            <span title={String(confirmedBalance)}>{compactBalance}</span>
             <Star size={20} className="text-emerald-400 shrink-0" fill="currentColor" />
           </p>
         </div>
