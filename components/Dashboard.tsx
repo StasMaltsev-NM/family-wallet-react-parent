@@ -420,7 +420,8 @@ const Dashboard: React.FC<Props> = ({
             </div>
           </div>
           <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white flex-1 text-center px-2">Активность</h4>
-          <div className="basis-[88px] shrink-0 flex items-center justify-end">
+          <div className="basis-[88px] shrink-0 flex items-center justify-end gap-2">
+            <span className="w-8 h-8 rounded-full opacity-0 pointer-events-none" aria-hidden="true" />
             <ChevronDown size={24} className={`text-[var(--text-muted)] transition-transform duration-500 ${isActivityExpanded ? 'rotate-180' : ''}`} />
           </div>
         </button>
