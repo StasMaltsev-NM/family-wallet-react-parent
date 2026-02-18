@@ -14,7 +14,7 @@ interface Props {
 
 const ChildSwitcher: React.FC<Props> = ({ children, selectedId, onSelect, onAdd, childPurchases }) => {
   return (
-    <div className="flex overflow-x-auto no-scrollbar gap-6 items-center pt-4 pb-6 pl-5 pr-20 -mx-5 snap-x snap-mandatory">
+    <div className="flex overflow-x-auto no-scrollbar gap-6 items-center pt-1 pb-2 pl-5 pr-20 -mx-5 snap-x snap-mandatory">
       {children.map(child => {
         const isSelected = child.id === selectedId;
         
@@ -73,7 +73,7 @@ const ChildSwitcher: React.FC<Props> = ({ children, selectedId, onSelect, onAdd,
       
       <button 
         onClick={onAdd}
-        className="w-16 h-16 rounded-full border-[3px] border-dashed border-[var(--text-muted)]/30 flex items-center justify-center text-[var(--text-muted)] hover:border-[var(--primary)] hover:text-[var(--primary)] transition-all flex-shrink-0 mb-7"
+        className="w-16 h-16 rounded-full border-[3px] border-dashed border-[var(--text-muted)]/30 flex items-center justify-center text-[var(--text-muted)] hover:border-[var(--primary)] hover:text-[var(--primary)] transition-all flex-shrink-0 self-center"
       >
         <Plus size={32} />
       </button>

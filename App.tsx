@@ -116,6 +116,18 @@ function taskBelongsToChild(task: any, child: any): boolean {
   return false;
 }
 
+function resolveDreamImage(kid: any): string {
+  const candidate =
+    kid?.dream_image_url ||
+    kid?.dream_image ||
+    kid?.dream?.image_url ||
+    kid?.dream?.image ||
+    "";
+  const raw = String(candidate || "").trim();
+  if (raw) return raw;
+  return "https://api.dicebear.com/7.x/shapes/svg?seed=dream";
+}
+
 const App: React.FC = () => {
   console.log("[APP RENDER]");
 
@@ -427,7 +439,7 @@ if (!code) {
         balance: kid.balance,
         dream: {
           title: kid.dream_title || "Мечта",
-          image: "https://api.dicebear.com/7.x/shapes/svg?seed=dream",
+          image: resolveDreamImage(kid),
           current: kid.dream_current || kid.balance?.confirmed || 0,
           price: kid.dream_target || 10000
         },
@@ -1088,8 +1100,8 @@ if (!code) {
 
   return (
     <div className="h-screen flex flex-col transition-colors duration-500 bg-black text-white w-full max-w-full overflow-x-hidden">
-      <header className="w-full px-4 pt-5 pb-2 sticky top-0 z-40 bg-black max-w-full">
-        <div className="flex items-center justify-between mb-4">
+      <header className="w-full px-4 pt-3 pb-0 sticky top-0 z-40 bg-black max-w-full">
+        <div className="flex items-center justify-between mb-2">
           <h1 className="text-3xl font-black tracking-tight text-center">
             В<span className="text-amber-400">Э</span>Й!
           </h1>
@@ -1125,7 +1137,7 @@ if (!code) {
         />
       </header>
 
-      <main className="flex-1 overflow-y-auto scrollArea max-w-3xl mx-auto px-4 md:px-6 mt-6 pb-40 w-full max-w-full box-border">
+      <main className="flex-1 overflow-y-auto scrollArea max-w-3xl mx-auto px-4 md:px-6 mt-2 pb-40 w-full max-w-full box-border">
         {renderContent()}
       </main>
 

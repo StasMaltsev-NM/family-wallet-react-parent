@@ -40,6 +40,26 @@ interface Props {
   onSetDreamGoal?: (dreamId: string, targetAmount: number) => Promise<void>;
 }
 
+function resolveDreamImageSrc(image: string | undefined): string {
+  const src = String(image || '').trim();
+  if (!src) return 'https://api.dicebear.com/7.x/shapes/svg?seed=dream';
+  return src;
+}
+
+function resolvePendingRewardImageSrc(purchase: any): string {
+  const variants = [
+    purchase?.reward_image_url,
+    purchase?.reward_image,
+    purchase?.image_url,
+    purchase?.image,
+  ];
+  for (const value of variants) {
+    const src = String(value || '').trim();
+    if (src) return src;
+  }
+  return '';
+}
+
 const Dashboard: React.FC<Props> = ({
   child,
   onUpdateChild,
@@ -66,6 +86,9 @@ const Dashboard: React.FC<Props> = ({
   const dreamRemaining = Math.max(0, dreamPrice - dreamCurrent);
   const progress = Math.min(100, (dreamCurrent / dreamPrice) * 100);
   const hasPendingDream = Boolean(pendingDream?.id);
+  const dreamImageSrc = resolveDreamImageSrc(child?.dream?.image);
+  const balanceDigits = String(Math.abs(Math.trunc(Number(child?.balance?.confirmed ?? 0)))).length;
+  const balanceValueClass = balanceDigits >= 6 ? 'text-[27px]' : 'text-3xl';
 
   useEffect(() => {
     if (hasPendingDream) {
@@ -190,12 +213,14 @@ const Dashboard: React.FC<Props> = ({
         </div>
       ) : (
         child.dream.title && child.dream.title !== "Мечта" && (
-          <div className="bg-[var(--bg-card)] rounded-[2.5rem] overflow-hidden border border-[var(--primary)]/30 shadow-2xl flex flex-row items-stretch h-40 group w-full max-w-full">
-            <div className="relative w-40 flex-shrink-0 overflow-hidden">
+          <div className="bg-[var(--bg-card)] rounded-[2.5rem] overflow-hidden border border-[var(--primary)]/30 shadow-2xl flex flex-row items-stretch h-36 sm:h-40 group w-full max-w-full">
+            <div className="relative w-36 sm:w-40 flex-shrink-0 overflow-hidden">
               <img
-                src={child.dream.image}
+                src={dreamImageSrc}
                 alt={child.dream.title}
                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000"
+                loading="lazy"
+                decoding="async"
               />
               <div className="absolute inset-0 bg-black/30" />
               <button
@@ -206,34 +231,20 @@ const Dashboard: React.FC<Props> = ({
               </button>
             </div>
 
-            <div className="flex-1 p-6 flex flex-col justify-between min-w-0">
-              <div className="flex justify-between items-start gap-3">
-                <div className="flex-1 min-w-0">
-                  <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.25em] mb-1">Мечта ребенка</p>
-                  <h3 className="text-xl font-black truncate text-white leading-tight">{child.dream.title}</h3>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <p className="text-2xl font-black text-[var(--primary)] flex items-center justify-end gap-1">
-                    {dreamRemaining} <Star size={20} fill="currentColor" />
-                  </p>
-                  <p className="text-[11px] text-[var(--text-muted)] uppercase font-bold tracking-widest">осталось до цели</p>
-                  <p className="text-[11px] text-[var(--text-muted)] uppercase font-bold tracking-widest mt-1">
-                    сумма мечты: {dreamPrice} ★
-                  </p>
-                </div>
+            <div className="flex-1 p-5 sm:p-6 flex flex-col justify-end min-w-0">
+              <div className="flex justify-end mb-3">
+                <p className="text-[22px] sm:text-2xl font-black text-[var(--primary)] flex items-center gap-1.5 whitespace-nowrap">
+                  <span>{dreamRemaining}</span>
+                  <span className="text-white/50">/</span>
+                  <span>{dreamPrice}</span>
+                  <Star size={18} fill="currentColor" />
+                </p>
               </div>
-
-              <div className="mt-auto">
-                <div className="relative h-2.5 bg-black/50 rounded-full overflow-hidden mb-2.5 border border-white/5">
-                  <div
-                    className="absolute h-full bg-gradient-to-r from-[var(--primary)] to-indigo-400 transition-all duration-1000"
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-[11px] font-black text-[var(--text-muted)] uppercase tracking-[0.15em]">Прогресс до цели</span>
-                  <span className="text-lg font-black text-white">{Math.round(progress)}%</span>
-                </div>
+              <div className="relative h-2.5 bg-black/50 rounded-full overflow-hidden border border-white/5">
+                <div
+                  className="absolute h-full bg-gradient-to-r from-[var(--primary)] to-indigo-400 transition-all duration-1000"
+                  style={{ width: `${progress}%` }}
+                />
               </div>
             </div>
           </div>
@@ -243,16 +254,17 @@ const Dashboard: React.FC<Props> = ({
       {/* 2. Баланс */}
       <div className="grid grid-cols-2 gap-5 w-full max-w-full">
         <div className="bg-[var(--bg-card)] p-6 rounded-[2.2rem] border border-[var(--border)] shadow-xl flex items-center gap-5 w-full max-w-full min-w-0">
-          <div className="w-14 h-14 bg-emerald-500/10 rounded-2xl flex items-center justify-center text-emerald-400">
-            <ArrowUpRight size={28} />
-          </div>
-          <div>
-            <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.2em] mb-1">Баланс</p>
-            <p className="text-3xl font-black text-white flex items-center gap-2">
-              {child.balance.confirmed} <Star size={20} className="text-emerald-400" fill="currentColor" />
-            </p>
-          </div>
+        <div className="w-14 h-14 bg-emerald-500/10 rounded-2xl flex items-center justify-center text-emerald-400">
+          <ArrowUpRight size={28} />
         </div>
+        <div className="min-w-0">
+          <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.2em] mb-1">Баланс</p>
+          <p className={`${balanceValueClass} leading-none font-black text-white flex items-center gap-2 min-w-0`}>
+            <span className="truncate">{child.balance.confirmed}</span>
+            <Star size={20} className="text-emerald-400 shrink-0" fill="currentColor" />
+          </p>
+        </div>
+      </div>
 
         <div className="bg-[var(--bg-card)] p-6 rounded-[2.2rem] border border-[var(--border)] shadow-xl flex items-center gap-5 w-full max-w-full min-w-0">
           <div className="w-14 h-14 bg-amber-500/10 rounded-2xl flex items-center justify-center text-amber-400">
@@ -338,14 +350,26 @@ const Dashboard: React.FC<Props> = ({
             {pendingPurchases.length === 0 ? (
               <p className="text-center py-6 text-[12px] font-black text-[var(--text-muted)] uppercase tracking-widest">Нет наград к выдаче</p>
             ) : (
-              pendingPurchases.map(p => (
-                <div key={p.id} className="flex items-center gap-6 p-6 bg-white/[0.03] rounded-[2.2rem] border border-white/10 shadow-lg hover:bg-white/[0.05] transition-all">
-                  {/* Увеличенная картинка награды */}
+              pendingPurchases.map((p) => {
+                const rewardImageSrc = resolvePendingRewardImageSrc(p);
+                return (
+                <div key={p.id} className="flex items-center gap-5 p-6 bg-white/[0.03] rounded-[2.2rem] border border-white/10 shadow-lg hover:bg-white/[0.05] transition-all">
                   <div className="relative flex-shrink-0">
-                    <div className="w-20 h-20 rounded-[1.5rem] flex items-center justify-center text-5xl border-2 border-white/10 shadow-xl bg-white/5">{p.reward_icon}</div>
+                    <div className="w-14 h-14 rounded-[1.1rem] flex items-center justify-center border border-white/10 shadow-lg bg-white/5 overflow-hidden">
+                      {rewardImageSrc ? (
+                        <img
+                          src={rewardImageSrc}
+                          alt={p.reward_title || 'reward'}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      ) : (
+                        <span className="text-3xl leading-none">{p.reward_icon || '🎁'}</span>
+                      )}
+                    </div>
                   </div>
                   
-                  {/* Инфо блок */}
                   <div className="flex-1 min-w-0">
                     <h5 className="text-xl font-black text-white truncate leading-tight mb-2">{p.reward_title}</h5>
                     <div className="flex flex-col gap-1.5">
@@ -360,7 +384,8 @@ const Dashboard: React.FC<Props> = ({
                     </div>
                   </div>
                 </div>
-              ))
+                );
+              })
             )}
           </div>
         )}
