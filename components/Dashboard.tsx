@@ -67,9 +67,9 @@ function formatCompactStars(value: number): string {
     return shown.replace(/\.0$/, "");
   };
 
-  if (abs >= 1_000_000_000) return `${compact(value / 1_000_000_000)} млрд`;
-  if (abs >= 1_000_000) return `${compact(value / 1_000_000)} м`;
-  if (abs >= 1_000) return `${compact(value / 1_000)} к`;
+  if (abs >= 1_000_000_000) return `${compact(value / 1_000_000_000)}млрд`;
+  if (abs >= 1_000_000) return `${compact(value / 1_000_000)}м`;
+  if (abs >= 1_000) return `${compact(value / 1_000)}к`;
   return String(Math.trunc(value));
 }
 
@@ -246,7 +246,10 @@ const Dashboard: React.FC<Props> = ({
 
             <div className="flex-1 p-5 sm:p-6 flex flex-col justify-between min-w-0">
               <div className="mb-2 min-w-0">
-                <h3 className="text-lg sm:text-xl font-black text-white truncate">{child.dream.title}</h3>
+                <div className="flex items-baseline gap-2 min-w-0">
+                  <h3 className="text-lg sm:text-xl font-black text-white truncate">{child.dream.title}</h3>
+                  <span className="text-[11px] font-bold text-[var(--text-muted)] whitespace-nowrap">мечта ребенка</span>
+                </div>
               </div>
               <div className="flex justify-end mb-3">
                 <p className="text-[22px] sm:text-2xl font-black text-[var(--primary)] flex items-center gap-1.5 whitespace-nowrap">
@@ -269,27 +272,28 @@ const Dashboard: React.FC<Props> = ({
 
       {/* 2. Баланс */}
       <div className="grid grid-cols-2 gap-5 w-full max-w-full">
-        <div className="bg-[var(--bg-card)] p-6 rounded-[2.2rem] border border-[var(--border)] shadow-xl flex items-center gap-5 w-full max-w-full min-w-0">
-        <div className="w-14 h-14 bg-emerald-500/10 rounded-2xl flex items-center justify-center text-emerald-400">
-          <ArrowUpRight size={28} />
-        </div>
-        <div className="min-w-0">
-          <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.2em] mb-1">Баланс</p>
-          <p className="text-3xl leading-none font-black text-white flex items-center gap-2 min-w-0">
-            <span title={String(confirmedBalance)}>{compactBalance}</span>
-            <Star size={20} className="text-emerald-400 shrink-0" fill="currentColor" />
-          </p>
-        </div>
-      </div>
-
-        <div className="bg-[var(--bg-card)] p-6 rounded-[2.2rem] border border-[var(--border)] shadow-xl flex items-center gap-5 w-full max-w-full min-w-0">
-          <div className="w-14 h-14 bg-amber-500/10 rounded-2xl flex items-center justify-center text-amber-400">
-            <Timer size={28} />
+        <div className="relative bg-[var(--bg-card)] p-6 rounded-[2.2rem] border border-[var(--border)] shadow-xl w-full max-w-full min-w-0">
+          <div className="absolute top-4 right-4 w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-400">
+            <ArrowUpRight size={18} />
           </div>
-          <div>
-            <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.2em] mb-1">Проверка</p>
-            <p className="text-3xl font-black text-white/90 flex items-center gap-2">
-              {child.balance.pending} <Star size={20} className="text-amber-500/50" fill="currentColor" />
+          <div className="min-w-0 pr-12">
+            <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.2em] mb-2">Баланс</p>
+            <p className="text-[34px] sm:text-[42px] leading-none font-black text-white flex items-center gap-1 min-w-0 whitespace-nowrap">
+              <span title={String(confirmedBalance)}>{compactBalance}</span>
+              <Star size={16} className="text-emerald-400 shrink-0" fill="currentColor" />
+            </p>
+          </div>
+        </div>
+
+        <div className="relative bg-[var(--bg-card)] p-6 rounded-[2.2rem] border border-[var(--border)] shadow-xl w-full max-w-full min-w-0">
+          <div className="absolute top-4 right-4 w-10 h-10 bg-amber-500/10 rounded-xl flex items-center justify-center text-amber-400">
+            <Timer size={18} />
+          </div>
+          <div className="pr-12">
+            <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.2em] mb-2">Проверка</p>
+            <p className="text-[34px] sm:text-[42px] leading-none font-black text-white/90 flex items-center gap-1 whitespace-nowrap">
+              <span>{child.balance.pending}</span>
+              <Star size={16} className="text-amber-500/60 shrink-0" fill="currentColor" />
             </p>
           </div>
         </div>
