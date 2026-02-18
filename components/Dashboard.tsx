@@ -309,7 +309,11 @@ const Dashboard: React.FC<Props> = ({
           </div>
           <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white flex-1 text-center px-2">Миссии на проверку</h4>
           <div className="basis-[88px] shrink-0 flex items-center justify-end gap-2">
-            {pendingMissions.length > 0 && <span className="bg-amber-400 text-black text-[12px] font-black px-3 py-1.5 rounded-full shadow-lg">{pendingMissions.length}</span>}
+            {pendingMissions.length > 0 && (
+              <span className="inline-flex items-center justify-center min-w-11 h-11 bg-amber-400 text-black text-[12px] font-black px-3 py-1.5 rounded-full shadow-lg">
+                {pendingMissions.length}
+              </span>
+            )}
             <ChevronDown size={24} className={`text-[var(--text-muted)] transition-transform duration-500 ${isMissionsExpanded ? 'rotate-180' : ''}`} />
           </div>
         </button>
@@ -360,7 +364,11 @@ const Dashboard: React.FC<Props> = ({
             Вручить<br/>награды
           </h4>
           <div className="basis-[88px] shrink-0 flex items-center justify-end gap-2">
-            {pendingPurchases.length > 0 && <span className="bg-[var(--primary)] text-black text-[12px] font-black px-3 py-1.5 rounded-full shadow-lg">{pendingPurchases.length}</span>}
+            {pendingPurchases.length > 0 && (
+              <span className="inline-flex items-center justify-center min-w-11 h-11 bg-[var(--primary)] text-black text-[12px] font-black px-3 py-1.5 rounded-full shadow-lg">
+                {pendingPurchases.length}
+              </span>
+            )}
             <ChevronDown size={24} className={`text-[var(--text-muted)] transition-transform duration-500 ${isPrizesExpanded ? 'rotate-180' : ''}`} />
           </div>
         </button>
@@ -422,7 +430,7 @@ const Dashboard: React.FC<Props> = ({
           <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white flex-1 text-center px-2">Активность</h4>
           <div className="basis-[88px] shrink-0 flex items-center justify-end gap-2">
             <span
-              className="inline-flex items-center justify-center bg-[var(--primary)] text-black text-[12px] font-black px-3 py-1.5 rounded-full shadow-lg opacity-0 pointer-events-none select-none"
+              className="inline-flex items-center justify-center min-w-11 h-11 bg-[var(--primary)] text-black text-[12px] font-black px-3 py-1.5 rounded-full shadow-lg opacity-0 pointer-events-none select-none"
               aria-hidden="true"
             >
               0
