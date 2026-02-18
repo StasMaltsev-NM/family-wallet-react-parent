@@ -421,8 +421,13 @@ const Dashboard: React.FC<Props> = ({
           </div>
           <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white flex-1 text-center px-2">Активность</h4>
           <div className="basis-[88px] shrink-0 flex items-center justify-end gap-2">
-            <span className="w-8 h-8 rounded-full opacity-0 pointer-events-none" aria-hidden="true" />
-            <ChevronDown size={24} className={`text-[var(--text-muted)] transition-transform duration-500 ${isActivityExpanded ? 'rotate-180' : ''}`} />
+            <span
+              className="invisible bg-[var(--primary)] text-black text-[12px] font-black px-3 py-1.5 rounded-full shadow-lg pointer-events-none"
+              aria-hidden="true"
+            >
+              00
+            </span>
+            <ChevronDown size={24} className={`text-[var(--text-muted)] transition-transform duration-500 -translate-y-px ${isActivityExpanded ? 'rotate-180' : ''}`} />
           </div>
         </button>
 
