@@ -328,6 +328,16 @@ export const parentApi = {
     );
   },
 
+  getActiveDreams(inviteCode: string) {
+    return request<{ dreams: any[] }>(
+      "/api/dreams/active",
+      {
+        method: "GET",
+      },
+      inviteCode
+    );
+  },
+
   setDreamGoal(inviteCode: string, dreamId: string, targetAmount: number) {
     return request<{ message: string }>(
       "/api/dreams/set-goal",
