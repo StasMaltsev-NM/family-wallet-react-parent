@@ -441,7 +441,7 @@ const Dashboard: React.FC<Props> = ({
                 0
               </span>
             </div>
-            <ChevronDown size={24} className={`-translate-x-4 text-[var(--text-muted)] transition-transform duration-500 ${isActivityExpanded ? 'rotate-180' : ''}`} />
+            <ChevronDown size={24} className={`-translate-x-[18px] text-[var(--text-muted)] transition-transform duration-500 ${isActivityExpanded ? 'rotate-180' : ''}`} />
           </div>
         </button>
 
