@@ -95,6 +95,9 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   const prizesRef = useRef<Prize[]>(prizes);
   const rewardsInFlightRef = useRef<Promise<any[]> | null>(null);
   const rewardsLastFetchAtRef = useRef(0);
+  const modalSelectionInitializedRef = useRef(false);
+  const createSubmitLockRef = useRef(false);
+  const rewardGroupByIdRef = useRef<Map<string, string[]>>(new Map());
   const { runInstant, isPending } = useInstantAction();
 
   const mapRewards = (rewards: any[]) =>
@@ -165,6 +168,49 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
     writeSessionCache(cacheKey, next);
     writeRuntimeRewardsCache(cacheKey, next);
     writePersistentRewardsCache(compactRewardsForPersistentCache(next));
+  };
+
+  const rememberRewardGroup = (rewardIds: string[]) => {
+    const uniqueIds = Array.from(new Set(rewardIds.filter(Boolean)));
+    if (uniqueIds.length < 2) return;
+    uniqueIds.forEach((id) => {
+      rewardGroupByIdRef.current.set(id, uniqueIds);
+    });
+  };
+
+  const mirrorImageToLinkedRewards = (
+    sourceRewardId: string,
+    sourceImageUrl: string,
+    sourceMeta?: { title: string; price: number; isOneTime: boolean }
+  ) => {
+    const imageUrl = String(sourceImageUrl || '').trim();
+    if (!imageUrl) return;
+    const linkedIds = rewardGroupByIdRef.current.get(sourceRewardId) || [];
+
+    setPrizes((prev) => {
+      let changed = false;
+      const next = prev.map((prize) => {
+        if (prize.id === sourceRewardId) return prize;
+        const inLinkedGroup = linkedIds.includes(prize.id);
+        const sameMeta = sourceMeta
+          ? prize.name === sourceMeta.title &&
+            Number(prize.cost) === Number(sourceMeta.price) &&
+            Boolean(prize.isOneTime) === Boolean(sourceMeta.isOneTime)
+          : false;
+
+        if ((inLinkedGroup || sameMeta) && !prize.image_url) {
+          changed = true;
+          return { ...prize, image_url: imageUrl };
+        }
+        return prize;
+      });
+
+      if (changed) {
+        updateRewardsCache(next);
+        return next;
+      }
+      return prev;
+    });
   };
 
   const waitForImages = async (rewardIds: string[], attempts = 18, delayMs = 5000) => {
@@ -244,7 +290,14 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   }, [inviteCode, cacheKey, refreshRewards]);
 
   useEffect(() => {
-    if (!isAdding) return;
+    if (!isAdding) {
+      modalSelectionInitializedRef.current = false;
+      return;
+    }
+    if (modalSelectionInitializedRef.current) return;
+    if (!allChildren.length) return;
+    modalSelectionInitializedRef.current = true;
+
     if (allChildren.length === 1) {
       const onlyId = allChildren[0].apiChildId || allChildren[0].id;
       setSelectedChildIds([onlyId]);
@@ -316,48 +369,49 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   };
 
 const handleCreateReward = async () => {
-  if (isPending('create-reward')) return;
-
-  const title = newPrize.name.trim();
-  const price = Number(newPrize.cost);
-  const isPermanent = newPrize.isPermanent;
-
-  if (selectedChildIds.length === 0) {
-    setCreateFeedback({ type: 'error', message: 'Выберите хотя бы одного ребёнка.' });
-    return;
-  }
-
-  if (!title || !Number.isFinite(price) || price <= 0) {
-    setCreateFeedback({ type: 'error', message: 'Заполните корректно название и цену.' });
-    return;
-  }
-
-  const selectedChildren = selectedChildIds
-    .map((localId) => allChildren.find((c) => (c.apiChildId || c.id) === localId))
-    .filter(Boolean) as Child[];
-
-  const apiChildIds = Array.from(
-    new Set(
-      selectedChildren
-        .map((child) => child.apiChildId || child.id)
-        .filter((childId): childId is string => Boolean(childId))
-    )
-  );
-
-  const unresolvedCount = selectedChildIds.length - apiChildIds.length;
-  if (apiChildIds.length === 0) {
-    setCreateFeedback({ type: 'error', message: 'Не удалось определить профиль ребёнка для API.' });
-    return;
-  }
-
-  setCreateFeedback({ type: 'info', message: 'Создаём награду...' });
-
-  // UI реагирует сразу: закрываем модалку и продолжаем запросы в фоне.
-  setIsAdding(false);
-  setSelectedChildIds([]);
-  setNewPrize({ name: '', cost: '', isPermanent: true });
+  if (isPending('create-reward') || createSubmitLockRef.current) return;
+  createSubmitLockRef.current = true;
 
   try {
+    const title = newPrize.name.trim();
+    const price = Number(newPrize.cost);
+    const isPermanent = newPrize.isPermanent;
+
+    if (selectedChildIds.length === 0) {
+      setCreateFeedback({ type: 'error', message: 'Выберите хотя бы одного ребёнка.' });
+      return;
+    }
+
+    if (!title || !Number.isFinite(price) || price <= 0) {
+      setCreateFeedback({ type: 'error', message: 'Заполните корректно название и цену.' });
+      return;
+    }
+
+    const selectedChildren = selectedChildIds
+      .map((localId) => allChildren.find((c) => (c.apiChildId || c.id) === localId))
+      .filter(Boolean) as Child[];
+
+    const apiChildIds = Array.from(
+      new Set(
+        selectedChildren
+          .map((child) => child.apiChildId || child.id)
+          .filter((childId): childId is string => Boolean(childId))
+      )
+    );
+
+    const unresolvedCount = selectedChildIds.length - apiChildIds.length;
+    if (apiChildIds.length === 0) {
+      setCreateFeedback({ type: 'error', message: 'Не удалось определить профиль ребёнка для API.' });
+      return;
+    }
+
+    setCreateFeedback({ type: 'info', message: 'Создаём награду...' });
+
+    // UI реагирует сразу: закрываем модалку и продолжаем запросы в фоне.
+    setIsAdding(false);
+    setSelectedChildIds([]);
+    setNewPrize({ name: '', cost: '', isPermanent: true });
+
     const started = await runInstant('create-reward', async () => {
       const createResults = await Promise.allSettled(
         apiChildIds.map((childId) =>
@@ -391,10 +445,23 @@ const handleCreateReward = async () => {
         return;
       }
 
+      rememberRewardGroup(createdRewardIds);
+
       const rewardsRes = await parentApi.listRewards(inviteCode);
       const mappedRewards = mapRewards(rewardsRes.rewards);
       setPrizes(mappedRewards);
       updateRewardsCache(mappedRewards);
+
+      const createdRewards = mappedRewards.filter((reward) => createdRewardIds.includes(reward.id));
+      const firstReady = createdRewards.find((reward) => Boolean(String(reward.image_url || '').trim()));
+      if (firstReady?.image_url) {
+        mirrorImageToLinkedRewards(firstReady.id, firstReady.image_url, {
+          title: firstReady.name,
+          price: Number(firstReady.cost),
+          isOneTime: Boolean(firstReady.isOneTime),
+        });
+      }
+
       startBackgroundImageRefresh(createdRewardIds);
 
       const totalIssueCount = unresolvedCount + failedCount;
@@ -418,6 +485,8 @@ const handleCreateReward = async () => {
       type: 'error',
       message: `Ошибка создания: ${getErrorMessage(err)}`,
     });
+  } finally {
+    createSubmitLockRef.current = false;
   }
 };
 
@@ -444,7 +513,16 @@ const handleCreateReward = async () => {
     try {
       const result = await runInstant(key, async () => parentApi.regenerateRewardImage(inviteCode, id));
       if (result === null) return;
-      await refreshRewards({ showProgress: true });
+      const rewards = await refreshRewards({ showProgress: true, force: true });
+      const source = rewards.find((reward: any) => reward.id === id);
+      const sourceImageUrl = String(source?.image_url || '').trim();
+      if (sourceImageUrl) {
+        mirrorImageToLinkedRewards(id, sourceImageUrl, {
+          title: String(source?.title || ''),
+          price: Number(source?.price || 0),
+          isOneTime: Number(source?.is_permanent) === 0,
+        });
+      }
 
       if (!result.image_ready) {
         if (result.previous_image_kept) {
