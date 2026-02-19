@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Child, Prize } from '../types';
 import { PRIZES } from '../constants';
 import { parentApi } from '../services/api';
@@ -16,13 +16,43 @@ interface Props {
 const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   const REWARDS_CACHE_TTL_MS = 90_000;
   const REWARDS_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+  const REWARDS_MIN_REFRESH_GAP_MS = 4_000;
   const [isAdding, setIsAdding] = useState(false);
   const [newPrize, setNewPrize] = useState({ name: '', cost: '', isPermanent: true });
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>([]);
   const cacheKey = inviteCode ? makeInviteScopedKey('rewards', inviteCode) : '';
+  const persistentCacheKey = cacheKey ? `${cacheKey}:local` : '';
+
+  const readPersistentRewardsCache = useCallback((maxAgeMs: number): Prize[] | null => {
+    if (!persistentCacheKey || typeof window === 'undefined') return null;
+    try {
+      const raw = localStorage.getItem(persistentCacheKey);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { ts?: number; data?: Prize[] };
+      if (!parsed?.ts || !Array.isArray(parsed?.data)) return null;
+      if (Date.now() - parsed.ts > maxAgeMs) return null;
+      return parsed.data;
+    } catch {
+      return null;
+    }
+  }, [persistentCacheKey]);
+
+  const writePersistentRewardsCache = useCallback((next: Prize[]) => {
+    if (!persistentCacheKey || typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(persistentCacheKey, JSON.stringify({ ts: Date.now(), data: next }));
+    } catch {
+      // no-op
+    }
+  }, [persistentCacheKey]);
+
   const [prizes, setPrizes] = useState<Prize[]>(() => {
     if (!cacheKey) return PRIZES;
-    return readSessionCache<Prize[]>(cacheKey, REWARDS_CACHE_MAX_AGE_MS) || PRIZES;
+    return (
+      readSessionCache<Prize[]>(cacheKey, REWARDS_CACHE_MAX_AGE_MS) ||
+      readPersistentRewardsCache(REWARDS_CACHE_MAX_AGE_MS) ||
+      PRIZES
+    );
   });
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(prizes.length === 0);
   const [isProgressLoading, setIsProgressLoading] = useState<boolean>(false);
@@ -31,6 +61,8 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
     message: string;
   } | null>(null);
   const prizesRef = useRef<Prize[]>(prizes);
+  const rewardsInFlightRef = useRef<Promise<any[]> | null>(null);
+  const rewardsLastFetchAtRef = useRef(0);
   const { runInstant, isPending } = useInstantAction();
 
   const mapRewards = (rewards: any[]) =>
@@ -46,23 +78,50 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
       isOneTime: r.is_permanent === 0
     }));
 
-  const refreshRewards = async (options?: { showProgress?: boolean }) => {
-    if (!inviteCode) return [];
-    if (options?.showProgress) setIsProgressLoading(true);
-    try {
-      const { rewards } = await parentApi.listRewards(inviteCode);
-      const mapped = mapRewards(rewards);
-      setPrizes(mapped);
-      if (cacheKey) writeSessionCache(cacheKey, mapped);
-      return rewards;
-    } finally {
-      if (options?.showProgress) setIsProgressLoading(false);
+  const refreshRewards = useCallback(async (options?: { showProgress?: boolean; force?: boolean }) => {
+    if (!inviteCode) return [] as any[];
+    const now = Date.now();
+
+    if (!options?.force) {
+      if (rewardsInFlightRef.current) {
+        return rewardsInFlightRef.current;
+      }
+      if (prizesRef.current.length > 0 && now - rewardsLastFetchAtRef.current < REWARDS_MIN_REFRESH_GAP_MS) {
+        // Троттлинг частых рефрешей: UI уже имеет свежие данные.
+        return prizesRef.current as any[];
+      }
     }
-  };
+
+    const requestPromise = (async () => {
+      const shouldShowProgress = Boolean(options?.showProgress && prizesRef.current.length === 0);
+      if (shouldShowProgress) setIsProgressLoading(true);
+      try {
+        const { rewards } = await parentApi.listRewards(inviteCode);
+        const mapped = mapRewards(rewards);
+        setPrizes(mapped);
+        if (cacheKey) writeSessionCache(cacheKey, mapped);
+        writePersistentRewardsCache(mapped);
+        rewardsLastFetchAtRef.current = Date.now();
+        return rewards;
+      } finally {
+        if (shouldShowProgress) setIsProgressLoading(false);
+      }
+    })();
+
+    rewardsInFlightRef.current = requestPromise;
+    try {
+      return await requestPromise;
+    } finally {
+      if (rewardsInFlightRef.current === requestPromise) {
+        rewardsInFlightRef.current = null;
+      }
+    }
+  }, [cacheKey, inviteCode, writePersistentRewardsCache]);
 
   const updateRewardsCache = (next: Prize[]) => {
     if (!cacheKey) return;
     writeSessionCache(cacheKey, next);
+    writePersistentRewardsCache(next);
   };
 
   const waitForImages = async (rewardIds: string[], attempts = 18, delayMs = 5000) => {
@@ -89,19 +148,21 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
 
   useEffect(() => {
     if (!cacheKey) return;
-    const cached = readSessionCache<Prize[]>(cacheKey, REWARDS_CACHE_MAX_AGE_MS);
+    const cached =
+      readSessionCache<Prize[]>(cacheKey, REWARDS_CACHE_MAX_AGE_MS) ||
+      readPersistentRewardsCache(REWARDS_CACHE_MAX_AGE_MS);
     if (cached?.length) {
       setPrizes(cached);
       setIsInitialLoading(false);
     } else {
       setIsInitialLoading(true);
     }
-  }, [cacheKey]);
+  }, [cacheKey, readPersistentRewardsCache]);
 
   useEffect(() => {
     const loadRewards = async () => {
       try {
-        await refreshRewards({ showProgress: true });
+        await refreshRewards({ showProgress: true, force: true });
       } catch (err) {
         console.error('[SHOP LOAD] error:', err);
       } finally {
@@ -110,7 +171,7 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
     };
 
     loadRewards();
-  }, [inviteCode, cacheKey]);
+  }, [inviteCode, cacheKey, refreshRewards]);
 
   useEffect(() => {
     if (!isAdding) return;
@@ -156,7 +217,27 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
       isActive = false;
       clearInterval(timer);
     };
-  }, [inviteCode]);
+  }, [inviteCode, refreshRewards]);
+
+  useEffect(() => {
+    if (!inviteCode) return;
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshRewards({ force: true });
+      }
+    };
+    const onFocus = () => {
+      void refreshRewards({ force: true });
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [inviteCode, refreshRewards]);
 
   const toggleChildSelection = (id: string) => {
     setSelectedChildIds(prev => 
