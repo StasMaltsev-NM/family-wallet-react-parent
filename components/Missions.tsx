@@ -524,10 +524,10 @@ const handleAddMission = async () => {
                       <RefreshCcw size={22} />
                     </div>
                     <div className="min-w-0">
-                      <span className="text-lg font-black text-white block truncate pr-2">ПОВТОР</span>
+                      <span className="text-lg font-black text-white block whitespace-nowrap">ПОВТОР</span>
                     </div>
                   </div>
-                  <div className="ml-4 w-[96px] shrink-0 flex flex-col items-end justify-center gap-1.5 pr-1">
+                  <div className="ml-3 w-[84px] shrink-0 flex flex-col items-center justify-center gap-1.5">
                     <span className="px-2 py-0.5 rounded-full border border-amber-400/40 text-[9px] font-black tracking-widest text-amber-300">СКОРО</span>
                     <input
                       type="checkbox"
