@@ -261,6 +261,47 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
     void waitForImages(rewardIds, 24, 3000);
   };
 
+  const startSharedImageGeneration = (rewardIds: string[]) => {
+    if (!inviteCode || !rewardIds.length) return;
+    const leaderId = rewardIds[0];
+    const rewardIdSet = new Set(rewardIds);
+
+    void (async () => {
+      try {
+        // Генерируем картинку только для одного лидера группы.
+        await parentApi.regenerateRewardImage(inviteCode, leaderId);
+      } catch (err) {
+        console.error('[SHOP CREATE] leader regenerate failed:', err);
+      }
+
+      for (let i = 0; i < 24; i += 1) {
+        try {
+          const rewards = await refreshRewards({ force: true });
+          const leader = rewards.find((reward: any) => reward.id === leaderId);
+          const leaderImageUrl = String(leader?.image_url || '').trim();
+
+          if (leaderImageUrl) {
+            mirrorImageToLinkedRewards(leaderId, leaderImageUrl, {
+              title: String(leader?.title || ''),
+              price: Number(leader?.price || 0),
+              isOneTime: Number(leader?.is_permanent) === 0,
+            });
+
+            const groupReady = rewards
+              .filter((reward: any) => rewardIdSet.has(reward.id))
+              .every((reward: any) => Boolean(String(reward.image_url || '').trim()));
+            if (groupReady) return;
+          }
+        } catch (err) {
+          console.error('[SHOP CREATE] shared image poll failed:', err);
+          return;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+      }
+    })();
+  };
+
   useEffect(() => {
     if (!cacheKey) return;
     const cached =
@@ -462,6 +503,7 @@ const handleCreateReward = async () => {
         });
       }
 
+      startSharedImageGeneration(createdRewardIds);
       startBackgroundImageRefresh(createdRewardIds);
 
       const totalIssueCount = unresolvedCount + failedCount;
