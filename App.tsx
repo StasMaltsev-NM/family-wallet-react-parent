@@ -132,6 +132,70 @@ function normalizeLookupText(value: any): string {
   return String(value || "").trim().toLowerCase();
 }
 
+type RewardImageIndex = {
+  byRewardId: Record<string, string>;
+  byChildTitle: Record<string, string>;
+  byChildTitlePrice: Record<string, string>;
+};
+
+function buildRewardImageIndex(rewards: any[]): RewardImageIndex {
+  const byRewardId: Record<string, string> = {};
+  const byChildTitle: Record<string, string> = {};
+  const byChildTitlePrice: Record<string, string> = {};
+
+  for (const reward of rewards || []) {
+    const image = String(reward?.image_url || reward?.reward_image_url || "").trim();
+    if (!image) continue;
+
+    const rewardId = String(reward?.id || reward?.reward_id || "").trim();
+    if (rewardId) byRewardId[rewardId] = image;
+
+    const childId = String(reward?.child_id || "").trim();
+    const title = normalizeLookupText(reward?.title || reward?.reward_title);
+    const price = Number(reward?.price ?? reward?.reward_price ?? 0) || 0;
+
+    if (childId && title) {
+      byChildTitle[`${childId}__${title}`] = image;
+      if (price > 0) {
+        byChildTitlePrice[`${childId}__${title}__${price}`] = image;
+      }
+    }
+  }
+
+  return { byRewardId, byChildTitle, byChildTitlePrice };
+}
+
+function applyRewardImageIndexToPurchases(
+  purchasesMap: Record<string, any[]>,
+  index: RewardImageIndex
+): Record<string, any[]> {
+  const next: Record<string, any[]> = {};
+
+  for (const [childId, purchases] of Object.entries(purchasesMap || {})) {
+    next[childId] = (purchases || []).map((purchase: any) => {
+      const existing =
+        String(purchase?.reward_image_url || "").trim() ||
+        String(purchase?.image_url || "").trim() ||
+        "";
+      if (existing) return purchase;
+
+      const rewardId = String(purchase?.reward_id || purchase?.id || "").trim();
+      const title = normalizeLookupText(purchase?.reward_title || purchase?.title);
+      const price = Number(purchase?.price ?? purchase?.reward_price ?? 0) || 0;
+
+      const byId = rewardId ? index.byRewardId[rewardId] : "";
+      const byStrict = childId && title ? index.byChildTitlePrice[`${childId}__${title}__${price}`] : "";
+      const bySoft = childId && title ? index.byChildTitle[`${childId}__${title}`] : "";
+      const resolved = byId || byStrict || bySoft || "";
+
+      if (!resolved) return purchase;
+      return { ...purchase, reward_image_url: resolved };
+    });
+  }
+
+  return next;
+}
+
 const App: React.FC = () => {
   console.log("[APP RENDER]");
 
@@ -167,6 +231,13 @@ const App: React.FC = () => {
   const [isInitialDataLoading, setIsInitialDataLoading] = useState(true);
   const [childPurchases, setChildPurchases] = useState<Record<string, any[]>>({});
   const [childHistory, setChildHistory] = useState<Record<string, any[]>>({});
+  const rewardImageIndexRef = useRef<RewardImageIndex>({
+    byRewardId: {},
+    byChildTitle: {},
+    byChildTitlePrice: {},
+  });
+  const rewardsHydrationInFlightRef = useRef(false);
+  const rewardsIndexFetchedAtRef = useRef(0);
 
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [parentCode, setParentCode] = useState<string>("");
@@ -216,6 +287,9 @@ const App: React.FC = () => {
     if (!parentCode) return;
     setIsInitialDataLoading(true);
     setLastSyncAt(null);
+    rewardImageIndexRef.current = { byRewardId: {}, byChildTitle: {}, byChildTitlePrice: {} };
+    rewardsHydrationInFlightRef.current = false;
+    rewardsIndexFetchedAtRef.current = 0;
   }, [parentCode]);
 
   // Telegram: ready/expand + layout
@@ -551,8 +625,53 @@ useEffect(() => {
           if (!purchasesMap[p.child_id]) purchasesMap[p.child_id] = [];
           purchasesMap[p.child_id].push(normalizedPurchase);
         }
-        nextPurchasesMap = purchasesMap;
-        setChildPurchases(purchasesMap);
+
+        const hasMissingPurchaseImages = allPurchases.some(
+          (p: any) =>
+            !String(p?.reward_image_url || "").trim() &&
+            !String(p?.image_url || "").trim()
+        );
+
+        const cachedIndex = rewardImageIndexRef.current;
+        const hasCachedIndex =
+          Object.keys(cachedIndex.byRewardId).length > 0 ||
+          Object.keys(cachedIndex.byChildTitle).length > 0 ||
+          Object.keys(cachedIndex.byChildTitlePrice).length > 0;
+
+        const runtimePurchasesMap =
+          hasMissingPurchaseImages && hasCachedIndex
+            ? applyRewardImageIndexToPurchases(purchasesMap, cachedIndex)
+            : purchasesMap;
+
+        nextPurchasesMap = runtimePurchasesMap;
+        setChildPurchases(runtimePurchasesMap);
+
+        const REWARDS_INDEX_REFRESH_MS = 15 * 60 * 1000;
+        const shouldRefreshRewardsIndex =
+          hasMissingPurchaseImages &&
+          !rewardsHydrationInFlightRef.current &&
+          (Date.now() - rewardsIndexFetchedAtRef.current > REWARDS_INDEX_REFRESH_MS || !hasCachedIndex);
+
+        if (shouldRefreshRewardsIndex) {
+          rewardsHydrationInFlightRef.current = true;
+          void (async () => {
+            try {
+              const rewardsResp = await parentApi.listRewards(code);
+              const rewards = rewardsResp?.rewards ?? [];
+              const freshIndex = buildRewardImageIndex(rewards);
+
+              rewardImageIndexRef.current = freshIndex;
+              rewardsIndexFetchedAtRef.current = Date.now();
+
+              if (parentCodeRef.current !== code) return;
+              setChildPurchases((prev) => applyRewardImageIndexToPurchases(prev, freshIndex));
+            } catch (rewardsErr) {
+              console.error("[rewards hydration] FAILED:", rewardsErr);
+            } finally {
+              rewardsHydrationInFlightRef.current = false;
+            }
+          })();
+        }
       } catch (e) {
         console.error("[purchases] failed:", e);
         nextPurchasesMap = {};
