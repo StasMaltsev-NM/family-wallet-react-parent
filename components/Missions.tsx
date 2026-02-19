@@ -524,7 +524,7 @@ const handleAddMission = async () => {
                       <RefreshCcw size={22} />
                     </div>
                     <div className="min-w-0">
-                      <span className="text-lg font-black text-white block truncate pr-2">Повторяющаяся</span>
+                      <span className="text-lg font-black text-white block truncate pr-2">ПОВТОР</span>
                     </div>
                   </div>
                   <div className="ml-4 w-[96px] shrink-0 flex flex-col items-end justify-center gap-1.5 pr-1">
