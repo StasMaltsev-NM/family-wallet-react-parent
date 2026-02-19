@@ -468,21 +468,23 @@ const handleAddMission = async () => {
                   onClick={showSoonFeatureNotice}
                   className="flex items-center justify-between p-5 bg-white/[0.03] rounded-2xl cursor-pointer hover:bg-white/[0.05] transition-all border border-white/5"
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div className="p-2.5 rounded-xl transition-colors bg-white/10 text-[var(--text-muted)]">
                       <Users size={20} />
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="min-w-0">
                       <span className="text-base font-black text-white">✨ Командная миссия</span>
-                      <span className="px-2 py-0.5 rounded-full border border-amber-400/40 text-[9px] font-black tracking-widest text-amber-300">СКОРО</span>
                     </div>
                   </div>
-                  <input
-                    type="checkbox"
-                    className="w-6 h-6 accent-amber-500 rounded-lg pointer-events-none"
-                    checked={false}
-                    readOnly
-                  />
+                  <div className="ml-3 w-[78px] shrink-0 flex flex-col items-center justify-center gap-1.5">
+                    <span className="px-2 py-0.5 rounded-full border border-amber-400/40 text-[9px] font-black tracking-widest text-amber-300">СКОРО</span>
+                    <input
+                      type="checkbox"
+                      className="w-6 h-6 accent-amber-500 rounded-lg pointer-events-none"
+                      checked={false}
+                      readOnly
+                    />
+                  </div>
                 </label>
               </div>
 
@@ -517,23 +519,23 @@ const handleAddMission = async () => {
                   onClick={showSoonFeatureNotice}
                   className="flex items-center justify-between p-6 bg-white/[0.03] rounded-3xl cursor-pointer hover:bg-white/[0.05] transition-all border border-white/5"
                 >
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 min-w-0 flex-1">
                     <div className="p-3 rounded-xl transition-colors bg-white/10 text-[var(--text-muted)]">
                       <RefreshCcw size={22} />
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg font-black text-white">Повторяющаяся</span>
-                        <span className="px-2 py-0.5 rounded-full border border-amber-400/40 text-[9px] font-black tracking-widest text-amber-300">СКОРО</span>
-                      </div>
+                    <div className="min-w-0">
+                      <span className="text-lg font-black text-white">Повторяющаяся</span>
                     </div>
                   </div>
-                  <input
-                    type="checkbox"
-                    className="w-7 h-7 accent-[var(--primary)] rounded-lg pointer-events-none"
-                    checked={false}
-                    readOnly
-                  />
+                  <div className="ml-3 w-[84px] shrink-0 flex flex-col items-center justify-center gap-1.5">
+                    <span className="px-2 py-0.5 rounded-full border border-amber-400/40 text-[9px] font-black tracking-widest text-amber-300">СКОРО</span>
+                    <input
+                      type="checkbox"
+                      className="w-7 h-7 accent-[var(--primary)] rounded-lg pointer-events-none"
+                      checked={false}
+                      readOnly
+                    />
+                  </div>
                 </label>
 
                 {newMission.isRecurring && (
