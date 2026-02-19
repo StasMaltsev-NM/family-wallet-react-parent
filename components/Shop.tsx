@@ -110,6 +110,11 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
       isOneTime: r.is_permanent === 0
     }));
 
+  const extractRewardId = (payload: any): string | null => {
+    const rewardId = payload?.reward_id || payload?.reward?.id || payload?.id || null;
+    return typeof rewardId === 'string' && rewardId.trim() ? rewardId : null;
+  };
+
   const refreshRewards = useCallback(async (options?: { showProgress?: boolean; force?: boolean }) => {
     if (!inviteCode) return [] as any[];
     const now = Date.now();
@@ -164,12 +169,38 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
 
   const waitForImages = async (rewardIds: string[], attempts = 18, delayMs = 5000) => {
     if (!rewardIds.length) return;
+    const rewardIdSet = new Set(rewardIds);
+    let mirroredImageUrl = '';
+
     for (let i = 0; i < attempts; i += 1) {
       try {
         const rewards = await refreshRewards();
-        const allReady = rewardIds.every((id) =>
-          rewards.find((r: any) => r.id === id && r.image_url)
-        );
+        const createdGroup = rewards.filter((r: any) => rewardIdSet.has(r.id));
+        if (!createdGroup.length) return;
+
+        if (!mirroredImageUrl) {
+          const firstReady = createdGroup.find((r: any) => typeof r.image_url === 'string' && r.image_url.trim());
+          mirroredImageUrl = firstReady?.image_url || '';
+        }
+
+        if (mirroredImageUrl) {
+          setPrizes((prev) => {
+            let changed = false;
+            const next = prev.map((prize) => {
+              if (!rewardIdSet.has(prize.id)) return prize;
+              if (prize.image_url) return prize;
+              changed = true;
+              return { ...prize, image_url: mirroredImageUrl };
+            });
+            if (changed) {
+              updateRewardsCache(next);
+              return next;
+            }
+            return prev;
+          });
+        }
+
+        const allReady = createdGroup.every((r: any) => Boolean(r.image_url));
         if (allReady) return;
       } catch (err) {
         console.error('[SHOP POLL] error:', err);
@@ -335,14 +366,21 @@ const handleCreateReward = async () => {
       );
 
       const createdRewardIds: string[] = [];
+      const createdRewardIdSet = new Set<string>();
       let failedCount = 0;
 
       createResults.forEach((result) => {
-        if (result.status === 'fulfilled' && result.value?.reward_id) {
-          createdRewardIds.push(result.value.reward_id);
-        } else {
-          failedCount += 1;
+        if (result.status === 'fulfilled') {
+          const rewardId = extractRewardId(result.value);
+          if (rewardId) {
+            if (!createdRewardIdSet.has(rewardId)) {
+              createdRewardIdSet.add(rewardId);
+              createdRewardIds.push(rewardId);
+            }
+            return;
+          }
         }
+        failedCount += 1;
       });
 
       if (createdRewardIds.length === 0) {
