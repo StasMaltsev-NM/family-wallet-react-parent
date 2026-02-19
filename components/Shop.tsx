@@ -19,7 +19,7 @@ type RewardsCacheEnvelope = {
 };
 
 const runtimeRewardsCache = new Map<string, RewardsCacheEnvelope>();
-const MAX_CACHED_DATA_URI_LEN = 2048;
+const MAX_PERSISTED_DATA_URI_LEN = 2048;
 
 function readRuntimeRewardsCache(key: string, maxAgeMs: number): Prize[] | null {
   const cached = runtimeRewardsCache.get(key);
@@ -41,11 +41,11 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>([]);
   const cacheKey = inviteCode ? makeInviteScopedKey('rewards', inviteCode) : '';
   const persistentCacheKey = cacheKey ? `${cacheKey}:local` : '';
-  const compactRewardsForCache = useCallback(
+  const compactRewardsForPersistentCache = useCallback(
     (next: Prize[]): Prize[] =>
       next.map((reward) => {
         const image = typeof reward.image_url === 'string' ? reward.image_url : '';
-        if (image.startsWith('data:') && image.length > MAX_CACHED_DATA_URI_LEN) {
+        if (image.startsWith('data:') && image.length > MAX_PERSISTED_DATA_URI_LEN) {
           return { ...reward, image_url: '' };
         }
         return reward;
@@ -130,13 +130,14 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
       try {
         const { rewards } = await parentApi.listRewards(inviteCode);
         const mapped = mapRewards(rewards);
-        const cacheSafe = compactRewardsForCache(mapped);
         setPrizes(mapped);
         if (cacheKey) {
-          writeSessionCache(cacheKey, cacheSafe);
-          writeRuntimeRewardsCache(cacheKey, cacheSafe);
+          // Для мгновенного переключения вкладок храним полные image_url (включая data URI).
+          writeSessionCache(cacheKey, mapped);
+          writeRuntimeRewardsCache(cacheKey, mapped);
         }
-        writePersistentRewardsCache(cacheSafe);
+        // В localStorage пишем компактную версию, чтобы не упираться в quota.
+        writePersistentRewardsCache(compactRewardsForPersistentCache(mapped));
         rewardsLastFetchAtRef.current = Date.now();
         return rewards;
       } finally {
@@ -152,14 +153,13 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
         rewardsInFlightRef.current = null;
       }
     }
-  }, [cacheKey, compactRewardsForCache, inviteCode, writePersistentRewardsCache]);
+  }, [cacheKey, compactRewardsForPersistentCache, inviteCode, writePersistentRewardsCache]);
 
   const updateRewardsCache = (next: Prize[]) => {
     if (!cacheKey) return;
-    const cacheSafe = compactRewardsForCache(next);
-    writeSessionCache(cacheKey, cacheSafe);
-    writeRuntimeRewardsCache(cacheKey, cacheSafe);
-    writePersistentRewardsCache(cacheSafe);
+    writeSessionCache(cacheKey, next);
+    writeRuntimeRewardsCache(cacheKey, next);
+    writePersistentRewardsCache(compactRewardsForPersistentCache(next));
   };
 
   const waitForImages = async (rewardIds: string[], attempts = 18, delayMs = 5000) => {
