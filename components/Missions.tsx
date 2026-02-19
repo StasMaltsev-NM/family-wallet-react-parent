@@ -458,18 +458,27 @@ const handleAddMission = async () => {
                 </div>
 
                 {/* Чекбокс Командная */}
-                <label className="flex items-center justify-between p-5 bg-white/[0.03] rounded-2xl cursor-pointer hover:bg-white/[0.06] transition-all border border-white/5 group">
+                <label className="flex items-center justify-between p-5 bg-white/[0.03] rounded-2xl transition-all border border-white/5 opacity-85">
                   <div className="flex items-center gap-3">
-                    <div className={`p-2.5 rounded-xl transition-colors ${newMission.isTeam ? "bg-amber-500/20 text-amber-500" : "bg-white/10 text-[var(--text-muted)]"}`}>
+                    <div className="p-2.5 rounded-xl transition-colors bg-white/10 text-[var(--text-muted)]">
                       <Users size={20} />
                     </div>
-                    <span className="text-base font-black text-white">✨ Командная миссия</span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-base font-black text-white">✨ Командная миссия</span>
+                        <span className="px-2 py-0.5 rounded-full border border-amber-400/40 text-[10px] font-black tracking-widest text-amber-300">СКОРО</span>
+                      </div>
+                      <p className="text-[11px] text-[var(--text-muted)] font-bold uppercase tracking-widest mt-0.5">
+                        Функция появится в ближайших обновлениях
+                      </p>
+                    </div>
                   </div>
                   <input
                     type="checkbox"
-                    className="w-6 h-6 accent-amber-500 rounded-lg cursor-pointer"
-                    checked={newMission.isTeam}
-                    onChange={(e) => setNewMission({ ...newMission, isTeam: e.target.checked })}
+                    className="w-6 h-6 accent-amber-500 rounded-lg cursor-not-allowed opacity-70"
+                    checked={false}
+                    readOnly
+                    disabled
                   />
                 </label>
               </div>
@@ -501,21 +510,27 @@ const handleAddMission = async () => {
 
               {/* Настройка повторений */}
               <div className="space-y-4">
-                <label className="flex items-center justify-between p-6 bg-white/[0.03] rounded-3xl cursor-pointer hover:bg-white/[0.06] transition-all border border-white/5 group">
+                <label className="flex items-center justify-between p-6 bg-white/[0.03] rounded-3xl transition-all border border-white/5 opacity-85">
                   <div className="flex items-center gap-4">
-                    <div className={`p-3 rounded-xl transition-colors ${newMission.isRecurring ? "bg-[var(--primary)]/20 text-[var(--primary)]" : "bg-white/10 text-[var(--text-muted)]"}`}>
-                      <RefreshCcw size={22} className={newMission.isRecurring ? "animate-spin-slow" : ""} />
+                    <div className="p-3 rounded-xl transition-colors bg-white/10 text-[var(--text-muted)]">
+                      <RefreshCcw size={22} />
                     </div>
                     <div>
-                      <span className="text-lg font-black text-white">Повторяющаяся</span>
-                      <p className="text-[11px] text-[var(--text-muted)] font-bold uppercase tracking-widest mt-0.5">Задача на каждый день или неделю</p>
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg font-black text-white">Повторяющаяся</span>
+                        <span className="px-2 py-0.5 rounded-full border border-amber-400/40 text-[10px] font-black tracking-widest text-amber-300">СКОРО</span>
+                      </div>
+                      <p className="text-[11px] text-[var(--text-muted)] font-bold uppercase tracking-widest mt-0.5">
+                        Функция появится в ближайших обновлениях
+                      </p>
                     </div>
                   </div>
                   <input
                     type="checkbox"
-                    className="w-7 h-7 accent-[var(--primary)] rounded-lg cursor-pointer"
-                    checked={newMission.isRecurring}
-                    onChange={(e) => setNewMission({ ...newMission, isRecurring: e.target.checked })}
+                    className="w-7 h-7 accent-[var(--primary)] rounded-lg cursor-not-allowed opacity-70"
+                    checked={false}
+                    readOnly
+                    disabled
                   />
                 </label>
 
