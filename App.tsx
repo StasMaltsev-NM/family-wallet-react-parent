@@ -136,12 +136,15 @@ type RewardImageIndex = {
   byRewardId: Record<string, string>;
   byChildTitle: Record<string, string>;
   byChildTitlePrice: Record<string, string>;
+  byGlobalTitlePrice: Record<string, string>;
 };
 
 function buildRewardImageIndex(rewards: any[]): RewardImageIndex {
   const byRewardId: Record<string, string> = {};
   const byChildTitle: Record<string, string> = {};
   const byChildTitlePrice: Record<string, string> = {};
+  const byGlobalTitlePrice: Record<string, string> = {};
+  const byGlobalTitlePriceConflicts = new Set<string>();
 
   for (const reward of rewards || []) {
     const image = String(reward?.image_url || reward?.reward_image_url || "").trim();
@@ -160,9 +163,25 @@ function buildRewardImageIndex(rewards: any[]): RewardImageIndex {
         byChildTitlePrice[`${childId}__${title}__${price}`] = image;
       }
     }
+
+    // Fallback для старых/битых purchase-записей без reward_id или с неверным child_id:
+    // используем только глобально-уникальную пару title+price, чтобы не подмешивать чужие картинки.
+    if (title && price > 0) {
+      const globalKey = `${title}__${price}`;
+      const current = byGlobalTitlePrice[globalKey];
+      if (!current) {
+        byGlobalTitlePrice[globalKey] = image;
+      } else if (current !== image) {
+        byGlobalTitlePriceConflicts.add(globalKey);
+      }
+    }
   }
 
-  return { byRewardId, byChildTitle, byChildTitlePrice };
+  for (const key of byGlobalTitlePriceConflicts) {
+    delete byGlobalTitlePrice[key];
+  }
+
+  return { byRewardId, byChildTitle, byChildTitlePrice, byGlobalTitlePrice };
 }
 
 function applyRewardImageIndexToPurchases(
@@ -186,7 +205,8 @@ function applyRewardImageIndexToPurchases(
       const byId = rewardId ? index.byRewardId[rewardId] : "";
       const byStrict = childId && title ? index.byChildTitlePrice[`${childId}__${title}__${price}`] : "";
       const bySoft = childId && title ? index.byChildTitle[`${childId}__${title}`] : "";
-      const resolved = byId || byStrict || bySoft || "";
+      const byGlobalStrict = title && price > 0 ? index.byGlobalTitlePrice[`${title}__${price}`] : "";
+      const resolved = byId || byStrict || bySoft || byGlobalStrict || "";
 
       if (!resolved) return purchase;
       return { ...purchase, reward_image_url: resolved };
@@ -235,6 +255,7 @@ const App: React.FC = () => {
     byRewardId: {},
     byChildTitle: {},
     byChildTitlePrice: {},
+    byGlobalTitlePrice: {},
   });
   const rewardsHydrationInFlightRef = useRef(false);
   const rewardsIndexFetchedAtRef = useRef(0);
@@ -287,7 +308,7 @@ const App: React.FC = () => {
     if (!parentCode) return;
     setIsInitialDataLoading(true);
     setLastSyncAt(null);
-    rewardImageIndexRef.current = { byRewardId: {}, byChildTitle: {}, byChildTitlePrice: {} };
+    rewardImageIndexRef.current = { byRewardId: {}, byChildTitle: {}, byChildTitlePrice: {}, byGlobalTitlePrice: {} };
     rewardsHydrationInFlightRef.current = false;
     rewardsIndexFetchedAtRef.current = 0;
   }, [parentCode]);
@@ -636,7 +657,8 @@ useEffect(() => {
         const hasCachedIndex =
           Object.keys(cachedIndex.byRewardId).length > 0 ||
           Object.keys(cachedIndex.byChildTitle).length > 0 ||
-          Object.keys(cachedIndex.byChildTitlePrice).length > 0;
+          Object.keys(cachedIndex.byChildTitlePrice).length > 0 ||
+          Object.keys(cachedIndex.byGlobalTitlePrice).length > 0;
 
         const runtimePurchasesMap =
           hasMissingPurchaseImages && hasCachedIndex
@@ -646,11 +668,25 @@ useEffect(() => {
         nextPurchasesMap = runtimePurchasesMap;
         setChildPurchases(runtimePurchasesMap);
 
+        const hasUnresolvedPurchaseImages = Object.values(runtimePurchasesMap).some((items: any) =>
+          (items || []).some(
+            (p: any) =>
+              !String(p?.reward_image_url || "").trim() &&
+              !String(p?.image_url || "").trim()
+          )
+        );
+
         const REWARDS_INDEX_REFRESH_MS = 15 * 60 * 1000;
+        const REWARDS_INDEX_UNRESOLVED_RETRY_MS = 15 * 1000;
+        const rewardsIndexAgeMs = Date.now() - rewardsIndexFetchedAtRef.current;
         const shouldRefreshRewardsIndex =
-          hasMissingPurchaseImages &&
+          hasUnresolvedPurchaseImages &&
           !rewardsHydrationInFlightRef.current &&
-          (Date.now() - rewardsIndexFetchedAtRef.current > REWARDS_INDEX_REFRESH_MS || !hasCachedIndex);
+          (
+            !hasCachedIndex ||
+            rewardsIndexAgeMs > REWARDS_INDEX_REFRESH_MS ||
+            rewardsIndexAgeMs > REWARDS_INDEX_UNRESOLVED_RETRY_MS
+          );
 
         if (shouldRefreshRewardsIndex) {
           rewardsHydrationInFlightRef.current = true;
