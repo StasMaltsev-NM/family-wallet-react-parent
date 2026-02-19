@@ -13,6 +13,25 @@ interface Props {
   currentChild?: Child;
 }
 
+type RewardsCacheEnvelope = {
+  ts: number;
+  data: Prize[];
+};
+
+const runtimeRewardsCache = new Map<string, RewardsCacheEnvelope>();
+const MAX_CACHED_DATA_URI_LEN = 2048;
+
+function readRuntimeRewardsCache(key: string, maxAgeMs: number): Prize[] | null {
+  const cached = runtimeRewardsCache.get(key);
+  if (!cached?.ts || !Array.isArray(cached?.data)) return null;
+  if (Date.now() - cached.ts > maxAgeMs) return null;
+  return cached.data;
+}
+
+function writeRuntimeRewardsCache(key: string, data: Prize[]): void {
+  runtimeRewardsCache.set(key, { ts: Date.now(), data });
+}
+
 const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   const REWARDS_CACHE_TTL_MS = 90_000;
   const REWARDS_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
@@ -22,6 +41,17 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>([]);
   const cacheKey = inviteCode ? makeInviteScopedKey('rewards', inviteCode) : '';
   const persistentCacheKey = cacheKey ? `${cacheKey}:local` : '';
+  const compactRewardsForCache = useCallback(
+    (next: Prize[]): Prize[] =>
+      next.map((reward) => {
+        const image = typeof reward.image_url === 'string' ? reward.image_url : '';
+        if (image.startsWith('data:') && image.length > MAX_CACHED_DATA_URI_LEN) {
+          return { ...reward, image_url: '' };
+        }
+        return reward;
+      }),
+    []
+  );
 
   const readPersistentRewardsCache = useCallback((maxAgeMs: number): Prize[] | null => {
     if (!persistentCacheKey || typeof window === 'undefined') return null;
@@ -48,6 +78,8 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
 
   const [prizes, setPrizes] = useState<Prize[]>(() => {
     if (!cacheKey) return PRIZES;
+    const runtimeCached = readRuntimeRewardsCache(cacheKey, REWARDS_CACHE_MAX_AGE_MS);
+    if (runtimeCached) return runtimeCached;
     return (
       readSessionCache<Prize[]>(cacheKey, REWARDS_CACHE_MAX_AGE_MS) ||
       readPersistentRewardsCache(REWARDS_CACHE_MAX_AGE_MS) ||
@@ -98,9 +130,13 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
       try {
         const { rewards } = await parentApi.listRewards(inviteCode);
         const mapped = mapRewards(rewards);
+        const cacheSafe = compactRewardsForCache(mapped);
         setPrizes(mapped);
-        if (cacheKey) writeSessionCache(cacheKey, mapped);
-        writePersistentRewardsCache(mapped);
+        if (cacheKey) {
+          writeSessionCache(cacheKey, cacheSafe);
+          writeRuntimeRewardsCache(cacheKey, cacheSafe);
+        }
+        writePersistentRewardsCache(cacheSafe);
         rewardsLastFetchAtRef.current = Date.now();
         return rewards;
       } finally {
@@ -116,12 +152,14 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
         rewardsInFlightRef.current = null;
       }
     }
-  }, [cacheKey, inviteCode, writePersistentRewardsCache]);
+  }, [cacheKey, compactRewardsForCache, inviteCode, writePersistentRewardsCache]);
 
   const updateRewardsCache = (next: Prize[]) => {
     if (!cacheKey) return;
-    writeSessionCache(cacheKey, next);
-    writePersistentRewardsCache(next);
+    const cacheSafe = compactRewardsForCache(next);
+    writeSessionCache(cacheKey, cacheSafe);
+    writeRuntimeRewardsCache(cacheKey, cacheSafe);
+    writePersistentRewardsCache(cacheSafe);
   };
 
   const waitForImages = async (rewardIds: string[], attempts = 18, delayMs = 5000) => {
@@ -149,6 +187,7 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   useEffect(() => {
     if (!cacheKey) return;
     const cached =
+      readRuntimeRewardsCache(cacheKey, REWARDS_CACHE_MAX_AGE_MS) ||
       readSessionCache<Prize[]>(cacheKey, REWARDS_CACHE_MAX_AGE_MS) ||
       readPersistentRewardsCache(REWARDS_CACHE_MAX_AGE_MS);
     if (cached?.length) {
