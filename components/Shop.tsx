@@ -21,6 +21,56 @@ type RewardsCacheEnvelope = {
 const runtimeRewardsCache = new Map<string, RewardsCacheEnvelope>();
 const MAX_PERSISTED_DATA_URI_LEN = 2048;
 
+function normalizeRewardGroupKey(prize: Pick<Prize, 'name' | 'cost' | 'isOneTime'>): string {
+  return `${String(prize.name || '').trim().toLowerCase()}|${Number(prize.cost) || 0}|${prize.isOneTime ? 1 : 0}`;
+}
+
+function pickCanonicalImageFromGroup(group: Prize[]): string {
+  const candidates = group
+    .filter((item) => typeof item.image_url === 'string' && item.image_url.trim().length > 0)
+    .sort((a, b) => String(a.id || '').localeCompare(String(b.id || '')));
+  return candidates[0]?.image_url?.trim() || '';
+}
+
+function normalizeSharedRewardImages(rewards: Prize[]): Prize[] {
+  if (!Array.isArray(rewards) || rewards.length === 0) return rewards;
+
+  const grouped = new Map<string, Prize[]>();
+  rewards.forEach((reward) => {
+    const key = normalizeRewardGroupKey(reward);
+    const bucket = grouped.get(key);
+    if (bucket) {
+      bucket.push(reward);
+      return;
+    }
+    grouped.set(key, [reward]);
+  });
+
+  const canonicalById = new Map<string, string>();
+  grouped.forEach((group) => {
+    if (group.length < 2) return;
+    const childIds = new Set(group.map((item) => String(item.child_id || '').trim()).filter(Boolean));
+    if (childIds.size < 2) return;
+    const canonicalImageUrl = pickCanonicalImageFromGroup(group);
+    if (!canonicalImageUrl) return;
+    group.forEach((item) => canonicalById.set(item.id, canonicalImageUrl));
+  });
+
+  if (canonicalById.size === 0) return rewards;
+
+  let changed = false;
+  const next = rewards.map((reward) => {
+    const canonical = canonicalById.get(reward.id);
+    if (!canonical) return reward;
+    const current = String(reward.image_url || '').trim();
+    if (current === canonical) return reward;
+    changed = true;
+    return { ...reward, image_url: canonical };
+  });
+
+  return changed ? next : rewards;
+}
+
 function readRuntimeRewardsCache(key: string, maxAgeMs: number): Prize[] | null {
   const cached = runtimeRewardsCache.get(key);
   if (!cached?.ts || !Array.isArray(cached?.data)) return null;
@@ -79,12 +129,12 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   const [prizes, setPrizes] = useState<Prize[]>(() => {
     if (!cacheKey) return PRIZES;
     const runtimeCached = readRuntimeRewardsCache(cacheKey, REWARDS_CACHE_MAX_AGE_MS);
-    if (runtimeCached) return runtimeCached;
-    return (
+    if (runtimeCached) return normalizeSharedRewardImages(runtimeCached);
+    const cached =
       readSessionCache<Prize[]>(cacheKey, REWARDS_CACHE_MAX_AGE_MS) ||
       readPersistentRewardsCache(REWARDS_CACHE_MAX_AGE_MS) ||
-      PRIZES
-    );
+      PRIZES;
+    return normalizeSharedRewardImages(cached);
   });
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(prizes.length === 0);
   const [isProgressLoading, setIsProgressLoading] = useState<boolean>(false);
@@ -138,14 +188,15 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
       try {
         const { rewards } = await parentApi.listRewards(inviteCode);
         const mapped = mapRewards(rewards);
-        setPrizes(mapped);
+        const normalizedMapped = normalizeSharedRewardImages(mapped);
+        setPrizes(normalizedMapped);
         if (cacheKey) {
           // Для мгновенного переключения вкладок храним полные image_url (включая data URI).
-          writeSessionCache(cacheKey, mapped);
-          writeRuntimeRewardsCache(cacheKey, mapped);
+          writeSessionCache(cacheKey, normalizedMapped);
+          writeRuntimeRewardsCache(cacheKey, normalizedMapped);
         }
         // В localStorage пишем компактную версию, чтобы не упираться в quota.
-        writePersistentRewardsCache(compactRewardsForPersistentCache(mapped));
+        writePersistentRewardsCache(compactRewardsForPersistentCache(normalizedMapped));
         rewardsLastFetchAtRef.current = Date.now();
         return rewards;
       } finally {
@@ -164,10 +215,11 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   }, [cacheKey, compactRewardsForPersistentCache, inviteCode, writePersistentRewardsCache]);
 
   const updateRewardsCache = (next: Prize[]) => {
+    const normalized = normalizeSharedRewardImages(next);
     if (!cacheKey) return;
-    writeSessionCache(cacheKey, next);
-    writeRuntimeRewardsCache(cacheKey, next);
-    writePersistentRewardsCache(compactRewardsForPersistentCache(next));
+    writeSessionCache(cacheKey, normalized);
+    writeRuntimeRewardsCache(cacheKey, normalized);
+    writePersistentRewardsCache(compactRewardsForPersistentCache(normalized));
   };
 
   const rememberRewardGroup = (rewardIds: string[]) => {
@@ -198,7 +250,8 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
             Boolean(prize.isOneTime) === Boolean(sourceMeta.isOneTime)
           : false;
 
-        if ((inLinkedGroup || sameMeta) && !prize.image_url) {
+        if (inLinkedGroup || sameMeta) {
+          if (String(prize.image_url || '').trim() === imageUrl) return prize;
           changed = true;
           return { ...prize, image_url: imageUrl };
         }
@@ -206,8 +259,9 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
       });
 
       if (changed) {
-        updateRewardsCache(next);
-        return next;
+        const normalized = normalizeSharedRewardImages(next);
+        updateRewardsCache(normalized);
+        return normalized;
       }
       return prev;
     });
@@ -309,7 +363,7 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
       readSessionCache<Prize[]>(cacheKey, REWARDS_CACHE_MAX_AGE_MS) ||
       readPersistentRewardsCache(REWARDS_CACHE_MAX_AGE_MS);
     if (cached?.length) {
-      setPrizes(cached);
+      setPrizes(normalizeSharedRewardImages(cached));
       setIsInitialLoading(false);
     } else {
       setIsInitialLoading(true);
@@ -489,7 +543,7 @@ const handleCreateReward = async () => {
       rememberRewardGroup(createdRewardIds);
 
       const rewardsRes = await parentApi.listRewards(inviteCode);
-      const mappedRewards = mapRewards(rewardsRes.rewards);
+      const mappedRewards = normalizeSharedRewardImages(mapRewards(rewardsRes.rewards));
       setPrizes(mappedRewards);
       updateRewardsCache(mappedRewards);
 
