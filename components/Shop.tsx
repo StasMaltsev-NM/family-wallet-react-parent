@@ -508,29 +508,25 @@ const handleCreateReward = async () => {
     setNewPrize({ name: '', cost: '', isPermanent: true });
 
     const started = await runInstant('create-reward', async () => {
-      const createResults = await Promise.allSettled(
-        apiChildIds.map((childId) =>
-          parentApi.createReward(inviteCode, childId, title, Math.round(price), '', isPermanent)
-        )
+      const createResult = await parentApi.createRewardsBatch(
+        inviteCode,
+        apiChildIds,
+        title,
+        Math.round(price),
+        '',
+        isPermanent
       );
 
-      const createdRewardIds: string[] = [];
-      const createdRewardIdSet = new Set<string>();
-      let failedCount = 0;
-
-      createResults.forEach((result) => {
-        if (result.status === 'fulfilled') {
-          const rewardId = extractRewardId(result.value);
-          if (rewardId) {
-            if (!createdRewardIdSet.has(rewardId)) {
-              createdRewardIdSet.add(rewardId);
-              createdRewardIds.push(rewardId);
-            }
-            return;
-          }
-        }
-        failedCount += 1;
-      });
+      const createdRewardIds = Array.from(
+        new Set(
+          [
+            ...((Array.isArray(createResult?.reward_ids) ? createResult.reward_ids : []) as string[]),
+            extractRewardId(createResult),
+          ]
+            .map((id) => String(id || '').trim())
+            .filter(Boolean)
+        )
+      );
 
       if (createdRewardIds.length === 0) {
         setCreateFeedback({
@@ -557,14 +553,13 @@ const handleCreateReward = async () => {
         });
       }
 
-      startSharedImageGeneration(createdRewardIds);
+      // Бэкенд теперь генерирует картинку один раз на всю группу в createRewardsBatch.
       startBackgroundImageRefresh(createdRewardIds);
 
-      const totalIssueCount = unresolvedCount + failedCount;
-      if (totalIssueCount > 0) {
+      if (unresolvedCount > 0) {
         setCreateFeedback({
           type: 'info',
-          message: `Создано: ${createdRewardIds.length}. Не удалось: ${totalIssueCount}.`,
+          message: `Создано: ${createdRewardIds.length}. Не удалось определить детей: ${unresolvedCount}.`,
         });
         return;
       }

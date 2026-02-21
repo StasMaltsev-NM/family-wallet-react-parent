@@ -258,6 +258,27 @@ export const parentApi = {
     }, inviteCode);
   },
 
+  createRewardsBatch(
+    inviteCode: string,
+    childIds: string[],
+    title: string,
+    price: number,
+    description?: string,
+    isPermanent: boolean = true
+  ) {
+    return request<{ reward_id?: string; reward_ids?: string[]; message?: string }>("/api/rewards/create", {
+      method: "POST",
+      body: JSON.stringify({
+        child_ids: childIds,
+        title,
+        price,
+        description: description || '',
+        icon: '🎁',
+        is_permanent: isPermanent ? 1 : 0
+      }),
+    }, inviteCode);
+  },
+
   listRewards(inviteCode: string) {
     return request<{ rewards: any[] }>("/api/rewards/list", {
       method: "GET",
