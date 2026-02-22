@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Child } from '../types';
 import {
   Sparkles,
@@ -42,7 +42,51 @@ const CORE_BLOCKS: AssistantReportBlock[] = [
   'saving_strategy',
 ];
 
+type AIPendingState = {
+  main: boolean;
+  blocks: AssistantReportBlock[];
+  missions: boolean;
+  prizes: boolean;
+};
+
+type AICacheState = {
+  reportBlocks: Record<AssistantReportBlock, string>;
+  missionIdeas: string;
+  prizeIdeas: string;
+  pending: AIPendingState;
+};
+
+const EMPTY_PENDING: AIPendingState = {
+  main: false,
+  blocks: [],
+  missions: false,
+  prizes: false,
+};
+
+const AI_CACHE_VERSION = 'v2';
+
+const isBrowser = () => typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+
+const getEmptyCacheState = (): AICacheState => ({
+  reportBlocks: { ...EMPTY_BLOCKS },
+  missionIdeas: '',
+  prizeIdeas: '',
+  pending: { ...EMPTY_PENDING },
+});
+
+const uniqueBlocks = (blocks: AssistantReportBlock[]) => Array.from(new Set(blocks));
+const normalizeCachedIdeas = (value: unknown): string => {
+  const text = String(value || '').trim();
+  return text.toLowerCase().includes('ошибка генерации') ? '' : text;
+};
+
 const AIAssistant: React.FC<Props> = ({ child, inviteCode }) => {
+  const mountedRef = useRef(true);
+  const cacheKey = useMemo(
+    () => `fw_ai_assistant:${AI_CACHE_VERSION}:${inviteCode}:${child.id}`,
+    [inviteCode, child.id]
+  );
+
   const [reportBlocks, setReportBlocks] = useState<Record<AssistantReportBlock, string>>(EMPTY_BLOCKS);
   const [loadingBlocks, setLoadingBlocks] = useState<Record<AssistantReportBlock, boolean>>(EMPTY_LOADING);
 
@@ -52,69 +96,241 @@ const AIAssistant: React.FC<Props> = ({ child, inviteCode }) => {
   const [isMissionsLoading, setIsMissionsLoading] = useState(false);
   const [isPrizesLoading, setIsPrizesLoading] = useState(false);
 
+  const readCache = (): AICacheState => {
+    if (!isBrowser()) return getEmptyCacheState();
+    try {
+      const raw = window.localStorage.getItem(cacheKey);
+      if (!raw) return getEmptyCacheState();
+      const parsed = JSON.parse(raw) as Partial<AICacheState>;
+      return {
+        reportBlocks: {
+          ...EMPTY_BLOCKS,
+          ...(parsed.reportBlocks || {}),
+        },
+        missionIdeas: normalizeCachedIdeas(parsed.missionIdeas),
+        prizeIdeas: normalizeCachedIdeas(parsed.prizeIdeas),
+        pending: {
+          ...EMPTY_PENDING,
+          ...(parsed.pending || {}),
+          blocks: uniqueBlocks(((parsed.pending?.blocks || []) as AssistantReportBlock[]).filter(Boolean)),
+        },
+      };
+    } catch {
+      return getEmptyCacheState();
+    }
+  };
+
+  const writeCache = (updater: (prev: AICacheState) => AICacheState) => {
+    if (!isBrowser()) return;
+    const next = updater(readCache());
+    window.localStorage.setItem(cacheKey, JSON.stringify(next));
+  };
+
   const setBlockLoading = (block: AssistantReportBlock, value: boolean) => {
     setLoadingBlocks((prev) => ({ ...prev, [block]: value }));
   };
 
   const handleRefreshBlock = async (block: AssistantReportBlock) => {
-    setBlockLoading(block, true);
-    const text = await getAIReportBlock(block, child, inviteCode);
-    setReportBlocks((prev) => ({ ...prev, [block]: text }));
-    setBlockLoading(block, false);
+    if (mountedRef.current) setBlockLoading(block, true);
+    writeCache((prev) => ({
+      ...prev,
+      pending: {
+        ...prev.pending,
+        blocks: uniqueBlocks([...prev.pending.blocks, block]),
+      },
+    }));
+
+    try {
+      const text = await getAIReportBlock(block, child, inviteCode);
+      if (mountedRef.current) {
+        setReportBlocks((prev) => ({ ...prev, [block]: text }));
+      }
+      writeCache((prev) => ({
+        ...prev,
+        reportBlocks: { ...prev.reportBlocks, [block]: text },
+        pending: {
+          ...prev.pending,
+          blocks: prev.pending.blocks.filter((item) => item !== block),
+        },
+      }));
+    } catch {
+      writeCache((prev) => ({
+        ...prev,
+        pending: {
+          ...prev.pending,
+          blocks: prev.pending.blocks.filter((item) => item !== block),
+        },
+      }));
+    } finally {
+      if (mountedRef.current) setBlockLoading(block, false);
+    }
   };
 
   const handleRefreshMain = async () => {
     if (isMainLoading) return;
 
-    setIsMainLoading(true);
-    setLoadingBlocks({
-      analytics: true,
-      expert_advice: true,
-      execution_dynamics: true,
-      learning_trends: true,
-      saving_strategy: true,
-    });
+    if (mountedRef.current) {
+      setIsMainLoading(true);
+      setLoadingBlocks({
+        analytics: true,
+        expert_advice: true,
+        execution_dynamics: true,
+        learning_trends: true,
+        saving_strategy: true,
+      });
+    }
+    writeCache((prev) => ({
+      ...prev,
+      pending: {
+        ...prev.pending,
+        main: true,
+      },
+    }));
 
-    const results = await Promise.all(
-      CORE_BLOCKS.map(async (block) => ({
-        block,
-        text: await getAIReportBlock(block, child, inviteCode),
-      }))
-    );
+    try {
+      const results = await Promise.all(
+        CORE_BLOCKS.map(async (block) => ({
+          block,
+          text: await getAIReportBlock(block, child, inviteCode),
+        }))
+      );
 
-    setReportBlocks((prev) => {
-      const next = { ...prev };
-      for (const item of results) {
-        next[item.block] = item.text;
+      const blockPatch = results.reduce((acc, item) => {
+        acc[item.block] = item.text;
+        return acc;
+      }, {} as Record<AssistantReportBlock, string>);
+
+      if (mountedRef.current) {
+        setReportBlocks((prev) => ({ ...prev, ...blockPatch }));
       }
-      return next;
-    });
-
-    setLoadingBlocks(EMPTY_LOADING);
-    setIsMainLoading(false);
+      writeCache((prev) => ({
+        ...prev,
+        reportBlocks: { ...prev.reportBlocks, ...blockPatch },
+        pending: {
+          ...prev.pending,
+          main: false,
+        },
+      }));
+    } catch {
+      writeCache((prev) => ({
+        ...prev,
+        pending: {
+          ...prev.pending,
+          main: false,
+        },
+      }));
+    } finally {
+      if (mountedRef.current) {
+        setLoadingBlocks(EMPTY_LOADING);
+        setIsMainLoading(false);
+      }
+    }
   };
 
   const handleRefreshMissions = async () => {
-    setIsMissionsLoading(true);
-    const res = await getAIContent('missions', child, inviteCode);
-    setMissionIdeas(res);
-    setIsMissionsLoading(false);
+    if (mountedRef.current) setIsMissionsLoading(true);
+    writeCache((prev) => ({
+      ...prev,
+      pending: {
+        ...prev.pending,
+        missions: true,
+      },
+    }));
+
+    try {
+      const res = await getAIContent('missions', child, inviteCode);
+      if (mountedRef.current) setMissionIdeas(res);
+      writeCache((prev) => ({
+        ...prev,
+        missionIdeas: res,
+        pending: {
+          ...prev.pending,
+          missions: false,
+        },
+      }));
+    } catch {
+      writeCache((prev) => ({
+        ...prev,
+        pending: {
+          ...prev.pending,
+          missions: false,
+        },
+      }));
+    } finally {
+      if (mountedRef.current) setIsMissionsLoading(false);
+    }
   };
 
   const handleRefreshPrizes = async () => {
-    setIsPrizesLoading(true);
-    const res = await getAIContent('prizes', child, inviteCode);
-    setPrizeIdeas(res);
-    setIsPrizesLoading(false);
+    if (mountedRef.current) setIsPrizesLoading(true);
+    writeCache((prev) => ({
+      ...prev,
+      pending: {
+        ...prev.pending,
+        prizes: true,
+      },
+    }));
+
+    try {
+      const res = await getAIContent('prizes', child, inviteCode);
+      if (mountedRef.current) setPrizeIdeas(res);
+      writeCache((prev) => ({
+        ...prev,
+        prizeIdeas: res,
+        pending: {
+          ...prev.pending,
+          prizes: false,
+        },
+      }));
+    } catch {
+      writeCache((prev) => ({
+        ...prev,
+        pending: {
+          ...prev.pending,
+          prizes: false,
+        },
+      }));
+    } finally {
+      if (mountedRef.current) setIsPrizesLoading(false);
+    }
   };
 
   useEffect(() => {
-    setReportBlocks(EMPTY_BLOCKS);
-    setMissionIdeas('');
-    setPrizeIdeas('');
-    void handleRefreshMain();
+    mountedRef.current = true;
+    const cached = readCache();
+    setReportBlocks(cached.reportBlocks);
+    setMissionIdeas(cached.missionIdeas);
+    setPrizeIdeas(cached.prizeIdeas);
+    setIsMainLoading(cached.pending.main);
+    setIsMissionsLoading(cached.pending.missions);
+    setIsPrizesLoading(cached.pending.prizes);
+    setLoadingBlocks({
+      analytics: cached.pending.main || cached.pending.blocks.includes('analytics'),
+      expert_advice: cached.pending.main || cached.pending.blocks.includes('expert_advice'),
+      execution_dynamics: cached.pending.main || cached.pending.blocks.includes('execution_dynamics'),
+      learning_trends: cached.pending.main || cached.pending.blocks.includes('learning_trends'),
+      saving_strategy: cached.pending.main || cached.pending.blocks.includes('saving_strategy'),
+    });
+
+    if (cached.pending.main) {
+      void handleRefreshMain();
+    } else {
+      cached.pending.blocks.forEach((block) => {
+        void handleRefreshBlock(block);
+      });
+    }
+    if (cached.pending.missions) {
+      void handleRefreshMissions();
+    }
+    if (cached.pending.prizes) {
+      void handleRefreshPrizes();
+    }
+
+    return () => {
+      mountedRef.current = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [child.id, inviteCode]);
+  }, [cacheKey]);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-24">
@@ -217,17 +433,19 @@ const AIAssistant: React.FC<Props> = ({ child, inviteCode }) => {
       <div className="space-y-4">
         <IdeaCard
           icon={<Target size={22} className="text-[var(--primary)]" />}
-          title="Идея миссий"
+          title="Идеи миссий"
           ideas={missionIdeas}
           isLoading={isMissionsLoading}
           onRefresh={handleRefreshMissions}
+          kind="missions"
         />
         <IdeaCard
           icon={<Gift size={22} className="text-orange-400" />}
-          title="Идея наград"
+          title="Идеи наград"
           ideas={prizeIdeas}
           isLoading={isPrizesLoading}
           onRefresh={handleRefreshPrizes}
+          kind="rewards"
         />
       </div>
     </div>
@@ -276,7 +494,21 @@ const InsightCard = ({
   </div>
 );
 
-const IdeaCard = ({ icon, title, ideas, isLoading, onRefresh }: any) => (
+const IdeaCard = ({
+  icon,
+  title,
+  ideas,
+  isLoading,
+  onRefresh,
+  kind = 'missions',
+}: {
+  icon: React.ReactNode;
+  title: string;
+  ideas: string;
+  isLoading: boolean;
+  onRefresh: () => void;
+  kind?: 'missions' | 'rewards';
+}) => (
   <div className="bg-[var(--bg-card)] rounded-[2.5rem] p-8 border border-[var(--border)] relative overflow-hidden group">
     <div className="flex items-center justify-between mb-6">
       <div className="flex items-center gap-4">
@@ -300,7 +532,7 @@ const IdeaCard = ({ icon, title, ideas, isLoading, onRefresh }: any) => (
         </div>
       ) : ideas ? (
         <ul className="grid grid-cols-1 gap-3">
-          {parseIdeaItems(ideas).map((item: string, idx: number) => (
+          {getIdeaItems(ideas, kind).map((item: string, idx: number) => (
             <li key={idx} className="flex items-center gap-3 text-white/80 font-bold text-sm bg-white/[0.02] p-3 rounded-xl border border-white/5">
               <span className="w-6 h-6 rounded-lg bg-[var(--primary)]/20 text-[var(--primary)] flex items-center justify-center text-[10px] font-black">{idx + 1}</span>
               {item.trim()}
@@ -330,6 +562,26 @@ const parseIdeaItems = (raw: string): string[] => {
     .map((item) => item.trim())
     .filter(Boolean)
     .slice(0, 10);
+};
+
+const sanitizeRewardIdea = (value: string): string => {
+  const cleaned = value
+    .replace(/[.,;:!?'"`()[\]{}]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return '';
+  return cleaned.split(' ').slice(0, 3).join(' ');
+};
+
+const getIdeaItems = (raw: string, kind: 'missions' | 'rewards'): string[] => {
+  const items = parseIdeaItems(raw);
+  if (kind !== 'rewards') return items;
+
+  const compact = items
+    .map(sanitizeRewardIdea)
+    .filter(Boolean);
+
+  return compact.slice(0, 10);
 };
 
 export default AIAssistant;

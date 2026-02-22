@@ -20,6 +20,26 @@ type AssistantPayload = {
   report_block?: AssistantReportBlock;
 };
 
+const FALLBACK_MISSION_IDEAS = [
+  'Убрать игрушки',
+  'Заправить кровать',
+  'Помыть посуду',
+  'Чтение 15 минут',
+  'Полить цветы',
+  'Собрать рюкзак',
+  'Порядок на столе',
+];
+
+const FALLBACK_REWARD_IDEAS = [
+  'Мороженое',
+  'Картошка фри',
+  'Поход в кино',
+  'Аквапарк',
+  'Прогулка в парке',
+  'Вечер настолок',
+  'Катание на самокате',
+];
+
 const normalizeAssistantText = (value: unknown): string => {
   return String(value ?? '')
     .replace(/```[\s\S]*?```/g, ' ')
@@ -146,8 +166,10 @@ const CARD_PROMPTS: Record<AssistantCardType, string> = {
     'Формат: только список, каждая строка с "- ", без вступления и без нумерации.',
   ].join('\n'),
   prizes: [
-    'Предложи 7 наград с фокусом на нематериальную мотивацию.',
-    'Формат: только список, каждая строка с "- ", без вступления и без нумерации.',
+    'Предложи 7 наград для ребенка с фокусом на нематериальную мотивацию.',
+    'Формат: только список, каждая строка с "- ", без вступления и нумерации.',
+    'Каждый пункт строго 1-3 слова (например: "Поход в кино", "Картошка фри", "Аквапарк").',
+    'Без точек и длинных пояснений.',
   ].join('\n'),
 };
 
@@ -182,6 +204,28 @@ async function callParentAssistant(inviteCode: string, payload: AssistantPayload
   if (!text) throw new Error('AI_EMPTY_RESPONSE');
   return text;
 }
+
+const toBulletList = (items: string[]): string => items.map((item) => `- ${item}`).join('\n');
+
+const callParentAssistantWithRetry = async (
+  inviteCode: string,
+  payload: AssistantPayload,
+  retries = 1
+): Promise<string> => {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await callParentAssistant(inviteCode, payload);
+    } catch (error) {
+      lastError = error;
+      if (attempt >= retries) break;
+      await new Promise((resolve) => setTimeout(resolve, 350 * (attempt + 1)));
+    }
+  }
+
+  throw lastError;
+};
 
 /**
  * Основная аналитика прогресса через backend Kie Gemini.
@@ -227,7 +271,7 @@ export const getAIContent = async (
 
   try {
     const context = buildCommonContext(child);
-    return await callParentAssistant(inviteCode, {
+    return await callParentAssistantWithRetry(inviteCode, {
       mode,
       child_profile: context.child_profile,
       behavior_stats: context.behavior_stats,
@@ -236,7 +280,9 @@ export const getAIContent = async (
     });
   } catch (error) {
     console.error('Content generation error:', error);
-    return 'Ошибка генерации идей.';
+    if (type === 'prizes') return toBulletList(FALLBACK_REWARD_IDEAS);
+    if (type === 'missions') return toBulletList(FALLBACK_MISSION_IDEAS);
+    return 'Нет данных для генерации.';
   }
 };
 
