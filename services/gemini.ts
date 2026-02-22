@@ -1,6 +1,4 @@
 
-import { GoogleGenAI } from "@google/genai";
-
 const API_BASE = (import.meta.env.VITE_API_URL as string) || 'https://family-wallet-api.maltsevstas21.workers.dev';
 
 async function callParentAssistant(
@@ -107,9 +105,15 @@ export const getAIContent = async (
  * Используется gemini-2.5-flash-image для редактирования на основе исходного изображения и промпта.
  */
 export const editImageWithAI = async (imageSource: string, prompt: string): Promise<string | null> => {
-  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY as string });
-  
+  const apiKey = String(import.meta.env.VITE_API_KEY || '').trim();
+  if (!apiKey) {
+    console.warn('[AI IMAGE EDIT] VITE_API_KEY missing, skip client-side edit');
+    return null;
+  }
+
   try {
+    const { GoogleGenAI } = await import('@google/genai');
+    const ai = new GoogleGenAI({ apiKey });
     let base64Data = '';
     let mimeType = 'image/png';
 
