@@ -128,6 +128,17 @@ function resolveDreamImage(kid: any): string {
   return "https://api.dicebear.com/7.x/shapes/svg?seed=dream";
 }
 
+function resolveActiveDreamImage(dream: any, kid: any): string {
+  const candidate =
+    dream?.image_url ||
+    dream?.image ||
+    dream?.dream_image_url ||
+    dream?.dream_image ||
+    kid?.dream?.image ||
+    resolveDreamImage(kid);
+  return String(candidate || "").trim() || resolveDreamImage(kid);
+}
+
 function normalizeLookupText(value: any): string {
   return String(value || "").trim().toLowerCase();
 }
@@ -590,7 +601,7 @@ useEffect(() => {
           const activeDream = dreamsByChild[childId];
           if (!activeDream) return kid;
 
-          const imageFromDream = String(activeDream?.image_url || "").trim();
+          const imageFromDream = resolveActiveDreamImage(activeDream, kid);
           const currentFromDream = Number(activeDream?.current_amount ?? kid?.dream?.current ?? 0) || 0;
           const targetFromDream = Number(activeDream?.target_amount ?? kid?.dream?.price ?? 10000) || 10000;
           const titleFromDream = String(activeDream?.title || kid?.dream?.title || "Мечта");
@@ -602,7 +613,7 @@ useEffect(() => {
               title: titleFromDream,
               current: currentFromDream,
               price: targetFromDream,
-              image: imageFromDream || kid?.dream?.image || resolveDreamImage(kid),
+              image: imageFromDream,
             },
           };
         });
