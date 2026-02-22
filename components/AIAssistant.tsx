@@ -22,11 +22,10 @@ const AIAssistant: React.FC<Props> = ({ child, inviteCode }) => {
   // Обновление всей основной аналитики
   const handleRefreshMain = async () => {
     setIsMainLoading(true);
-    const context = `${child.name}, миссий: ${child.missions.length}, последнее: ${child.activities[0]?.description || 'старт'}`;
     
     const [resInsight, resAdvice] = await Promise.all([
-      getChildInsights(child.name, child.missions.length, child.activities[0]?.description || 'Только начинаем', inviteCode, child.id),
-      getAIContent('advice', context, inviteCode, child.id)
+      getChildInsights(child, inviteCode),
+      getAIContent('advice', child, inviteCode)
     ]);
     
     setInsight(resInsight);
@@ -36,14 +35,14 @@ const AIAssistant: React.FC<Props> = ({ child, inviteCode }) => {
 
   const handleRefreshMissions = async () => {
     setIsMissionsLoading(true);
-    const res = await getAIContent('missions', child.name, inviteCode, child.id);
+    const res = await getAIContent('missions', child, inviteCode);
     setMissionIdeas(res);
     setIsMissionsLoading(false);
   };
 
   const handleRefreshPrizes = async () => {
     setIsPrizesLoading(true);
-    const res = await getAIContent('prizes', child.name, inviteCode, child.id);
+    const res = await getAIContent('prizes', child, inviteCode);
     setPrizeIdeas(res);
     setIsPrizesLoading(false);
   };
@@ -82,9 +81,9 @@ const AIAssistant: React.FC<Props> = ({ child, inviteCode }) => {
                 <span className="text-white/60 font-black text-[10px] uppercase tracking-[0.2em]">ИИ изучает прогресс {child.name}...</span>
               </div>
             ) : (
-              <p className="text-xl font-bold leading-relaxed text-white drop-shadow-sm">
-                "{insight}"
-              </p>
+              <div className="w-full text-sm sm:text-base font-bold leading-relaxed text-white/95 whitespace-pre-line">
+                {insight}
+              </div>
             )}
           </div>
         </div>
@@ -126,8 +125,8 @@ const AIAssistant: React.FC<Props> = ({ child, inviteCode }) => {
             </div>
             <h4 className="text-[12px] font-black text-white/60 uppercase tracking-[0.2em]">Совет эксперта</h4>
           </div>
-          <p className="text-base font-bold text-white/90 leading-relaxed italic">
-            "{advice}"
+          <p className="text-base font-bold text-white/90 leading-relaxed whitespace-pre-line">
+            {advice}
           </p>
         </div>
       )}
@@ -206,7 +205,7 @@ const IdeaCard = ({ icon, title, ideas, isLoading, onRefresh }: any) => (
         </div>
       ) : ideas ? (
         <ul className="grid grid-cols-1 gap-3">
-          {ideas.split(',').map((item: string, idx: number) => (
+          {parseIdeaItems(ideas).map((item: string, idx: number) => (
             <li key={idx} className="flex items-center gap-3 text-white/80 font-bold text-sm bg-white/[0.02] p-3 rounded-xl border border-white/5">
               <span className="w-6 h-6 rounded-lg bg-[var(--primary)]/20 text-[var(--primary)] flex items-center justify-center text-[10px] font-black">{idx + 1}</span>
               {item.trim()}
@@ -219,5 +218,23 @@ const IdeaCard = ({ icon, title, ideas, isLoading, onRefresh }: any) => (
     </div>
   </div>
 );
+
+const parseIdeaItems = (raw: string): string[] => {
+  const text = String(raw || '').trim();
+  if (!text) return [];
+
+  const byLines = text
+    .split('\n')
+    .map((line) => line.replace(/^[-*•\d.)\s]+/, '').trim())
+    .filter(Boolean);
+
+  if (byLines.length >= 3) return byLines.slice(0, 10);
+
+  return text
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 10);
+};
 
 export default AIAssistant;

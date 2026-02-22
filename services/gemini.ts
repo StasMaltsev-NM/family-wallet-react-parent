@@ -1,16 +1,114 @@
+import type { Child, Mission } from '../types';
 
 const API_BASE = (import.meta.env.VITE_API_URL as string) || 'https://family-wallet-api.maltsevstas21.workers.dev';
 
-async function callParentAssistant(
-  inviteCode: string,
-  payload: {
-    mode: 'report' | 'missions' | 'rewards';
-    child_profile: Record<string, unknown>;
-    behavior_stats: Record<string, unknown>;
-    parent_question?: string;
-    child_id?: string;
-  }
-): Promise<string> {
+type AssistantMode = 'report' | 'missions' | 'rewards';
+type AssistantCardType = 'advice' | 'missions' | 'prizes';
+
+type AssistantPayload = {
+  mode: AssistantMode;
+  child_profile: Record<string, unknown>;
+  behavior_stats: Record<string, unknown>;
+  parent_question?: string;
+  child_id?: string;
+};
+
+const normalizeAssistantText = (value: unknown): string => {
+  return String(value ?? '')
+    .replace(/^["«]+/, '')
+    .replace(/["»]+$/, '')
+    .trim();
+};
+
+const toSafeNumber = (value: unknown): number => {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : 0;
+};
+
+const buildMissionStats = (missions: Mission[]) => {
+  const active = missions.filter((m) => m.status === 'active').length;
+  const pending = missions.filter((m) => m.status === 'pending').length;
+  const completed = missions.filter((m) => m.status === 'completed').length;
+  const recurring = missions.filter((m) => Boolean(m.isRecurring)).length;
+  const team = missions.filter((m) => Boolean(m.isTeam)).length;
+  return { active, pending, completed, recurring, team };
+};
+
+const buildCommonContext = (child: Child) => {
+  const missions = Array.isArray(child.missions) ? child.missions : [];
+  const activities = Array.isArray(child.activities) ? child.activities : [];
+  const pendingPrizes = Array.isArray(child.pendingPrizes) ? child.pendingPrizes : [];
+  const missionStats = buildMissionStats(missions);
+  const dreamPrice = toSafeNumber(child.dream?.price);
+  const dreamCurrent = toSafeNumber(child.dream?.current);
+  const dreamLeft = Math.max(0, dreamPrice - dreamCurrent);
+  const dreamProgress = dreamPrice > 0 ? Math.min(100, Math.round((dreamCurrent / dreamPrice) * 100)) : 0;
+
+  return {
+    child_profile: {
+      child_name: child.name,
+      child_id: child.id,
+      gender: child.gender || 'unspecified',
+      dream_title: child.dream?.title || '',
+      dream_target_stars: dreamPrice,
+      dream_current_stars: dreamCurrent,
+      dream_left_stars: dreamLeft,
+      dream_progress_pct: dreamProgress,
+    },
+    behavior_stats: {
+      missions_total: missions.length,
+      missions_active: missionStats.active,
+      missions_pending: missionStats.pending,
+      missions_completed: missionStats.completed,
+      missions_recurring: missionStats.recurring,
+      missions_team: missionStats.team,
+      pending_rewards_total: pendingPrizes.length,
+      balance_confirmed: toSafeNumber(child.balance?.confirmed),
+      balance_pending: toSafeNumber(child.balance?.pending),
+      recent_activities: activities.slice(0, 8).map((a) => ({
+        date: a.date,
+        type: a.type,
+        amount: toSafeNumber(a.amount),
+        description: a.description,
+      })),
+    },
+  };
+};
+
+const REPORT_PROMPT = [
+  'Ты семейный психолог-коуч для родителя.',
+  'Работай только по входным данным, не выдумывай факты.',
+  'Без диагнозов и медицинских рекомендаций.',
+  'Запрещены общие фразы в стиле "отличные новости".',
+  'Ответ только на русском и строго в формате:',
+  'Итог недели:',
+  'Наблюдения по поведению и мотивации:',
+  '- 3-5 конкретных наблюдений по данным',
+  'Возможные причины (гипотезы):',
+  '- 2-4 мягкие гипотезы',
+  'Что попробовать на следующей неделе:',
+  '- 3 конкретных шага для родителя',
+  'Фраза поддержки ребёнку:',
+  'Точка контроля:',
+  '- 1 метрика на 7 дней',
+].join('\n');
+
+const CARD_PROMPTS: Record<AssistantCardType, string> = {
+  advice: [
+    'Дай 1 практический совет родителю на ближайшие 48 часов.',
+    'Формат: максимум 2 предложения, без воды, без вступления.',
+  ].join('\n'),
+  missions: [
+    'Предложи 7 миссий с учетом текущей динамики ребенка.',
+    'Формат: только список, каждая строка с "- ", без вступления и без нумерации.',
+  ].join('\n'),
+  prizes: [
+    'Предложи 7 наград с фокусом на нематериальную мотивацию.',
+    'Формат: только список, каждая строка с "- ", без вступления и без нумерации.',
+  ].join('\n'),
+};
+
+async function callParentAssistant(inviteCode: string, payload: AssistantPayload): Promise<string> {
   if (!inviteCode) {
     throw new Error('NO_INVITE_CODE');
   }
@@ -37,33 +135,23 @@ async function callParentAssistant(
     throw new Error(msg);
   }
 
-  const text = data?.text || data?.result || '';
+  const text = normalizeAssistantText(data?.text || data?.result || '');
   if (!text) throw new Error('AI_EMPTY_RESPONSE');
-  return String(text);
+  return text;
 }
 
 /**
  * Основная аналитика прогресса через backend Kie Gemini.
  */
-export const getChildInsights = async (
-  childName: string,
-  missionsCount: number,
-  recentActivity: string,
-  inviteCode: string,
-  childId?: string
-): Promise<string> => {
+export const getChildInsights = async (child: Child, inviteCode: string): Promise<string> => {
   try {
+    const context = buildCommonContext(child);
     return await callParentAssistant(inviteCode, {
       mode: 'report',
-      child_profile: {
-        child_name: childName,
-      },
-      behavior_stats: {
-        missions_count_hint: missionsCount,
-        recent_activity_hint: recentActivity,
-      },
-      parent_question: 'Сделай короткую сводку прогресса и рекомендации на ближайшую неделю.',
-      child_id: childId,
+      child_profile: context.child_profile,
+      behavior_stats: context.behavior_stats,
+      parent_question: REPORT_PROMPT,
+      child_id: child.id,
     });
   } catch (error) {
     console.error('Insights generation error:', error);
@@ -75,24 +163,20 @@ export const getChildInsights = async (
  * Генерация специализированного контента для карточек через backend Kie Gemini.
  */
 export const getAIContent = async (
-  type: 'advice' | 'missions' | 'prizes',
-  childContext: string,
-  inviteCode: string,
-  childId?: string
+  type: AssistantCardType,
+  child: Child,
+  inviteCode: string
 ): Promise<string> => {
-  const mode = type === 'missions' ? 'missions' : type === 'prizes' ? 'rewards' : 'report';
-  const parentQuestion =
-    type === 'advice'
-      ? `Дай один практический совет для родителя на основе контекста: ${childContext}`
-      : undefined;
+  const mode: AssistantMode = type === 'missions' ? 'missions' : type === 'prizes' ? 'rewards' : 'report';
 
   try {
+    const context = buildCommonContext(child);
     return await callParentAssistant(inviteCode, {
       mode,
-      child_profile: { context_hint: childContext },
-      behavior_stats: { source: 'parent_app_ai_cards' },
-      parent_question: parentQuestion,
-      child_id: childId,
+      child_profile: context.child_profile,
+      behavior_stats: context.behavior_stats,
+      parent_question: CARD_PROMPTS[type],
+      child_id: child.id,
     });
   } catch (error) {
     console.error('Content generation error:', error);
