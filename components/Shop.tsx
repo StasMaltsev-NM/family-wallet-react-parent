@@ -553,7 +553,8 @@ const handleCreateReward = async () => {
         });
       }
 
-      // Бэкенд теперь генерирует картинку один раз на всю группу в createRewardsBatch.
+      // Одна генерация на группу: запускаем только один regenerate для лидера.
+      startSharedImageGeneration(createdRewardIds);
       startBackgroundImageRefresh(createdRewardIds);
 
       if (unresolvedCount > 0) {
