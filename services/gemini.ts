@@ -4,6 +4,12 @@ const API_BASE = (import.meta.env.VITE_API_URL as string) || 'https://family-wal
 
 type AssistantMode = 'report' | 'missions' | 'rewards';
 type AssistantCardType = 'advice' | 'missions' | 'prizes';
+export type AssistantReportBlock =
+  | 'analytics'
+  | 'expert_advice'
+  | 'execution_dynamics'
+  | 'learning_trends'
+  | 'saving_strategy';
 
 type AssistantPayload = {
   mode: AssistantMode;
@@ -11,12 +17,16 @@ type AssistantPayload = {
   behavior_stats: Record<string, unknown>;
   parent_question?: string;
   child_id?: string;
+  report_block?: AssistantReportBlock;
 };
 
 const normalizeAssistantText = (value: unknown): string => {
   return String(value ?? '')
+    .replace(/```[\s\S]*?```/g, ' ')
     .replace(/^["«]+/, '')
     .replace(/["»]+$/, '')
+    .replace(/\s+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 };
 
@@ -93,6 +103,39 @@ const REPORT_PROMPT = [
   '- 1 метрика на 7 дней',
 ].join('\n');
 
+const REPORT_BLOCK_PROMPTS: Record<AssistantReportBlock, string> = {
+  analytics: [
+    'Сформируй блок "Аналитика ИИ".',
+    'До 200 токенов.',
+    'Только суть: темп выполнения, регулярность, реакция на сложность, связь "усилие → награда", риски перегруза/скуки.',
+    'Без заголовков, без markdown, без списков, 2-4 коротких абзаца.',
+  ].join(' '),
+  expert_advice: [
+    'Сформируй блок "Совет эксперта".',
+    'До 150 токенов.',
+    '2-3 конкретных действия для родителя на ближайшую неделю.',
+    'Без заголовков и markdown, коротко и практично.',
+  ].join(' '),
+  execution_dynamics: [
+    'Сформируй блок "Динамика выполнения".',
+    'До 70 токенов.',
+    '1-2 короткие фразы про скорость выполнения, откладывание, рывки, затягивание.',
+    'Без заголовков и markdown.',
+  ].join(' '),
+  learning_trends: [
+    'Сформируй блок "Тренды обучения".',
+    'До 70 токенов.',
+    '1-2 короткие фразы про дисциплину, самостоятельность и формирование привычки.',
+    'Без заголовков и markdown.',
+  ].join(' '),
+  saving_strategy: [
+    'Сформируй блок "Стратегия накопления".',
+    'До 70 токенов.',
+    '1-2 короткие фразы: стратегическое накопление против импульсивных трат и влияние промежуточных наград.',
+    'Без заголовков и markdown.',
+  ].join(' '),
+};
+
 const CARD_PROMPTS: Record<AssistantCardType, string> = {
   advice: [
     'Дай 1 практический совет родителю на ближайшие 48 часов.',
@@ -144,18 +187,27 @@ async function callParentAssistant(inviteCode: string, payload: AssistantPayload
  * Основная аналитика прогресса через backend Kie Gemini.
  */
 export const getChildInsights = async (child: Child, inviteCode: string): Promise<string> => {
+  return getAIReportBlock('analytics', child, inviteCode);
+};
+
+export const getAIReportBlock = async (
+  block: AssistantReportBlock,
+  child: Child,
+  inviteCode: string
+): Promise<string> => {
   try {
     const context = buildCommonContext(child);
     return await callParentAssistant(inviteCode, {
       mode: 'report',
+      report_block: block,
       child_profile: context.child_profile,
       behavior_stats: context.behavior_stats,
-      parent_question: REPORT_PROMPT,
+      parent_question: REPORT_BLOCK_PROMPTS[block] || REPORT_PROMPT,
       child_id: child.id,
     });
   } catch (error) {
-    console.error('Insights generation error:', error);
-    return 'Не удалось получить аналитику. Попробуйте позже.';
+    console.error(`AI report block generation error (${block}):`, error);
+    return 'Нет данных для этого блока. Попробуйте обновить позже.';
   }
 };
 
@@ -167,6 +219,10 @@ export const getAIContent = async (
   child: Child,
   inviteCode: string
 ): Promise<string> => {
+  if (type === 'advice') {
+    return getAIReportBlock('expert_advice', child, inviteCode);
+  }
+
   const mode: AssistantMode = type === 'missions' ? 'missions' : type === 'prizes' ? 'rewards' : 'report';
 
   try {
