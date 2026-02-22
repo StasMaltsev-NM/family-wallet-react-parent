@@ -1,50 +1,104 @@
 
 import { GoogleGenAI } from "@google/genai";
 
-/**
- * Основная аналитика прогресса.
- * Создаем экземпляр GoogleGenAI непосредственно перед вызовом для актуальности ключа.
- */
-export const getChildInsights = async (childName: string, missionsCount: number, recentActivity: string): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY as string });
+const API_BASE = (import.meta.env.VITE_API_URL as string) || 'https://family-wallet-api.maltsevstas21.workers.dev';
+
+async function callParentAssistant(
+  inviteCode: string,
+  payload: {
+    mode: 'report' | 'missions' | 'rewards';
+    child_profile: Record<string, unknown>;
+    behavior_stats: Record<string, unknown>;
+    parent_question?: string;
+    child_id?: string;
+  }
+): Promise<string> {
+  if (!inviteCode) {
+    throw new Error('NO_INVITE_CODE');
+  }
+
+  const response = await fetch(`${API_BASE}/api/ai-assistant/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Invite-Code': inviteCode,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const raw = await response.text();
+  let data: any = null;
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Проанализируй прогресс ребенка ${childName}. Активных миссий: ${missionsCount}. Последнее: ${recentActivity}. 
-                 Дай короткую общую сводку (2-3 предложения).`,
-      config: {
-        systemInstruction: "Ты — Senior AI аналитик по детскому развитию. Отвечай на русском.",
-        temperature: 0.8,
-      }
+    data = raw ? JSON.parse(raw) : null;
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || `HTTP ${response.status}`;
+    throw new Error(msg);
+  }
+
+  const text = data?.text || data?.result || '';
+  if (!text) throw new Error('AI_EMPTY_RESPONSE');
+  return String(text);
+}
+
+/**
+ * Основная аналитика прогресса через backend Kie Gemini.
+ */
+export const getChildInsights = async (
+  childName: string,
+  missionsCount: number,
+  recentActivity: string,
+  inviteCode: string,
+  childId?: string
+): Promise<string> => {
+  try {
+    return await callParentAssistant(inviteCode, {
+      mode: 'report',
+      child_profile: {
+        child_name: childName,
+      },
+      behavior_stats: {
+        missions_count_hint: missionsCount,
+        recent_activity_hint: recentActivity,
+      },
+      parent_question: 'Сделай короткую сводку прогресса и рекомендации на ближайшую неделю.',
+      child_id: childId,
     });
-    return response.text || "Данные успешно проанализированы. Ребенок показывает стабильный рост.";
   } catch (error) {
-    console.error("Insights generation error:", error);
-    return "Не удалось получить аналитику. Попробуйте позже.";
+    console.error('Insights generation error:', error);
+    return 'Не удалось получить аналитику. Попробуйте позже.';
   }
 };
 
 /**
- * Генерация специализированного контента для карточек.
+ * Генерация специализированного контента для карточек через backend Kie Gemini.
  */
-export const getAIContent = async (type: 'advice' | 'missions' | 'prizes', childContext: string): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY as string });
-  const prompts = {
-    advice: "Дай один практический совет по воспитанию или обучению на основе контекста: " + childContext,
-    missions: "Предложи 5 конкретных идей миссий для ребенка. Формат: только список через запятую. Контекст: " + childContext,
-    prizes: "Предложи 5 идей наград (призов) для ребенка. Формат: только список через запятую. Контекст: " + childContext,
-  };
+export const getAIContent = async (
+  type: 'advice' | 'missions' | 'prizes',
+  childContext: string,
+  inviteCode: string,
+  childId?: string
+): Promise<string> => {
+  const mode = type === 'missions' ? 'missions' : type === 'prizes' ? 'rewards' : 'report';
+  const parentQuestion =
+    type === 'advice'
+      ? `Дай один практический совет для родителя на основе контекста: ${childContext}`
+      : undefined;
 
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: prompts[type],
-      config: { temperature: 0.9 }
+    return await callParentAssistant(inviteCode, {
+      mode,
+      child_profile: { context_hint: childContext },
+      behavior_stats: { source: 'parent_app_ai_cards' },
+      parent_question: parentQuestion,
+      child_id: childId,
     });
-    return response.text || "Идеи находятся в разработке...";
   } catch (error) {
-    console.error("Content generation error:", error);
-    return "Ошибка генерации идей.";
+    console.error('Content generation error:', error);
+    return 'Ошибка генерации идей.';
   }
 };
 

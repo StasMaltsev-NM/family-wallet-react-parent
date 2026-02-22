@@ -6,9 +6,10 @@ import { getChildInsights, getAIContent } from '../services/gemini';
 
 interface Props {
   child: Child;
+  inviteCode: string;
 }
 
-const AIAssistant: React.FC<Props> = ({ child }) => {
+const AIAssistant: React.FC<Props> = ({ child, inviteCode }) => {
   const [insight, setInsight] = useState<string>('');
   const [advice, setAdvice] = useState<string>('');
   const [missionIdeas, setMissionIdeas] = useState<string>('');
@@ -24,8 +25,8 @@ const AIAssistant: React.FC<Props> = ({ child }) => {
     const context = `${child.name}, миссий: ${child.missions.length}, последнее: ${child.activities[0]?.description || 'старт'}`;
     
     const [resInsight, resAdvice] = await Promise.all([
-      getChildInsights(child.name, child.missions.length, child.activities[0]?.description || 'Только начинаем'),
-      getAIContent('advice', context)
+      getChildInsights(child.name, child.missions.length, child.activities[0]?.description || 'Только начинаем', inviteCode, child.id),
+      getAIContent('advice', context, inviteCode, child.id)
     ]);
     
     setInsight(resInsight);
@@ -35,14 +36,14 @@ const AIAssistant: React.FC<Props> = ({ child }) => {
 
   const handleRefreshMissions = async () => {
     setIsMissionsLoading(true);
-    const res = await getAIContent('missions', child.name);
+    const res = await getAIContent('missions', child.name, inviteCode, child.id);
     setMissionIdeas(res);
     setIsMissionsLoading(false);
   };
 
   const handleRefreshPrizes = async () => {
     setIsPrizesLoading(true);
-    const res = await getAIContent('prizes', child.name);
+    const res = await getAIContent('prizes', child.name, inviteCode, child.id);
     setPrizeIdeas(res);
     setIsPrizesLoading(false);
   };

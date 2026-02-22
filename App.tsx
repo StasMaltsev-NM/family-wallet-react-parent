@@ -1155,7 +1155,7 @@ useEffect(() => {
 
       case Tab.AI_ASSISTANT:
         return selectedChild ? (
-          <AIAssistant child={selectedChild} />
+          <AIAssistant child={selectedChild} inviteCode={parentCode} />
         ) : (
           <div className="text-center py-12 text-white/60">
             Выберите ребёнка
