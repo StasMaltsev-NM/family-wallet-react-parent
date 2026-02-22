@@ -359,6 +359,16 @@ export const parentApi = {
     );
   },
 
+  getMyDream(inviteCode: string) {
+    return request<{ dream?: any }>(
+      "/api/dreams/my",
+      {
+        method: "GET",
+      },
+      inviteCode
+    );
+  },
+
   setDreamGoal(inviteCode: string, dreamId: string, targetAmount: number) {
     return request<{ message: string }>(
       "/api/dreams/set-goal",

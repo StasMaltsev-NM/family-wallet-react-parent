@@ -139,6 +139,12 @@ function resolveActiveDreamImage(dream: any, kid: any): string {
   return String(candidate || "").trim() || resolveDreamImage(kid);
 }
 
+function hasMeaningfulDreamTitle(kid: any): boolean {
+  const title = String(kid?.dream?.title || "").trim();
+  if (!title) return false;
+  return title.toLowerCase() !== "мечта";
+}
+
 function normalizeLookupText(value: any): string {
   return String(value || "").trim().toLowerCase();
 }
@@ -620,6 +626,48 @@ useEffect(() => {
       } catch (e) {
         console.error("[dreams/active] FAILED:", e);
         hydratedKids = nextKids;
+      }
+
+      // Fallback: если активные мечты не вернулись для части детей, добираем через child invite (/api/dreams/my).
+      const kidsMissingDream = hydratedKids.filter(
+        (kid: any) => !hasMeaningfulDreamTitle(kid) && String(kid?.inviteCode || "").trim()
+      );
+      if (kidsMissingDream.length > 0) {
+        try {
+          const fallbackResults = await Promise.allSettled(
+            kidsMissingDream.map((kid: any) => parentApi.getMyDream(String(kid.inviteCode || "").trim()))
+          );
+
+          const fallbackByKidId: Record<string, any> = {};
+          kidsMissingDream.forEach((kid: any, index: number) => {
+            const result = fallbackResults[index];
+            if (result?.status !== "fulfilled") return;
+            const dream = result.value?.dream;
+            if (!dream) return;
+            const title = String(dream?.title || "").trim();
+            if (!title) return;
+            fallbackByKidId[String(kid.id || "")] = dream;
+          });
+
+          if (Object.keys(fallbackByKidId).length > 0) {
+            hydratedKids = hydratedKids.map((kid: any) => {
+              const fallbackDream = fallbackByKidId[String(kid?.id || "")];
+              if (!fallbackDream) return kid;
+              return {
+                ...kid,
+                dream: {
+                  ...kid.dream,
+                  title: String(fallbackDream?.title || kid?.dream?.title || "Мечта"),
+                  current: Number(fallbackDream?.current_amount ?? kid?.dream?.current ?? 0) || 0,
+                  price: Number(fallbackDream?.target_amount ?? kid?.dream?.price ?? 10000) || 10000,
+                  image: resolveActiveDreamImage(fallbackDream, kid),
+                },
+              };
+            });
+          }
+        } catch (e) {
+          console.error("[dreams/my fallback] FAILED:", e);
+        }
       }
 
       setApiChildren(hydratedKids);

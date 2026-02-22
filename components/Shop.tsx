@@ -138,6 +138,7 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   });
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(prizes.length === 0);
   const [isProgressLoading, setIsProgressLoading] = useState<boolean>(false);
+  const [isBootRefreshing, setIsBootRefreshing] = useState<boolean>(false);
   const [createFeedback, setCreateFeedback] = useState<{
     type: 'success' | 'error' | 'info';
     message: string;
@@ -372,11 +373,13 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
 
   useEffect(() => {
     const loadRewards = async () => {
+      setIsBootRefreshing(true);
       try {
         await refreshRewards({ showProgress: true, force: true });
       } catch (err) {
         console.error('[SHOP LOAD] error:', err);
       } finally {
+        setIsBootRefreshing(false);
         setIsInitialLoading(false);
       }
     };
@@ -704,7 +707,7 @@ const handleCreateReward = async () => {
                     className="relative w-full h-full object-cover scale-[1.2] transition-transform duration-500"
                   />
                 ) : (
-                  isProgressLoading ? (
+                  (isProgressLoading || isBootRefreshing) ? (
                     <div className="relative w-full h-full p-6">
                       <div className="w-full h-full rounded-[2rem] bg-white/10 animate-pulse border border-white/10" />
                     </div>
@@ -714,7 +717,7 @@ const handleCreateReward = async () => {
                 )}
                 {!prize.image_url ? (
                   <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[9px] font-black uppercase tracking-[0.2em] text-white/60 bg-black/40 px-2.5 py-1 rounded-full border border-white/10">
-                    {isProgressLoading ? 'Загрузка...' : 'Генерация...'}
+                    {(isProgressLoading || isBootRefreshing) ? 'Загрузка...' : 'Генерация...'}
                   </div>
                 ) : null}
               </div>
