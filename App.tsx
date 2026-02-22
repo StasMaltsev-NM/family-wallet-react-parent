@@ -1278,7 +1278,7 @@ useEffect(() => {
 
   if (isInitialDataLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6 bg-black text-white">
+      <div className="min-h-screen min-h-[100dvh] flex items-center justify-center p-6 bg-black text-white overflow-x-clip">
         <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white/[0.04] p-7">
           <div className="h-1 w-full overflow-hidden rounded-full bg-white/10">
             <div className="h-full w-1/3 bg-[var(--primary)] animate-[appBootBar_1.2s_linear_infinite]" />
@@ -1316,8 +1316,8 @@ useEffect(() => {
   }
 
   return (
-    <div className="h-screen flex flex-col transition-colors duration-500 bg-black text-white w-full max-w-full overflow-x-hidden">
-      <header className="w-full px-4 pt-3 pb-0 sticky top-0 z-40 bg-black max-w-full">
+    <div className="min-h-screen min-h-[100dvh] flex flex-col transition-colors duration-500 bg-black text-white w-full max-w-full overflow-x-clip">
+      <header className="w-full px-4 pt-[max(env(safe-area-inset-top),0.75rem)] pb-0 sticky top-0 z-40 bg-black max-w-full">
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-3xl font-black tracking-tight text-center">
             В<span className="text-amber-400">Э</span>Й!
@@ -1354,11 +1354,11 @@ useEffect(() => {
         />
       </header>
 
-      <main className="flex-1 overflow-y-auto scrollArea max-w-3xl mx-auto px-4 md:px-6 mt-2 pb-40 w-full max-w-full box-border">
+      <main className="flex-1 overflow-y-auto scrollArea max-w-3xl mx-auto px-4 md:px-6 mt-2 pb-[calc(10rem+env(safe-area-inset-bottom))] w-full max-w-full box-border">
         {renderContent()}
       </main>
 
-      <div className="fixed bottom-8 left-0 right-0 z-50 px-4 md:px-6 w-full max-w-full box-border">
+      <div className="fixed bottom-[max(env(safe-area-inset-bottom),1rem)] left-0 right-0 z-50 px-4 md:px-6 w-full max-w-full box-border">
         <nav className="max-w-3xl mx-auto bg-white/[0.04] backdrop-blur-3xl border border-white/10 rounded-[2.5rem] py-4 px-6 md:px-8 shadow-[0_25px_60px_rgba(0,0,0,0.8)] flex items-center justify-between transition-all duration-500 w-full max-w-full box-border">
           <NavButton
             active={activeTab === Tab.DASHBOARD}
