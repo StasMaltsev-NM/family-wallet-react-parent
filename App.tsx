@@ -1316,7 +1316,7 @@ useEffect(() => {
   }
 
   return (
-    <div className="min-h-screen min-h-[100dvh] flex flex-col transition-colors duration-500 bg-black text-white w-full max-w-full overflow-x-clip">
+    <div className="h-screen h-[100dvh] min-h-screen flex flex-col transition-colors duration-500 bg-black text-white w-full max-w-full overflow-hidden overflow-x-clip">
       <header className="w-full px-4 pt-[max(env(safe-area-inset-top),0.75rem)] pb-0 sticky top-0 z-40 bg-black max-w-full">
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-3xl font-black tracking-tight text-center">
@@ -1354,7 +1354,7 @@ useEffect(() => {
         />
       </header>
 
-      <main className="flex-1 overflow-y-auto scrollArea max-w-3xl mx-auto px-4 md:px-6 mt-2 pb-[calc(10rem+env(safe-area-inset-bottom))] w-full max-w-full box-border">
+      <main className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain scrollArea max-w-3xl mx-auto px-4 md:px-6 mt-2 pb-[calc(10rem+env(safe-area-inset-bottom))] w-full max-w-full box-border">
         {renderContent()}
       </main>
 
