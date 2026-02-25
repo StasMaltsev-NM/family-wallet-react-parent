@@ -266,16 +266,22 @@ export const parentApi = {
     description?: string,
     isPermanent: boolean = true
   ) {
+    const normalizedChildIds = Array.from(new Set((childIds || []).map((id) => String(id || '').trim()).filter(Boolean)));
+    const payload: Record<string, any> = {
+      child_ids: normalizedChildIds,
+      title,
+      price,
+      description: description || '',
+      icon: '🎁',
+      is_permanent: isPermanent ? 1 : 0
+    };
+    // Совместимость с backend-реализациями, где обязателен child_id даже при batch-передаче.
+    if (normalizedChildIds.length === 1) {
+      payload.child_id = normalizedChildIds[0];
+    }
     return request<{ reward_id?: string; reward_ids?: string[]; message?: string }>("/api/rewards/create", {
       method: "POST",
-      body: JSON.stringify({
-        child_ids: childIds,
-        title,
-        price,
-        description: description || '',
-        icon: '🎁',
-        is_permanent: isPermanent ? 1 : 0
-      }),
+      body: JSON.stringify(payload),
     }, inviteCode);
   },
 

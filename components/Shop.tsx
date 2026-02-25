@@ -511,25 +511,28 @@ const handleCreateReward = async () => {
     setNewPrize({ name: '', cost: '', isPermanent: true });
 
     const started = await runInstant('create-reward', async () => {
-      const createResult = await parentApi.createRewardsBatch(
-        inviteCode,
-        apiChildIds,
-        title,
-        Math.round(price),
-        '',
-        isPermanent
-      );
-
-      const createdRewardIds = Array.from(
-        new Set(
-          [
-            ...((Array.isArray(createResult?.reward_ids) ? createResult.reward_ids : []) as string[]),
-            extractRewardId(createResult),
-          ]
-            .map((id) => String(id || '').trim())
-            .filter(Boolean)
-        )
-      );
+      // Надёжный путь: всегда создаём награды по одной на каждого ребёнка.
+      // Это медленнее batch, но исключает рассинхрон payload между версиями backend.
+      const createdRewardIds: string[] = [];
+      const failedCreateChildIds: string[] = [];
+      for (const childId of apiChildIds) {
+        try {
+          const single = await parentApi.createReward(
+            inviteCode,
+            childId,
+            title,
+            Math.round(price),
+            '',
+            isPermanent
+          );
+          const rewardId = extractRewardId(single);
+          if (rewardId) createdRewardIds.push(rewardId);
+          else failedCreateChildIds.push(childId);
+        } catch (err) {
+          console.error('[SHOP CREATE] child create failed', { childId, err });
+          failedCreateChildIds.push(childId);
+        }
+      }
 
       if (createdRewardIds.length === 0) {
         setCreateFeedback({
@@ -560,10 +563,10 @@ const handleCreateReward = async () => {
       startSharedImageGeneration(createdRewardIds);
       startBackgroundImageRefresh(createdRewardIds);
 
-      if (unresolvedCount > 0) {
+      if (unresolvedCount > 0 || failedCreateChildIds.length > 0) {
         setCreateFeedback({
           type: 'info',
-          message: `Создано: ${createdRewardIds.length}. Не удалось определить детей: ${unresolvedCount}.`,
+          message: `Создано: ${createdRewardIds.length}. Пропущено детей: ${unresolvedCount + failedCreateChildIds.length}.`,
         });
         return;
       }
@@ -636,6 +639,7 @@ const handleCreateReward = async () => {
   const visiblePrizes = currentChildApiId
     ? prizes.filter((prize) => prize.child_id === currentChildApiId)
     : prizes;
+  const isAnyRewardsLoading = isProgressLoading || isBootRefreshing;
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
@@ -657,9 +661,14 @@ const handleCreateReward = async () => {
         </div>
         <button 
           onClick={() => setIsAdding(true)}
-          className="p-4 bg-[var(--primary)]/10 border border-[var(--primary)]/20 rounded-[1.5rem] text-[var(--primary)] hover:bg-[var(--primary)] hover:text-white active:scale-[0.96] transition-all shadow-lg"
+          disabled={isAnyRewardsLoading}
+          className="p-4 bg-[var(--primary)]/10 border border-[var(--primary)]/20 rounded-[1.5rem] text-[var(--primary)] hover:bg-[var(--primary)] hover:text-white active:scale-[0.96] transition-all shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"
         >
-          <Plus size={28} />
+          {isAnyRewardsLoading ? (
+            <div className="h-7 w-7 rounded-lg bg-[var(--primary)]/35 animate-pulse" />
+          ) : (
+            <Plus size={28} />
+          )}
         </button>
       </div>
 
@@ -728,14 +737,18 @@ const handleCreateReward = async () => {
                   <Star size={18} fill="currentColor" className="text-white" />
                 </div>
                 
-                <button
-                  onClick={() => handleRegenerateImage(prize.id)}
-                  disabled={isPending(`regen:${prize.id}`)}
-                  className="absolute top-4 left-4 p-2.5 bg-indigo-600/80 backdrop-blur-md rounded-xl text-white border border-white/10 hover:bg-indigo-500 active:scale-[0.96] transition-all disabled:opacity-50"
-                  title="Перегенерировать картинку"
-                >
-                  <Repeat size={16} className={isPending(`regen:${prize.id}`) ? 'animate-spin' : ''} />
-                </button>
+                {(isAnyRewardsLoading && !prize.image_url) ? (
+                  <div className="absolute top-4 left-4 h-10 w-10 rounded-xl bg-indigo-500/35 border border-white/10 animate-pulse" />
+                ) : (
+                  <button
+                    onClick={() => handleRegenerateImage(prize.id)}
+                    disabled={isPending(`regen:${prize.id}`)}
+                    className="absolute top-4 left-4 p-2.5 bg-indigo-600/80 backdrop-blur-md rounded-xl text-white border border-white/10 hover:bg-indigo-500 active:scale-[0.96] transition-all disabled:opacity-50"
+                    title="Перегенерировать картинку"
+                  >
+                    <Repeat size={16} className={isPending(`regen:${prize.id}`) ? 'animate-spin' : ''} />
+                  </button>
+                )}
               </div>
 
               <div className="p-6 flex flex-col flex-1 justify-between gap-4">

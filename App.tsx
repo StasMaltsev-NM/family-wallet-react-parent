@@ -145,6 +145,23 @@ function hasMeaningfulDreamTitle(kid: any): boolean {
   return title.toLowerCase() !== "мечта";
 }
 
+function hasUsableDreamImage(kid: any): boolean {
+  const src = String(
+    kid?.dream?.image ||
+      kid?.dream?.image_url ||
+      kid?.dream?.dream_image_url ||
+      kid?.dream_image_url ||
+      kid?.dream_image ||
+      ""
+  ).trim();
+  if (!src) return false;
+  const lower = src.toLowerCase();
+  if (lower.includes("api.dicebear.com/7.x/shapes/svg")) return false;
+  if (lower.includes("seed=dream")) return false;
+  if (lower.includes("dream-placeholder")) return false;
+  return true;
+}
+
 function normalizeLookupText(value: any): string {
   return String(value || "").trim().toLowerCase();
 }
@@ -274,6 +291,7 @@ const App: React.FC = () => {
     byChildTitlePrice: {},
     byGlobalTitlePrice: {},
   });
+  const dreamFallbackFetchedAtRef = useRef<Record<string, number>>({});
   const rewardsHydrationInFlightRef = useRef(false);
   const rewardsIndexFetchedAtRef = useRef(0);
 
@@ -326,6 +344,7 @@ const App: React.FC = () => {
     setIsInitialDataLoading(true);
     setLastSyncAt(null);
     rewardImageIndexRef.current = { byRewardId: {}, byChildTitle: {}, byChildTitlePrice: {}, byGlobalTitlePrice: {} };
+    dreamFallbackFetchedAtRef.current = {};
     rewardsHydrationInFlightRef.current = false;
     rewardsIndexFetchedAtRef.current = 0;
   }, [parentCode]);
@@ -629,11 +648,24 @@ useEffect(() => {
       }
 
       // Fallback: если активные мечты не вернулись для части детей, добираем через child invite (/api/dreams/my).
-      const kidsMissingDream = hydratedKids.filter(
-        (kid: any) => !hasMeaningfulDreamTitle(kid) && String(kid?.inviteCode || "").trim()
-      );
+      const DREAM_MY_REFRESH_MS = 10 * 60 * 1000;
+      const nowTs = Date.now();
+      const kidsMissingDream = hydratedKids.filter((kid: any) => {
+        const inviteCode = String(kid?.inviteCode || "").trim();
+        if (!inviteCode) return false;
+        const kidId = String(kid?.id || "");
+        const lastFetchedAt = dreamFallbackFetchedAtRef.current[kidId] || 0;
+        const missingData = !hasMeaningfulDreamTitle(kid) || !hasUsableDreamImage(kid);
+        if (!lastFetchedAt) return true; // хотя бы один раз гидрируем /api/dreams/my для каждого ребёнка
+        return missingData && nowTs - lastFetchedAt > DREAM_MY_REFRESH_MS;
+      });
       if (kidsMissingDream.length > 0) {
         try {
+          kidsMissingDream.forEach((kid: any) => {
+            const kidId = String(kid?.id || "");
+            if (!kidId) return;
+            dreamFallbackFetchedAtRef.current[kidId] = nowTs;
+          });
           const fallbackResults = await Promise.allSettled(
             kidsMissingDream.map((kid: any) => parentApi.getMyDream(String(kid.inviteCode || "").trim()))
           );

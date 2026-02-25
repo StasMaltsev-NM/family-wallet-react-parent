@@ -40,8 +40,14 @@ interface Props {
   onSetDreamGoal?: (dreamId: string, targetAmount: number) => Promise<void>;
 }
 
-function resolveDreamImageSrc(image: string | undefined): string {
-  const src = String(image || '').trim();
+function resolveDreamImageSrc(dream: any): string {
+  const src = String(
+    dream?.image_url ||
+      dream?.image ||
+      dream?.dream_image_url ||
+      dream?.dream_image ||
+      ''
+  ).trim();
   if (!src) return 'https://api.dicebear.com/7.x/shapes/svg?seed=dream';
   return src;
 }
@@ -99,7 +105,7 @@ const Dashboard: React.FC<Props> = ({
   const dreamRemaining = Math.max(0, dreamPrice - dreamCurrent);
   const progress = Math.min(100, (dreamCurrent / dreamPrice) * 100);
   const hasPendingDream = Boolean(pendingDream?.id);
-  const dreamImageSrc = resolveDreamImageSrc(child?.dream?.image);
+  const dreamImageSrc = resolveDreamImageSrc(child?.dream);
   const confirmedBalance = Math.trunc(Number(child?.balance?.confirmed ?? 0) || 0);
   const compactBalance = formatCompactStars(confirmedBalance);
 
@@ -114,7 +120,7 @@ const Dashboard: React.FC<Props> = ({
   const handleAIEdit = async () => {
     if (!editPrompt) return;
     setIsGenerating(true);
-    const result = await editImageWithAI(child.dream.image, `Примени эти визуальные изменения к изображению мечты: ${editPrompt}`);
+    const result = await editImageWithAI(dreamImageSrc, `Примени эти визуальные изменения к изображению мечты: ${editPrompt}`);
     if (result) {
       onUpdateChild({
         ...child,
