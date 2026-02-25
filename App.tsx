@@ -119,8 +119,16 @@ function taskBelongsToChild(task: any, child: any): boolean {
 function resolveDreamImage(kid: any): string {
   const candidate =
     kid?.dream_image_url ||
+    kid?.dream_image_data ||
+    kid?.dream_image_base64 ||
+    kid?.dream_image_b64 ||
     kid?.dream_image ||
     kid?.dream?.image_url ||
+    kid?.dream?.image_data ||
+    kid?.dream?.image_base64 ||
+    kid?.dream?.image_b64 ||
+    kid?.dream?.generated_image_url ||
+    kid?.dream?.generated_image ||
     kid?.dream?.image ||
     "";
   const raw = String(candidate || "").trim();
@@ -131,9 +139,19 @@ function resolveDreamImage(kid: any): string {
 function resolveActiveDreamImage(dream: any, kid: any): string {
   const candidate =
     dream?.image_url ||
+    dream?.image_data ||
+    dream?.image_base64 ||
+    dream?.image_b64 ||
+    dream?.generated_image_url ||
+    dream?.generated_image ||
     dream?.image ||
     dream?.dream_image_url ||
+    dream?.dream_image_data ||
+    dream?.dream_image_base64 ||
+    dream?.dream_image_b64 ||
     dream?.dream_image ||
+    kid?.dream?.generated_image_url ||
+    kid?.dream?.generated_image ||
     kid?.dream?.image ||
     resolveDreamImage(kid);
   return String(candidate || "").trim() || resolveDreamImage(kid);
@@ -148,9 +166,20 @@ function hasMeaningfulDreamTitle(kid: any): boolean {
 function hasUsableDreamImage(kid: any): boolean {
   const src = String(
     kid?.dream?.image ||
-      kid?.dream?.image_url ||
+    kid?.dream?.image_url ||
+      kid?.dream?.image_data ||
+      kid?.dream?.image_base64 ||
+      kid?.dream?.image_b64 ||
+      kid?.dream?.generated_image_url ||
+      kid?.dream?.generated_image ||
       kid?.dream?.dream_image_url ||
+      kid?.dream?.dream_image_data ||
+      kid?.dream?.dream_image_base64 ||
+      kid?.dream?.dream_image_b64 ||
       kid?.dream_image_url ||
+      kid?.dream_image_data ||
+      kid?.dream_image_base64 ||
+      kid?.dream_image_b64 ||
       kid?.dream_image ||
       ""
   ).trim();
@@ -648,7 +677,8 @@ useEffect(() => {
       }
 
       // Fallback: если активные мечты не вернулись для части детей, добираем через child invite (/api/dreams/my).
-      const DREAM_MY_REFRESH_MS = 10 * 60 * 1000;
+      const DREAM_MY_MISSING_RETRY_MS = 20 * 1000;
+      const DREAM_MY_SYNC_REFRESH_MS = 10 * 60 * 1000;
       const nowTs = Date.now();
       const kidsMissingDream = hydratedKids.filter((kid: any) => {
         const inviteCode = String(kid?.inviteCode || "").trim();
@@ -657,7 +687,8 @@ useEffect(() => {
         const lastFetchedAt = dreamFallbackFetchedAtRef.current[kidId] || 0;
         const missingData = !hasMeaningfulDreamTitle(kid) || !hasUsableDreamImage(kid);
         if (!lastFetchedAt) return true; // хотя бы один раз гидрируем /api/dreams/my для каждого ребёнка
-        return missingData && nowTs - lastFetchedAt > DREAM_MY_REFRESH_MS;
+        if (missingData) return nowTs - lastFetchedAt > DREAM_MY_MISSING_RETRY_MS;
+        return nowTs - lastFetchedAt > DREAM_MY_SYNC_REFRESH_MS;
       });
       if (kidsMissingDream.length > 0) {
         try {
