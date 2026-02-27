@@ -556,9 +556,7 @@ const handleAction = async (
 
               <div className="space-y-4">
                 <p className="text-[11px] font-black text-[var(--text-muted)] uppercase tracking-[0.2em] ml-2">О задаче</p>
-                <div className="flex items-center gap-3 text-[11px] font-black uppercase tracking-[0.2em] text-[var(--text-muted)] ml-2">
-                  <span className="w-6 h-6 rounded-lg bg-white/10 flex items-center justify-center text-sm">{newMission.icon || "✅"}</span>
-                </div>
+                <div className="flex items-center gap-3 text-[11px] font-black uppercase tracking-[0.2em] text-[var(--text-muted)] ml-2" />
                 <div className="grid gap-4">
                   <input
                     type="text"

@@ -11,6 +11,7 @@ import {
   Target,
   Gift,
   Plus,
+  ArrowUpRight,
 } from 'lucide-react';
 import { getAIContent, getAIReportBlock, type AssistantReportBlock } from '../services/gemini';
 
@@ -540,23 +541,48 @@ const IdeaCard = ({
           {getIdeaItems(ideas, kind).map((item: string, idx: number) => (
             <li
               key={idx}
-              className="flex items-center gap-3 text-white/80 font-bold text-sm bg-white/[0.02] p-3 rounded-xl border border-white/5"
+              className="text-white/80 font-bold text-sm bg-white/[0.02] p-3 rounded-xl border border-white/5"
             >
-              <span className="w-6 h-6 rounded-lg bg-[var(--primary)]/20 text-[var(--primary)] flex items-center justify-center text-[10px] font-black">
-                {idx + 1}
-              </span>
-              <span className="flex-1 min-w-0">{item.trim()}</span>
-              {kind === 'missions' && onAddIdea ? (
-                <button
-                  onClick={() => onAddIdea(item)}
-                  className="px-3 py-1.5 rounded-lg bg-[var(--primary)]/15 text-[var(--primary)] text-[11px] font-black uppercase tracking-widest hover:bg-[var(--primary)] hover:text-white transition-all"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <Plus size={12} />
-                    Добавить
-                  </span>
-                </button>
-              ) : null}
+              <div
+                role={kind === 'missions' && onAddIdea ? 'button' : undefined}
+                tabIndex={kind === 'missions' && onAddIdea ? 0 : -1}
+                onClick={kind === 'missions' && onAddIdea ? () => onAddIdea(item) : undefined}
+                onKeyDown={
+                  kind === 'missions' && onAddIdea
+                    ? (event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          onAddIdea(item);
+                        }
+                      }
+                    : undefined
+                }
+                className={[
+                  'flex items-center gap-3',
+                  kind === 'missions' && onAddIdea
+                    ? 'cursor-pointer hover:bg-white/[0.05] transition-colors'
+                    : '',
+                ].join(' ')}
+                title={kind === 'missions' && onAddIdea ? 'Добавить миссию' : undefined}
+              >
+                <span className="w-6 h-6 rounded-lg bg-[var(--primary)]/20 text-[var(--primary)] flex items-center justify-center text-[10px] font-black">
+                  {idx + 1}
+                </span>
+                <span className="flex-1 min-w-0">{item.trim()}</span>
+                {kind === 'missions' && onAddIdea ? (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onAddIdea(item);
+                    }}
+                    className="w-8 h-8 rounded-md bg-[var(--primary)]/15 text-[var(--primary)] border border-[var(--primary)]/25 flex items-center justify-center hover:bg-[var(--primary)] hover:text-white transition-all active:scale-95"
+                    title="Добавить миссию"
+                  >
+                    <ArrowUpRight size={14} />
+                  </button>
+                ) : null}
+              </div>
             </li>
           ))}
         </ul>
