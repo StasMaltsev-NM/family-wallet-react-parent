@@ -12,6 +12,7 @@ import Shop from "./components/Shop";
 import AIAssistant from "./components/AIAssistant";
 import SettingsModal from "./components/SettingsModal";
 import AddChildScreen from "./components/AddChildScreen";
+import AppSplash from "./components/AppSplash";
 
 import {
   LayoutDashboard,
@@ -304,6 +305,10 @@ const App: React.FC = () => {
   );
   const selectedChildIdRef = useRef<string>(selectedChildId);
 
+  const [isAppBootLoading, setIsAppBootLoading] = useState(true);
+  const [isBootFading, setIsBootFading] = useState(false);
+  const [isAuthResolved, setIsAuthResolved] = useState(false);
+
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAddChildOpen, setIsAddChildOpen] = useState(false);
 
@@ -405,6 +410,14 @@ const App: React.FC = () => {
     document.body.setAttribute("data-theme", `${theme}`);
   }, [theme]);
 
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      setIsBootFading(true);
+      window.setTimeout(() => setIsAppBootLoading(false), 320);
+    }, 12000);
+    return () => window.clearTimeout(id);
+  }, []);
+
   // compute identityKey once
   useEffect(() => {
     const id = getTgUserId();
@@ -425,43 +438,48 @@ const App: React.FC = () => {
       if (!identityKey) {
         setParentCode("");
         setIsInviteModalOpen(true);
+        setIsAuthResolved(true);
         return;
       }
 
-      const saved = await tgCloudGet(INVITE_KEY);
-      console.log('[APP] Cloud storage parentCode:', saved);
-      console.log('[APP] identityKey:', identityKey);
-      console.log('[APP] INVITE_KEY:', INVITE_KEY);
+      try {
+        const saved = await tgCloudGet(INVITE_KEY);
+        console.log('[APP] Cloud storage parentCode:', saved);
+        console.log('[APP] identityKey:', identityKey);
+        console.log('[APP] INVITE_KEY:', INVITE_KEY);
 
-      // ФИКС: если сохранён TEST_BROWSER или пустой код — игнорируем
-      if (saved === 'TEST_BROWSER' || !saved) {
-        console.log('[APP] Invalid/empty code in cloud, clearing and opening modal');
+        // ФИКС: если сохранён TEST_BROWSER или пустой код — игнорируем
+        if (saved === 'TEST_BROWSER' || !saved) {
+          console.log('[APP] Invalid/empty code in cloud, clearing and opening modal');
 
-        // ОЧИСТИТЬ Cloud Storage
-        await tgCloudSet(INVITE_KEY, '');
+          // ОЧИСТИТЬ Cloud Storage
+          await tgCloudSet(INVITE_KEY, '');
 
-        setParentCode("");
-        setIsInviteModalOpen(true);
-        return;
-      }
-
-      if (saved) {
-        setParentCode(saved);
-        console.log('[APP] parentCode SET from cloud:', saved);
-        setIsInviteModalOpen(false);
-
-        // Загрузить коды семьи
-        try {
-          const codes = await parentApi.getFamilyCodes(saved);
-          setPartnerCode(codes.partnerCode || undefined);
-          setFriendCodes(codes.friendCodes);
-          console.log('[FAMILY CODES] (restored)', codes);
-        } catch (err) {
-          console.error('[FAMILY CODES] ERROR:', err);
+          setParentCode("");
+          setIsInviteModalOpen(true);
+          return;
         }
-      } else {
-        setParentCode("");
-        setIsInviteModalOpen(true);
+
+        if (saved) {
+          setParentCode(saved);
+          console.log('[APP] parentCode SET from cloud:', saved);
+          setIsInviteModalOpen(false);
+
+          // Загрузить коды семьи
+          try {
+            const codes = await parentApi.getFamilyCodes(saved);
+            setPartnerCode(codes.partnerCode || undefined);
+            setFriendCodes(codes.friendCodes);
+            console.log('[FAMILY CODES] (restored)', codes);
+          } catch (err) {
+            console.error('[FAMILY CODES] ERROR:', err);
+          }
+        } else {
+          setParentCode("");
+          setIsInviteModalOpen(true);
+        }
+      } finally {
+        setIsAuthResolved(true);
       }
     })();
   }, [identityKey, INVITE_KEY]);
@@ -523,6 +541,7 @@ useEffect(() => {
         }
       } finally {
         setIsAuthLoading(false);
+        setIsAuthResolved(true);
       }
     } else {
       console.log('[NEW AUTH] No Telegram initData - skip');
@@ -531,6 +550,7 @@ useEffect(() => {
       if (!parentCode) {
         setIsInviteModalOpen(true);
       }
+      setIsAuthResolved(true);
     }
   };
 
@@ -538,14 +558,31 @@ useEffect(() => {
   initAuth();
 }, []);
 
+useEffect(() => {
+  console.log("[AUTH STATE]", {
+    identityKey,
+    INVITE_KEY,
+    parentCode,
+    isInviteModalOpen,
+  });
+}, [identityKey, INVITE_KEY, parentCode, isInviteModalOpen]);
+
   useEffect(() => {
-    console.log("[AUTH STATE]", {
-      identityKey,
-      INVITE_KEY,
-      parentCode,
-      isInviteModalOpen,
-    });
-  }, [identityKey, INVITE_KEY, parentCode, isInviteModalOpen]);
+    if (!isAuthResolved) return;
+
+    if (!parentCode) {
+      setIsInitialDataLoading(false);
+      setIsBootFading(true);
+      const id = window.setTimeout(() => setIsAppBootLoading(false), 320);
+      return () => window.clearTimeout(id);
+    }
+
+    if (!isInitialDataLoading) {
+      setIsBootFading(true);
+      const id = window.setTimeout(() => setIsAppBootLoading(false), 320);
+      return () => window.clearTimeout(id);
+    }
+  }, [isAuthResolved, parentCode, isInitialDataLoading]);
 
   // ===== refreshTasks =====
   const parentCodeRef = useRef<string>("");
@@ -1323,6 +1360,10 @@ useEffect(() => {
   };
 
   // ===== Auth gate =====
+  if (isAppBootLoading || isInitialDataLoading) {
+    return <AppSplash isFading={isBootFading} />;
+  }
+
   if (!parentCode) {
     return (
       <div
@@ -1414,45 +1455,6 @@ useEffect(() => {
               {getReadableApiError(authError)}
             </div>
           ) : null}
-        </div>
-      </div>
-    );
-  }
-
-  if (isInitialDataLoading) {
-    return (
-      <div className="min-h-screen min-h-[100dvh] flex items-center justify-center p-6 bg-black text-white overflow-x-clip">
-        <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white/[0.04] p-7">
-          <div className="h-1 w-full overflow-hidden rounded-full bg-white/10">
-            <div className="h-full w-1/3 bg-[var(--primary)] animate-[appBootBar_1.2s_linear_infinite]" />
-          </div>
-          <style>{`
-            @keyframes appBootBar {
-              0% { transform: translateX(-100%); }
-              100% { transform: translateX(350%); }
-            }
-          `}</style>
-          <div className="mt-5 text-center">
-            <p className="text-lg font-black">Загрузка данных семьи...</p>
-            <p className="mt-2 text-xs uppercase tracking-[0.2em] text-[var(--text-muted)]">
-              Подтягиваем миссии, награды, баланс и историю
-            </p>
-          </div>
-          {apiError ? (
-            <div className="mt-5 rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4">
-              <p className="text-sm text-rose-300">Ошибка API: {getReadableApiError(apiError)}</p>
-              <button
-                onClick={() => refreshTasks()}
-                className="mt-3 w-full rounded-xl bg-rose-500/20 py-3 text-xs font-black uppercase tracking-widest text-rose-200 hover:bg-rose-500/30"
-              >
-                Повторить загрузку
-              </button>
-            </div>
-          ) : (
-            <div className="mt-4 text-center text-[11px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
-              Открываем приложение...
-            </div>
-          )}
         </div>
       </div>
     );
