@@ -343,6 +343,7 @@ const App: React.FC = () => {
   // identityKey: уникально для TG-акка (tg_user_id) или web fallback (fw_web_user_id)
   const [identityKey, setIdentityKey] = useState<string>("");
   const INVITE_KEY = useMemo(() => parentInviteStorageKey(identityKey), [identityKey]);
+  const bootStartedAtRef = useRef<number>(Date.now());
   const APP_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
   const getAppCacheKey = useCallback((code: string) => makeInviteScopedKey("app-core", code), []);
   const getRewardsCacheKey = useCallback((code: string) => makeInviteScopedKey("rewards", code), []);
@@ -570,18 +571,18 @@ useEffect(() => {
   useEffect(() => {
     if (!isAuthResolved) return;
 
-    if (!parentCode) {
-      setIsInitialDataLoading(false);
-      setIsBootFading(true);
-      const id = window.setTimeout(() => setIsAppBootLoading(false), 320);
-      return () => window.clearTimeout(id);
-    }
+    const isDataReady = parentCode ? !isInitialDataLoading : true;
+    if (!isDataReady) return;
 
-    if (!isInitialDataLoading) {
+    const elapsed = Date.now() - bootStartedAtRef.current;
+    const minDelay = Math.max(0, 900 - elapsed);
+
+    const id = window.setTimeout(() => {
       setIsBootFading(true);
-      const id = window.setTimeout(() => setIsAppBootLoading(false), 320);
-      return () => window.clearTimeout(id);
-    }
+      window.setTimeout(() => setIsAppBootLoading(false), 320);
+    }, minDelay);
+
+    return () => window.clearTimeout(id);
   }, [isAuthResolved, parentCode, isInitialDataLoading]);
 
   // ===== refreshTasks =====

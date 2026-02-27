@@ -24,13 +24,13 @@ const AppSplash: React.FC<{ isFading?: boolean }> = ({ isFading }) => {
         }
       `}</style>
       <div className="flex items-center justify-center" style={{ color: "var(--primary, #7c3aed)" }}>
-        <svg viewBox="0 0 120 120" className="w-28 h-28" aria-label="Загрузка" role="img">
+        <svg viewBox="0 0 120 120" className="w-32 h-32" aria-label="Загрузка" role="img">
           <path
             d={STAR_PATH}
             className="splash-star"
             fill="none"
             stroke="currentColor"
-            strokeWidth="4"
+            strokeWidth="6"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
