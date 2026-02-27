@@ -1563,7 +1563,7 @@ useEffect(() => {
   };
 
   // ===== Auth gate =====
-  if (isAppBootLoading || isInitialDataLoading) {
+  if (!isAuthResolved || isAppBootLoading || isInitialDataLoading) {
     return <AppSplash isFading={isBootFading} />;
   }
 
