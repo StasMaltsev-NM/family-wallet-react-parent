@@ -295,6 +295,8 @@ const App: React.FC = () => {
     return (saved as Theme) || Theme.DEEP_PURPLE;
   });
   const [activeTab, setActiveTab] = useState<Tab>(Tab.DASHBOARD);
+  const [missionIdeaDraft, setMissionIdeaDraft] = useState<string>("");
+  const [missionIdeaNonce, setMissionIdeaNonce] = useState<number>(0);
 
   const [children, setChildren] = useState<Child[]>(INITIAL_CHILDREN);
   const [selectedChildId, setSelectedChildId] = useState<string>(
@@ -1114,6 +1116,18 @@ useEffect(() => {
     );
   }, [uiChildren, selectedChildId]);
 
+  const handleAddMissionIdea = useCallback((idea: string) => {
+    const title = String(idea || "").trim();
+    if (!title) return;
+    setMissionIdeaDraft(title);
+    setMissionIdeaNonce((prev) => prev + 1);
+    setActiveTab(Tab.MISSIONS);
+  }, []);
+
+  const handleConsumeMissionIdea = useCallback(() => {
+    setMissionIdeaDraft("");
+  }, []);
+
   const apiChildId = (selectedChild as any)?.apiChildId;
   const pendingPrizesCount =
     childPurchases[apiChildId]?.filter((p: any) => p.status === "pending").length ??
@@ -1258,6 +1272,9 @@ useEffect(() => {
             onTaskAction={onTaskAction as any}
             parentCode={parentCode}
             onRefresh={refreshTasks as any}
+            prefillMissionTitle={missionIdeaDraft}
+            prefillMissionNonce={missionIdeaNonce}
+            onConsumePrefill={handleConsumeMissionIdea}
           />
         ) : (
           <div className="text-center py-12 text-white/60">
@@ -1277,7 +1294,11 @@ useEffect(() => {
 
       case Tab.AI_ASSISTANT:
         return selectedChild ? (
-          <AIAssistant child={selectedChild} inviteCode={parentCode} />
+          <AIAssistant
+            child={selectedChild}
+            inviteCode={parentCode}
+            onAddMissionIdea={handleAddMissionIdea}
+          />
         ) : (
           <div className="text-center py-12 text-white/60">
             Выберите ребёнка

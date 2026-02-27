@@ -10,12 +10,14 @@ import {
   MessageSquareQuote,
   Target,
   Gift,
+  Plus,
 } from 'lucide-react';
 import { getAIContent, getAIReportBlock, type AssistantReportBlock } from '../services/gemini';
 
 interface Props {
   child: Child;
   inviteCode: string;
+  onAddMissionIdea?: (idea: string) => void;
 }
 
 const EMPTY_BLOCKS: Record<AssistantReportBlock, string> = {
@@ -80,7 +82,7 @@ const normalizeCachedIdeas = (value: unknown): string => {
   return text.toLowerCase().includes('ошибка генерации') ? '' : text;
 };
 
-const AIAssistant: React.FC<Props> = ({ child, inviteCode }) => {
+const AIAssistant: React.FC<Props> = ({ child, inviteCode, onAddMissionIdea }) => {
   const mountedRef = useRef(true);
   const cacheKey = useMemo(
     () => `fw_ai_assistant:${AI_CACHE_VERSION}:${inviteCode}:${child.id}`,
@@ -438,6 +440,7 @@ const AIAssistant: React.FC<Props> = ({ child, inviteCode }) => {
           isLoading={isMissionsLoading}
           onRefresh={handleRefreshMissions}
           kind="missions"
+          onAddIdea={onAddMissionIdea}
         />
         <IdeaCard
           icon={<Gift size={22} className="text-orange-400" />}
@@ -501,6 +504,7 @@ const IdeaCard = ({
   isLoading,
   onRefresh,
   kind = 'missions',
+  onAddIdea,
 }: {
   icon: React.ReactNode;
   title: string;
@@ -508,6 +512,7 @@ const IdeaCard = ({
   isLoading: boolean;
   onRefresh: () => void;
   kind?: 'missions' | 'rewards';
+  onAddIdea?: (idea: string) => void;
 }) => (
   <div className="bg-[var(--bg-card)] rounded-[2.5rem] p-8 border border-[var(--border)] relative overflow-hidden group">
     <div className="flex items-center justify-between mb-6">
@@ -533,9 +538,25 @@ const IdeaCard = ({
       ) : ideas ? (
         <ul className="grid grid-cols-1 gap-3">
           {getIdeaItems(ideas, kind).map((item: string, idx: number) => (
-            <li key={idx} className="flex items-center gap-3 text-white/80 font-bold text-sm bg-white/[0.02] p-3 rounded-xl border border-white/5">
-              <span className="w-6 h-6 rounded-lg bg-[var(--primary)]/20 text-[var(--primary)] flex items-center justify-center text-[10px] font-black">{idx + 1}</span>
-              {item.trim()}
+            <li
+              key={idx}
+              className="flex items-center gap-3 text-white/80 font-bold text-sm bg-white/[0.02] p-3 rounded-xl border border-white/5"
+            >
+              <span className="w-6 h-6 rounded-lg bg-[var(--primary)]/20 text-[var(--primary)] flex items-center justify-center text-[10px] font-black">
+                {idx + 1}
+              </span>
+              <span className="flex-1 min-w-0">{item.trim()}</span>
+              {kind === 'missions' && onAddIdea ? (
+                <button
+                  onClick={() => onAddIdea(item)}
+                  className="px-3 py-1.5 rounded-lg bg-[var(--primary)]/15 text-[var(--primary)] text-[11px] font-black uppercase tracking-widest hover:bg-[var(--primary)] hover:text-white transition-all"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Plus size={12} />
+                    Добавить
+                  </span>
+                </button>
+              ) : null}
             </li>
           ))}
         </ul>

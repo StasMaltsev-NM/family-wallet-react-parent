@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Child, Mission } from "../types";
 import {
   Plus,
@@ -27,6 +27,11 @@ interface Props {
 
   // чтобы после create/confirm/reject тянуть свежие tasks
   onRefresh: () => Promise<void> | void;
+
+  // prefill from AI ideas
+  prefillMissionTitle?: string;
+  prefillMissionNonce?: number;
+  onConsumePrefill?: () => void;
 }
 // Реальная структура задач из backend
 export type ApiTask = {
@@ -62,10 +67,22 @@ function mapApiStatusToUi(status: ApiTask["status"]): "pending" | "active" | "co
   return "confirmed";
 }
 
-const Missions: React.FC<Props> = ({ child, allChildren, onUpdateChild, onTaskAction, parentCode, onRefresh }) => {
+const Missions: React.FC<Props> = ({
+  child,
+  allChildren,
+  onUpdateChild,
+  onTaskAction,
+  parentCode,
+  onRefresh,
+  prefillMissionTitle,
+  prefillMissionNonce,
+  onConsumePrefill,
+}) => {
   const [isAdding, setIsAdding] = useState(false);
   const { runInstant, isPending } = useInstantAction();
   const isCreatingMission = isPending("mission:create");
+  const rewardInputRef = useRef<HTMLInputElement | null>(null);
+  const [isPrefillMode, setIsPrefillMode] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<{
     type: "success" | "error" | "info";
     message: string;
@@ -74,6 +91,7 @@ const Missions: React.FC<Props> = ({ child, allChildren, onUpdateChild, onTaskAc
   // UI-форма (пока это локальная форма, создание через API сделаем отдельным шагом)
   const [newMission, setNewMission] = useState({
     title: "",
+    icon: "✅",
     reward: "",
     isRecurring: false,
     isTeam: false,
@@ -104,6 +122,49 @@ const Missions: React.FC<Props> = ({ child, allChildren, onUpdateChild, onTaskAc
       setSelectedChildIds([child.id]);
     }
   }, [allChildren, child.id, isAdding, selectedChildIds.length]);
+
+  const generateMissionIcon = (title: string): string => {
+    const text = String(title || "").toLowerCase();
+    if (!text) return "✅";
+    const rules: Array<[RegExp, string]> = [
+      [/чита|книг/, "📚"],
+      [/убор|поряд|убрат/, "🧹"],
+      [/посуд|мыть|стир/, "🧼"],
+      [/спорт|зарядк|бег|йог|упражн/, "🏃"],
+      [/музык|пиан|гитар|песн/, "🎵"],
+      [/урок|учеб|домашн|школ/, "📝"],
+      [/цвет|растен|полив/, "🌿"],
+      [/помог|покуп|магазин/, "🛒"],
+      [/готов|еда|кухн/, "🍽️"],
+      [/собак|кот|живот/, "🐶"],
+    ];
+    for (const [rx, emoji] of rules) {
+      if (rx.test(text)) return emoji;
+    }
+    return "✨";
+  };
+
+  useEffect(() => {
+    if (!prefillMissionTitle || !prefillMissionNonce) return;
+    const title = String(prefillMissionTitle || "").trim();
+    if (!title) return;
+    const icon = generateMissionIcon(title);
+    setNewMission((prev) => ({
+      ...prev,
+      title,
+      icon,
+      reward: "",
+      isRecurring: false,
+      isTeam: false,
+      recurrenceType: "daily",
+      selectedDays: [],
+    }));
+    setIsPrefillMode(true);
+    setIsAdding(true);
+    setSelectedChildIds(allChildren.length === 1 ? [allChildren[0].id] : [child.id]);
+    setTimeout(() => rewardInputRef.current?.focus(), 150);
+    if (onConsumePrefill) onConsumePrefill();
+  }, [prefillMissionTitle, prefillMissionNonce, allChildren, child.id, onConsumePrefill]);
 const sortedMissions: Mission[] = useMemo(() => {
   const list = Array.isArray(child.missions) ? child.missions : [];
 
@@ -198,7 +259,7 @@ const handleAction = async (
 
   // ВАЖНО: создание миссии пока локальное - чтобы UI не сломать.
   // Реальный create через backend вынесем следующим шагом, когда подтвердим endpoint.
-const handleAddMission = async () => {
+  const handleAddMission = async () => {
   if (isPending("mission:create")) return;
   if (!newMission.title || !newMission.reward || selectedChildIds.length === 0) {
     setActionFeedback({ type: "error", message: "Заполните название, награду и выберите ребёнка." });
@@ -251,7 +312,7 @@ const handleAddMission = async () => {
               title,
               description: null,
               reward_amount: rewardAmount,
-              icon: "✅",
+              icon: newMission.icon || "✅",
               status: "IDLE",
               recurring: newMission.isRecurring ? true : null,
               recurring_days:
@@ -298,6 +359,7 @@ const handleAddMission = async () => {
     setIsAdding(false);
     setNewMission({
       title: "",
+      icon: "✅",
       reward: "",
       isRecurring: false,
       isTeam: false,
@@ -305,6 +367,7 @@ const handleAddMission = async () => {
       selectedDays: [],
     });
     setSelectedChildIds(allChildren.length === 1 ? [allChildren[0].id] : [child.id]);
+    setIsPrefillMode(false);
   } catch (e) {
     console.error(e);
     setActionFeedback({ type: "error", message: getErrorMessage(e, "Не удалось создать миссию.") });
@@ -426,7 +489,10 @@ const handleAddMission = async () => {
       </div>
 
       <button
-        onClick={() => setIsAdding(true)}
+        onClick={() => {
+          setIsPrefillMode(false);
+          setIsAdding(true);
+        }}
         className="fixed bottom-32 right-8 w-16 h-16 sm:w-20 sm:h-20 bg-[var(--primary)] text-white rounded-[2rem] shadow-[0_20px_50px_var(--primary-glow)] flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-50 group"
       >
         <Plus size={40} className="group-hover:rotate-90 transition-transform duration-300" />
@@ -490,13 +556,24 @@ const handleAddMission = async () => {
 
               <div className="space-y-4">
                 <p className="text-[11px] font-black text-[var(--text-muted)] uppercase tracking-[0.2em] ml-2">О задаче</p>
+                <div className="flex items-center gap-3 text-[11px] font-black uppercase tracking-[0.2em] text-[var(--text-muted)] ml-2">
+                  <span className="w-6 h-6 rounded-lg bg-white/10 flex items-center justify-center text-sm">{newMission.icon || "✅"}</span>
+                  Обложка готова
+                </div>
                 <div className="grid gap-4">
                   <input
                     type="text"
                     placeholder="Что нужно сделать?"
                     className="w-full h-16 rounded-2xl px-6 font-bold text-lg bg-black/50 border border-white/10 outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
                     value={newMission.title}
-                    onChange={(e) => setNewMission({ ...newMission, title: e.target.value })}
+                    onChange={(e) => {
+                      const nextTitle = e.target.value;
+                      setNewMission({
+                        ...newMission,
+                        title: nextTitle,
+                        icon: generateMissionIcon(nextTitle),
+                      });
+                    }}
                   />
                   <div className="relative">
                     <input
@@ -505,6 +582,7 @@ const handleAddMission = async () => {
                       className="w-full h-16 rounded-2xl px-6 font-bold text-lg bg-black/50 border border-white/10 outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
                       value={newMission.reward}
                       onChange={(e) => setNewMission({ ...newMission, reward: e.target.value })}
+                      ref={rewardInputRef}
                     />
                     <div className="absolute right-6 top-1/2 -translate-y-1/2">
                       <Star size={24} className="text-amber-400" fill="currentColor" />
@@ -513,82 +591,89 @@ const handleAddMission = async () => {
                 </div>
               </div>
 
-              {/* Настройка повторений */}
-              <div className="space-y-4">
-                <label
-                  onClick={showSoonFeatureNotice}
-                  className="flex items-center justify-between p-6 bg-white/[0.03] rounded-3xl cursor-pointer hover:bg-white/[0.05] transition-all border border-white/5"
-                >
-                  <div className="flex items-center gap-4 min-w-0 flex-1">
-                    <div className="p-3 rounded-xl transition-colors bg-white/10 text-[var(--text-muted)]">
-                      <RefreshCcw size={22} />
-                    </div>
-                    <div className="min-w-0">
-                      <span className="text-lg font-black text-white block whitespace-nowrap">ПОВТОР</span>
-                    </div>
-                  </div>
-                  <div className="ml-3 w-[84px] shrink-0 flex flex-col items-center justify-center gap-1.5">
-                    <span className="px-2 py-0.5 rounded-full border border-amber-400/40 text-[9px] font-black tracking-widest text-amber-300">СКОРО</span>
-                    <input
-                      type="checkbox"
-                      className="w-7 h-7 accent-[var(--primary)] rounded-lg pointer-events-none"
-                      checked={false}
-                      readOnly
-                    />
-                  </div>
-                </label>
-
-                {newMission.isRecurring && (
-                  <div className="p-6 bg-white/[0.02] border border-white/5 rounded-3xl space-y-6 animate-in slide-in-from-top-4 duration-300">
-                    <div className="space-y-3">
-                      <p className="text-[11px] font-black text-[var(--text-muted)] uppercase tracking-[0.2em]">График выполнения</p>
-                      <div className="relative">
-                        <select
-                          className="w-full h-14 bg-black/40 border border-white/10 rounded-2xl px-6 font-bold appearance-none outline-none focus:ring-2 focus:ring-[var(--primary)]"
-                          value={newMission.recurrenceType}
-                          onChange={(e) => setNewMission({ ...newMission, recurrenceType: e.target.value })}
-                        >
-                          <option value="daily">Ежедневно</option>
-                          <option value="weekends">По выходным</option>
-                          <option value="custom">Выбрать дни недели</option>
-                        </select>
-                        <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none opacity-40" />
+              {!isPrefillMode ? (
+                <div className="space-y-4">
+                  <label
+                    onClick={showSoonFeatureNotice}
+                    className="flex items-center justify-between p-6 bg-white/[0.03] rounded-3xl cursor-pointer hover:bg-white/[0.05] transition-all border border-white/5"
+                  >
+                    <div className="flex items-center gap-4 min-w-0 flex-1">
+                      <div className="p-3 rounded-xl transition-colors bg-white/10 text-[var(--text-muted)]">
+                        <RefreshCcw size={22} />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-lg font-black text-white block whitespace-nowrap">ПОВТОР</span>
                       </div>
                     </div>
+                    <div className="ml-3 w-[84px] shrink-0 flex flex-col items-center justify-center gap-1.5">
+                      <span className="px-2 py-0.5 rounded-full border border-amber-400/40 text-[9px] font-black tracking-widest text-amber-300">СКОРО</span>
+                      <input
+                        type="checkbox"
+                        className="w-7 h-7 accent-[var(--primary)] rounded-lg pointer-events-none"
+                        checked={false}
+                        readOnly
+                      />
+                    </div>
+                  </label>
 
-                    {newMission.recurrenceType === "custom" && (
-                      <div className="space-y-3 animate-in fade-in duration-300">
-                        <p className="text-[11px] font-black text-[var(--text-muted)] uppercase tracking-[0.2em] flex items-center gap-2">
-                          <CalendarDays size={14} /> Отметьте дни
-                        </p>
-                        <div className="flex justify-between gap-1.5 overflow-x-auto no-scrollbar py-1">
-                          {DAYS_OF_WEEK.map((day) => (
-                            <button
-                              key={day.id}
-                              onClick={() => toggleDaySelection(day.id)}
-                              className={`
-                                flex-1 min-w-[44px] h-12 rounded-xl text-[12px] font-black transition-all
-                                ${newMission.selectedDays.includes(day.id)
-                                  ? "bg-[var(--primary)] text-white shadow-lg shadow-[var(--primary)]/20 scale-105"
-                                  : "bg-white/5 text-[var(--text-muted)] border border-white/5 hover:bg-white/10"
-                                }
-                              `}
-                            >
-                              {day.label}
-                            </button>
-                          ))}
+                  {newMission.isRecurring && (
+                    <div className="p-6 bg-white/[0.02] border border-white/5 rounded-3xl space-y-6 animate-in slide-in-from-top-4 duration-300">
+                      <div className="space-y-3">
+                        <p className="text-[11px] font-black text-[var(--text-muted)] uppercase tracking-[0.2em]">График выполнения</p>
+                        <div className="relative">
+                          <select
+                            className="w-full h-14 bg-black/40 border border-white/10 rounded-2xl px-6 font-bold appearance-none outline-none focus:ring-2 focus:ring-[var(--primary)]"
+                            value={newMission.recurrenceType}
+                            onChange={(e) => setNewMission({ ...newMission, recurrenceType: e.target.value })}
+                          >
+                            <option value="daily">Ежедневно</option>
+                            <option value="weekends">По выходным</option>
+                            <option value="custom">Выбрать дни недели</option>
+                          </select>
+                          <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none opacity-40" />
                         </div>
                       </div>
-                    )}
-                  </div>
-                )}
-              </div>
+
+                      {newMission.recurrenceType === "custom" && (
+                        <div className="space-y-3 animate-in fade-in duration-300">
+                          <p className="text-[11px] font-black text-[var(--text-muted)] uppercase tracking-[0.2em] flex items-center gap-2">
+                            <CalendarDays size={14} /> Отметьте дни
+                          </p>
+                          <div className="flex justify-between gap-1.5 overflow-x-auto no-scrollbar py-1">
+                            {DAYS_OF_WEEK.map((day) => (
+                              <button
+                                key={day.id}
+                                onClick={() => toggleDaySelection(day.id)}
+                                className={`
+                                  flex-1 min-w-[44px] h-12 rounded-xl text-[12px] font-black transition-all
+                                  ${newMission.selectedDays.includes(day.id)
+                                    ? "bg-[var(--primary)] text-white shadow-lg shadow-[var(--primary)]/20 scale-105"
+                                    : "bg-white/5 text-[var(--text-muted)] border border-white/5 hover:bg-white/10"
+                                  }
+                                `}
+                              >
+                                {day.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : null}
             </div>
 
             <div className="flex gap-4">
               <button
-                onPointerDown={() => setIsAdding(false)}
-                onClick={() => setIsAdding(false)}
+                onPointerDown={() => {
+                  setIsAdding(false);
+                  setIsPrefillMode(false);
+                }}
+                onClick={() => {
+                  setIsAdding(false);
+                  setIsPrefillMode(false);
+                }}
                 className="flex-1 py-5 text-sm font-black text-[var(--text-muted)] hover:text-white transition-colors uppercase tracking-widest"
               >
                 Отмена
