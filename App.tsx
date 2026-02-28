@@ -575,7 +575,7 @@ useEffect(() => {
     if (!isDataReady) return;
 
     const elapsed = Date.now() - bootStartedAtRef.current;
-    const minDelay = Math.max(0, 900 - elapsed);
+    const minDelay = Math.max(0, 1300 - elapsed);
 
     const id = window.setTimeout(() => {
       setIsBootFading(true);

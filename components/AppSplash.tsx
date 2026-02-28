@@ -12,24 +12,38 @@ const AppSplash: React.FC<{ isFading?: boolean }> = ({ isFading }) => {
     >
       <style>{`
         @keyframes splashDash {
-          0% { stroke-dashoffset: 360; opacity: 0.35; }
-          45% { opacity: 1; }
-          100% { stroke-dashoffset: 0; opacity: 0.7; }
+          0% { stroke-dashoffset: 560; }
+          100% { stroke-dashoffset: 0; }
+        }
+        @keyframes splashColor {
+          0% { stroke: #A78BFA; }
+          25% { stroke: #F3F4F6; }
+          50% { stroke: #6EE7B7; }
+          75% { stroke: #10B981; }
+          100% { stroke: #A78BFA; }
         }
         .splash-star {
-          stroke-dasharray: 360;
-          stroke-dashoffset: 360;
-          animation: splashDash 1.8s ease-in-out infinite;
+          stroke-dasharray: 560;
+          stroke-dashoffset: 560;
+          animation: splashDash 1.4s linear infinite, splashColor 5.2s linear infinite;
           filter: drop-shadow(0 0 12px var(--primary));
         }
       `}</style>
-      <div className="flex items-center justify-center" style={{ color: "var(--primary, #7c3aed)" }}>
+      <div className="flex items-center justify-center">
         <svg viewBox="0 0 120 120" className="w-32 h-32" aria-label="Загрузка" role="img">
+          <path
+            d={STAR_PATH}
+            fill="none"
+            stroke="var(--primary)"
+            strokeWidth="5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity="0.25"
+          />
           <path
             d={STAR_PATH}
             className="splash-star"
             fill="none"
-            stroke="currentColor"
             strokeWidth="6"
             strokeLinecap="round"
             strokeLinejoin="round"
