@@ -24,7 +24,6 @@ import {
   Coins,
   CreditCard,
   TicketPercent,
-  Loader2,
   LogOut,
   Copy,
   Check,
@@ -410,6 +409,7 @@ const App: React.FC = () => {
   const [authError, setAuthError] = useState<string | null>(null);
   const [createdChildInvite, setCreatedChildInvite] = useState<{ name: string; code: string } | null>(null);
   const [isChildCodeCopied, setIsChildCodeCopied] = useState(false);
+  const [isIdentityReady, setIsIdentityReady] = useState(false);
   // identityKey: уникально для TG-акка (tg_user_id) или web fallback (fw_web_user_id)
   const [identityKey, setIdentityKey] = useState<string>("");
   const INVITE_KEY = useMemo(() => parentInviteStorageKey(identityKey), [identityKey]);
@@ -495,6 +495,7 @@ const App: React.FC = () => {
     const id = getTgUserId();
     const key = id ? `id_${id}` : "";
     setIdentityKey(key);
+    setIsIdentityReady(true);
 
     console.log("[IDENTITY]", {
       rawId: id,
@@ -507,6 +508,7 @@ const App: React.FC = () => {
   // load parentCode for this identityKey
   useEffect(() => {
     (async () => {
+      if (!isIdentityReady) return;
       if (!identityKey) {
         setParentCode("");
         setIsInviteModalOpen(true);
@@ -554,7 +556,7 @@ const App: React.FC = () => {
         setIsAuthResolved(true);
       }
     })();
-  }, [identityKey, INVITE_KEY]);
+  }, [isIdentityReady, identityKey, INVITE_KEY]);
   // NEW AUTH: backend Telegram auth via initData
 useEffect(() => {
   // Новый AUTH через backend (приоритет!)
@@ -1798,7 +1800,6 @@ useEffect(() => {
           onTopup60={() => handleCreateCheckout("topup_60")}
           onApplyPromo={handleRedeemPromo}
           isActionLoading={billingActionLoading}
-          onRefresh={() => refreshBillingStatus({ silent: false })}
         />
       ) : null}
 
@@ -1950,7 +1951,6 @@ interface BillingModalProps {
   onTopup60: () => void;
   onApplyPromo: () => void;
   onClose: () => void;
-  onRefresh: () => void;
   isActionLoading: boolean;
 }
 
@@ -1962,7 +1962,6 @@ const BillingModal: React.FC<BillingModalProps> = ({
   onTopup60,
   onApplyPromo,
   onClose,
-  onRefresh,
   isActionLoading,
 }) => (
   <div className="fixed inset-0 z-[130] flex items-center justify-center p-4">
@@ -1973,14 +1972,6 @@ const BillingModal: React.FC<BillingModalProps> = ({
           <Coins size={20} className="text-[var(--primary)]" />
           Оплата и кредиты
         </h3>
-        <button
-          type="button"
-          onClick={onRefresh}
-          className="h-9 w-9 rounded-xl border border-white/10 bg-white/5 text-white/80 hover:text-white flex items-center justify-center"
-          title="Обновить баланс"
-        >
-          {billing.loading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-        </button>
       </div>
 
       <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4">

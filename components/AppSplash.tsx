@@ -17,7 +17,7 @@ const AppSplash: React.FC<{ isFading?: boolean }> = ({ isFading }) => {
   useEffect(() => {
     const id = window.setInterval(() => {
       setMessageIndex((prev) => (prev + 1) % messages.length);
-    }, 1800);
+    }, 3000);
     return () => window.clearInterval(id);
   }, [messages.length]);
   return (
