@@ -27,6 +27,8 @@ interface Props {
 
   // чтобы после create/confirm/reject тянуть свежие tasks
   onRefresh: () => Promise<void> | void;
+  canCreateMissions?: boolean;
+  creationBlockedReason?: string;
 }
 // Реальная структура задач из backend
 export type ApiTask = {
@@ -62,7 +64,16 @@ function mapApiStatusToUi(status: ApiTask["status"]): "pending" | "active" | "co
   return "confirmed";
 }
 
-const Missions: React.FC<Props> = ({ child, allChildren, onUpdateChild, onTaskAction, parentCode, onRefresh }) => {
+const Missions: React.FC<Props> = ({
+  child,
+  allChildren,
+  onUpdateChild,
+  onTaskAction,
+  parentCode,
+  onRefresh,
+  canCreateMissions = true,
+  creationBlockedReason = "Создание миссий временно недоступно.",
+}) => {
   const [isAdding, setIsAdding] = useState(false);
   const { runInstant, isPending } = useInstantAction();
   const isCreatingMission = isPending("mission:create");
@@ -200,6 +211,10 @@ const handleAction = async (
   // Реальный create через backend вынесем следующим шагом, когда подтвердим endpoint.
 const handleAddMission = async () => {
   if (isPending("mission:create")) return;
+  if (!canCreateMissions) {
+    setActionFeedback({ type: "info", message: creationBlockedReason });
+    return;
+  }
   if (!newMission.title || !newMission.reward || selectedChildIds.length === 0) {
     setActionFeedback({ type: "error", message: "Заполните название, награду и выберите ребёнка." });
     return;
@@ -426,8 +441,15 @@ const handleAddMission = async () => {
       </div>
 
       <button
-        onClick={() => setIsAdding(true)}
-        className="fixed bottom-32 right-8 w-16 h-16 sm:w-20 sm:h-20 bg-[var(--primary)] text-white rounded-[2rem] shadow-[0_20px_50px_var(--primary-glow)] flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-50 group"
+        onClick={() => {
+          if (!canCreateMissions) {
+            setActionFeedback({ type: "info", message: creationBlockedReason });
+            return;
+          }
+          setIsAdding(true);
+        }}
+        className="fixed bottom-32 right-8 w-16 h-16 sm:w-20 sm:h-20 bg-[var(--primary)] text-white rounded-[2rem] shadow-[0_20px_50px_var(--primary-glow)] flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-50 group disabled:opacity-60 disabled:cursor-not-allowed"
+        disabled={!canCreateMissions}
       >
         <Plus size={40} className="group-hover:rotate-90 transition-transform duration-300" />
       </button>
