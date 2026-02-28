@@ -1,9 +1,25 @@
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 const STAR_PATH =
   "M60 8 L72 42 L108 42 L78 62 L90 96 L60 76 L30 96 L42 62 L12 42 L48 42 Z";
 
 const AppSplash: React.FC<{ isFading?: boolean }> = ({ isFading }) => {
+  const messages = useMemo(
+    () => [
+      "Здесь безопасно",
+      "Мы не собираем личные данные",
+      "При удалении профиля вся информация исчезнет",
+    ],
+    []
+  );
+  const [messageIndex, setMessageIndex] = useState(0);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setMessageIndex((prev) => (prev + 1) % messages.length);
+    }, 1800);
+    return () => window.clearInterval(id);
+  }, [messages.length]);
   return (
     <div
       className={`fixed inset-0 z-[999] flex items-center justify-center bg-black text-white transition-opacity duration-300 ${
@@ -29,7 +45,7 @@ const AppSplash: React.FC<{ isFading?: boolean }> = ({ isFading }) => {
           filter: drop-shadow(0 0 12px var(--primary));
         }
       `}</style>
-      <div className="flex items-center justify-center">
+      <div className="flex flex-col items-center justify-center gap-4 text-center px-6">
         <svg viewBox="0 0 120 120" className="w-32 h-32" aria-label="Загрузка" role="img">
           <path
             d={STAR_PATH}
@@ -49,6 +65,9 @@ const AppSplash: React.FC<{ isFading?: boolean }> = ({ isFading }) => {
             strokeLinejoin="round"
           />
         </svg>
+        <div className="text-[11px] font-black uppercase tracking-[0.28em] text-[var(--text-muted)] transition-opacity">
+          {messages[messageIndex]}
+        </div>
       </div>
     </div>
   );
