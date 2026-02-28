@@ -9,6 +9,52 @@ const REGENERATE_IMAGE_TIMEOUT_MS = 120000;
 const GET_RETRY_COUNT = 2;
 const RETRY_BASE_DELAY_MS = 700;
 
+export type BillingCapabilities = {
+  can_create_children: boolean;
+  can_create_missions: boolean;
+  can_create_rewards: boolean;
+  can_use_ai: boolean;
+  can_generate_images: boolean;
+};
+
+export type BillingPlan = {
+  code: string;
+  active: boolean;
+  expires_at?: string | null;
+  blocked_reason?: string | null;
+};
+
+export type BillingCredits = {
+  balance: number;
+  spendable: boolean;
+};
+
+export type BillingStatusResponse = {
+  plan: BillingPlan;
+  credits: BillingCredits;
+  capabilities: BillingCapabilities;
+  limits?: {
+    children?: number | null;
+    missions_per_child?: number | null;
+    rewards_per_child?: number | null;
+  };
+};
+
+export type BillingCheckoutResponse = {
+  payment_id: string;
+  checkout_url: string;
+  amount_rub: number;
+  product: "monthly_subscription" | "topup_60";
+};
+
+export type BillingPromoRedeemResponse = {
+  success: boolean;
+  message: string;
+  activated_until?: string | null;
+  credits_added?: number;
+  current_balance?: number;
+};
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function isAbortError(err: unknown): boolean {
@@ -384,6 +430,41 @@ export const parentApi = {
           dream_id: dreamId,
           target_amount: targetAmount,
         }),
+      },
+      inviteCode
+    );
+  },
+
+  getBillingStatus(inviteCode: string) {
+    return request<BillingStatusResponse>(
+      "/api/billing/status",
+      {
+        method: "GET",
+      },
+      inviteCode
+    );
+  },
+
+  createBillingCheckout(
+    inviteCode: string,
+    product: "monthly_subscription" | "topup_60"
+  ) {
+    return request<BillingCheckoutResponse>(
+      "/api/billing/checkout",
+      {
+        method: "POST",
+        body: JSON.stringify({ product }),
+      },
+      inviteCode
+    );
+  },
+
+  redeemPromoCode(inviteCode: string, promoCode: string) {
+    return request<BillingPromoRedeemResponse>(
+      "/api/billing/promo/redeem",
+      {
+        method: "POST",
+        body: JSON.stringify({ promo_code: String(promoCode || "").trim() }),
       },
       inviteCode
     );

@@ -20,12 +20,16 @@ import {
   Sparkles,
   Settings,
   Palette,
+  Coins,
+  CreditCard,
+  TicketPercent,
+  Loader2,
   LogOut,
   Copy,
   Check,
 } from "lucide-react";
 
-import { parentApi } from "./services/api";
+import { parentApi, type BillingStatusResponse } from "./services/api";
 import { authApi } from "./services/api";
 import { makeInviteScopedKey, readSessionCache, writeSessionCache, removeSessionCache } from "./services/cache";
 // TEMP DEBUG
@@ -279,6 +283,69 @@ function applyRewardImageIndexToPurchases(
   return next;
 }
 
+type BillingUiState = {
+  loading: boolean;
+  loaded: boolean;
+  error: string | null;
+  planCode: string;
+  planActive: boolean;
+  expiresAt: string | null;
+  creditsBalance: number;
+  creditsSpendable: boolean;
+  canCreateChildren: boolean;
+  canCreateMissions: boolean;
+  canCreateRewards: boolean;
+  canUseAI: boolean;
+  canGenerateImages: boolean;
+};
+
+const BILLING_DEFAULT_STATE: BillingUiState = {
+  loading: false,
+  loaded: false,
+  error: null,
+  planCode: "free",
+  planActive: true,
+  expiresAt: null,
+  creditsBalance: 0,
+  creditsSpendable: true,
+  canCreateChildren: true,
+  canCreateMissions: true,
+  canCreateRewards: true,
+  canUseAI: true,
+  canGenerateImages: true,
+};
+
+type BillingBannerState = {
+  type: "info" | "error" | "success";
+  message: string;
+} | null;
+
+function normalizeBillingState(raw: BillingStatusResponse): BillingUiState {
+  const planActive = Boolean(raw?.plan?.active);
+  return {
+    loading: false,
+    loaded: true,
+    error: null,
+    planCode: String(raw?.plan?.code || "free"),
+    planActive,
+    expiresAt: raw?.plan?.expires_at || null,
+    creditsBalance: Math.max(0, Number(raw?.credits?.balance ?? 0) || 0),
+    creditsSpendable: Boolean(raw?.credits?.spendable ?? true),
+    canCreateChildren: Boolean(raw?.capabilities?.can_create_children ?? planActive),
+    canCreateMissions: Boolean(raw?.capabilities?.can_create_missions ?? planActive),
+    canCreateRewards: Boolean(raw?.capabilities?.can_create_rewards ?? planActive),
+    canUseAI: Boolean(raw?.capabilities?.can_use_ai ?? planActive),
+    canGenerateImages: Boolean(raw?.capabilities?.can_generate_images ?? planActive),
+  };
+}
+
+function compactCredits(value: number): string {
+  const n = Math.max(0, Math.trunc(Number(value) || 0));
+  if (n >= 1_000_000) return `${Math.floor(n / 1_000_000)}M`;
+  if (n >= 1_000) return `${Math.floor(n / 1_000)}K`;
+  return String(n);
+}
+
 const App: React.FC = () => {
   console.log("[APP RENDER]");
 
@@ -323,6 +390,11 @@ const App: React.FC = () => {
   const dreamFallbackFetchedAtRef = useRef<Record<string, number>>({});
   const rewardsHydrationInFlightRef = useRef(false);
   const rewardsIndexFetchedAtRef = useRef(0);
+  const [billing, setBilling] = useState<BillingUiState>(BILLING_DEFAULT_STATE);
+  const [isBillingModalOpen, setIsBillingModalOpen] = useState(false);
+  const [billingPromoCode, setBillingPromoCode] = useState("");
+  const [billingActionLoading, setBillingActionLoading] = useState(false);
+  const [billingBanner, setBillingBanner] = useState<BillingBannerState>(null);
 
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [parentCode, setParentCode] = useState<string>("");
@@ -376,6 +448,7 @@ const App: React.FC = () => {
     dreamFallbackFetchedAtRef.current = {};
     rewardsHydrationInFlightRef.current = false;
     rewardsIndexFetchedAtRef.current = 0;
+    setBilling((prev) => ({ ...prev, loading: true, error: null }));
   }, [parentCode]);
 
   // Telegram: ready/expand + layout
@@ -574,6 +647,34 @@ useEffect(() => {
       selectedChildIdRef.current = snapshot.selectedChildId;
     }
   }, [parentCode, getAppCacheKey]);
+
+  const refreshBillingStatus = useCallback(
+    async (options?: { silent?: boolean }) => {
+      const code = parentCodeRef.current;
+      if (!code) {
+        setBilling(BILLING_DEFAULT_STATE);
+        return;
+      }
+
+      if (!options?.silent) {
+        setBilling((prev) => ({ ...prev, loading: true, error: null }));
+      }
+
+      try {
+        const status = await parentApi.getBillingStatus(code);
+        setBilling(normalizeBillingState(status));
+      } catch (err: any) {
+        console.error("[billing/status] FAILED:", err);
+        setBilling((prev) => ({
+          ...prev,
+          loading: false,
+          loaded: prev.loaded,
+          error: err?.message || "Не удалось загрузить биллинг",
+        }));
+      }
+    },
+    []
+  );
 
   const refreshTasks = useCallback(async () => {
     const code = parentCodeRef.current;
@@ -941,6 +1042,25 @@ useEffect(() => {
     };
   }, [refreshTasks]);
 
+  useEffect(() => {
+    let alive = true;
+
+    const tick = async (silent: boolean) => {
+      if (!alive) return;
+      await refreshBillingStatus({ silent });
+    };
+
+    tick(false);
+    const id = window.setInterval(() => {
+      void tick(true);
+    }, 15000);
+
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+  }, [refreshBillingStatus, parentCode]);
+
   // task actions
   const onTaskAction = useCallback(
     async (taskId: string, action: "confirm" | "reject" | "delete") => {
@@ -1205,6 +1325,87 @@ useEffect(() => {
     selectedChildIdRef.current = "";
   };
 
+  useEffect(() => {
+    if (!billingBanner) return;
+    const timer = setTimeout(() => setBillingBanner(null), 5000);
+    return () => clearTimeout(timer);
+  }, [billingBanner]);
+
+  const openBillingModal = useCallback(() => {
+    setIsBillingModalOpen(true);
+    setBillingPromoCode("");
+  }, []);
+
+  const requireCapability = useCallback(
+    (allowed: boolean, message: string) => {
+      if (allowed) return true;
+      setBillingBanner({ type: "info", message });
+      openBillingModal();
+      return false;
+    },
+    [openBillingModal]
+  );
+
+  const handleCreateCheckout = useCallback(
+    async (product: "monthly_subscription" | "topup_60") => {
+      if (!parentCodeRef.current) return;
+      setBillingActionLoading(true);
+      try {
+        const response = await parentApi.createBillingCheckout(parentCodeRef.current, product);
+        const checkoutUrl = String(response?.checkout_url || "").trim();
+        if (!checkoutUrl) {
+          throw new Error("Ссылка на оплату не получена");
+        }
+        const tg = getTg();
+        if (tg?.openLink) {
+          tg.openLink(checkoutUrl);
+        } else {
+          window.open(checkoutUrl, "_blank", "noopener,noreferrer");
+        }
+        setBillingBanner({
+          type: "success",
+          message: "Окно оплаты открыто. После успешного платежа баланс обновится автоматически.",
+        });
+      } catch (err: any) {
+        setBillingBanner({
+          type: "error",
+          message: `Ошибка оплаты: ${err?.message || "Не удалось открыть оплату"}`,
+        });
+      } finally {
+        setBillingActionLoading(false);
+      }
+    },
+    []
+  );
+
+  const handleRedeemPromo = useCallback(async () => {
+    const code = String(billingPromoCode || "").trim();
+    if (!code) {
+      setBillingBanner({ type: "info", message: "Введите промокод." });
+      return;
+    }
+    if (!parentCodeRef.current) return;
+    setBillingActionLoading(true);
+    try {
+      const result = await parentApi.redeemPromoCode(parentCodeRef.current, code);
+      setBillingBanner({
+        type: result?.success ? "success" : "error",
+        message: result?.message || (result?.success ? "Промокод активирован." : "Промокод не применён."),
+      });
+      if (result?.success) {
+        setBillingPromoCode("");
+        await refreshBillingStatus({ silent: false });
+      }
+    } catch (err: any) {
+      setBillingBanner({
+        type: "error",
+        message: `Ошибка промокода: ${err?.message || "Не удалось активировать промокод"}`,
+      });
+    } finally {
+      setBillingActionLoading(false);
+    }
+  }, [billingPromoCode, refreshBillingStatus]);
+
   const renderContent = () => {
     // ЗАЩИТА ОТ NULL!
     if (!selectedChild && uiChildren.length === 0) {
@@ -1214,7 +1415,10 @@ useEffect(() => {
           <h2 className="text-2xl font-bold mb-2 text-white">Добро пожаловать!</h2>
           <p className="text-white/60 mb-6">Добавьте первого ребёнка, чтобы начать</p>
           <button
-            onClick={() => setIsAddChildOpen(true)}
+            onClick={() => {
+              if (!requireCapability(billing.canCreateChildren, "Создание новых профилей доступно только при активной подписке.")) return;
+              setIsAddChildOpen(true);
+            }}
             className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl font-semibold hover:scale-105 transition-transform"
           >
             + Добавить ребёнка
@@ -1258,6 +1462,8 @@ useEffect(() => {
             onTaskAction={onTaskAction as any}
             parentCode={parentCode}
             onRefresh={refreshTasks as any}
+            canCreateMissions={billing.canCreateMissions}
+            creationBlockedReason="Создание миссий доступно только при активной подписке."
           />
         ) : (
           <div className="text-center py-12 text-white/60">
@@ -1272,12 +1478,30 @@ useEffect(() => {
             allChildren={uiChildren}
             inviteCode={parentCode}
             currentChild={selectedChild}
+            canCreateRewards={billing.canCreateRewards}
+            creationBlockedReason="Создание наград доступно только при активной подписке."
           />
         );
 
       case Tab.AI_ASSISTANT:
         return selectedChild ? (
-          <AIAssistant child={selectedChild} inviteCode={parentCode} />
+          billing.canUseAI ? (
+            <AIAssistant child={selectedChild} inviteCode={parentCode} />
+          ) : (
+            <div className="rounded-[2.4rem] border border-white/10 bg-[var(--bg-card)] p-7">
+              <h3 className="text-xl font-black text-white">ИИ недоступен</h3>
+              <p className="mt-3 text-sm font-bold text-[var(--text-muted)]">
+                Для генерации аналитики нужна активная подписка.
+              </p>
+              <button
+                onClick={openBillingModal}
+                className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-[var(--primary)] px-5 py-3 text-sm font-black text-white"
+              >
+                <Coins size={16} />
+                Открыть оплату
+              </button>
+            </div>
+          )
         ) : (
           <div className="text-center py-12 text-white/60">
             Выберите ребёнка
@@ -1447,6 +1671,17 @@ useEffect(() => {
 
           <div className="flex gap-2 items-center">
             <button
+              onClick={openBillingModal}
+              className="px-3 py-2 rounded-full bg-white/5 text-[var(--text-muted)] hover:text-[var(--primary)] transition-all border border-white/5 inline-flex items-center gap-2"
+              title="Оплата и кредиты"
+            >
+              <Coins size={16} />
+              <span className="text-xs font-black tracking-wide">
+                {billing.loading ? "..." : compactCredits(billing.creditsBalance)}
+              </span>
+            </button>
+
+            <button
               onClick={toggleTheme}
               className="p-2.5 rounded-full bg-white/5 text-[var(--text-muted)] hover:text-[var(--primary)] transition-all border border-white/5"
               title="Сменить тему"
@@ -1471,10 +1706,29 @@ useEffect(() => {
             setSelectedChildId(id);
             selectedChildIdRef.current = id;
           }}
-          onAdd={() => setIsAddChildOpen(true)}
+          onAdd={() => {
+            if (!requireCapability(billing.canCreateChildren, "Создание новых профилей доступно только при активной подписке.")) return;
+            setIsAddChildOpen(true);
+          }}
           childPurchases={childPurchases}
         />
       </header>
+
+      {billingBanner ? (
+        <div className="px-4 pt-2">
+          <div
+            className={`max-w-3xl mx-auto rounded-2xl border px-4 py-3 text-sm font-bold ${
+              billingBanner.type === "error"
+                ? "border-rose-400/40 bg-rose-500/10 text-rose-200"
+                : billingBanner.type === "success"
+                  ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-200"
+                  : "border-cyan-400/40 bg-cyan-500/10 text-cyan-100"
+            }`}
+          >
+            {billingBanner.message}
+          </div>
+        </div>
+      ) : null}
 
       <main className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain scrollArea max-w-3xl mx-auto px-4 md:px-6 mt-2 pb-[calc(10rem+env(safe-area-inset-bottom))] w-full max-w-full box-border">
         {renderContent()}
@@ -1503,7 +1757,10 @@ useEffect(() => {
           />
           <NavButton
             active={activeTab === Tab.AI_ASSISTANT}
-            onClick={() => setActiveTab(Tab.AI_ASSISTANT)}
+            onClick={() => {
+              if (!requireCapability(billing.canUseAI, "ИИ доступен только при активной подписке.")) return;
+              setActiveTab(Tab.AI_ASSISTANT);
+            }}
             icon={<Sparkles size={24} />}
             label="ИИ"
           />
@@ -1517,6 +1774,7 @@ useEffect(() => {
           onDeleteChild={handleDeleteChild as any}
           onClose={() => setIsSettingsOpen(false)}
           onOpenAddChild={() => {
+            if (!requireCapability(billing.canCreateChildren, "Создание новых профилей доступно только при активной подписке.")) return;
             setIsSettingsOpen(false);
             setIsAddChildOpen(true);
           }}
@@ -1527,11 +1785,34 @@ useEffect(() => {
         />
       )}
 
+      {isBillingModalOpen ? (
+        <BillingModal
+          billing={billing}
+          promoCode={billingPromoCode}
+          onPromoCodeChange={setBillingPromoCode}
+          onClose={() => setIsBillingModalOpen(false)}
+          onBuyMonthly={() => handleCreateCheckout("monthly_subscription")}
+          onTopup60={() => handleCreateCheckout("topup_60")}
+          onApplyPromo={handleRedeemPromo}
+          isActionLoading={billingActionLoading}
+          onRefresh={() => refreshBillingStatus({ silent: false })}
+        />
+      ) : null}
+
       {isAddChildOpen && (
         <AddChildScreen
           onCancel={() => setIsAddChildOpen(false)}
           onAdd={async (newChild: any) => {
             try {
+              if (!billing.canCreateChildren) {
+                setBillingBanner({
+                  type: "info",
+                  message: "Создание новых профилей доступно только при активной подписке.",
+                });
+                setIsAddChildOpen(false);
+                openBillingModal();
+                return;
+              }
               // СОЗДАТЬ РЕБЁНКА В API!
               if (parentCode) {
                 const response = await parentApi.addChild(parentCode, {
@@ -1656,6 +1937,115 @@ const NavButton: React.FC<NavButtonProps> = ({
     </div>
     <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>
   </button>
+);
+
+interface BillingModalProps {
+  billing: BillingUiState;
+  promoCode: string;
+  onPromoCodeChange: (value: string) => void;
+  onBuyMonthly: () => void;
+  onTopup60: () => void;
+  onApplyPromo: () => void;
+  onClose: () => void;
+  onRefresh: () => void;
+  isActionLoading: boolean;
+}
+
+const BillingModal: React.FC<BillingModalProps> = ({
+  billing,
+  promoCode,
+  onPromoCodeChange,
+  onBuyMonthly,
+  onTopup60,
+  onApplyPromo,
+  onClose,
+  onRefresh,
+  isActionLoading,
+}) => (
+  <div className="fixed inset-0 z-[130] flex items-center justify-center p-4">
+    <div className="absolute inset-0 bg-black/85 backdrop-blur-xl" onClick={onClose} />
+    <div className="relative w-full max-w-md rounded-[2rem] border border-white/10 bg-[#0B0B10] p-6 sm:p-7 shadow-[0_30px_80px_rgba(0,0,0,0.8)]">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-xl font-black tracking-tight text-white inline-flex items-center gap-2">
+          <Coins size={20} className="text-[var(--primary)]" />
+          Оплата и кредиты
+        </h3>
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="h-9 w-9 rounded-xl border border-white/10 bg-white/5 text-white/80 hover:text-white flex items-center justify-center"
+          title="Обновить баланс"
+        >
+          {billing.loading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+        </button>
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4">
+        <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--text-muted)] font-black">Баланс кредитов</p>
+        <p className="mt-2 text-3xl font-black text-white">{billing.loading ? "..." : billing.creditsBalance}</p>
+        <p className="mt-2 text-xs font-bold text-[var(--text-muted)]">
+          План: {billing.planCode.toUpperCase()} {billing.planActive ? "• активен" : "• неактивен"}
+        </p>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-3">
+        <button
+          type="button"
+          disabled={isActionLoading}
+          onClick={onBuyMonthly}
+          className="rounded-2xl bg-[var(--primary)] px-4 py-3 text-sm font-black text-white active:scale-95 disabled:opacity-60 inline-flex items-center justify-center gap-2"
+        >
+          <CreditCard size={16} />
+          Подписка 499 ₽ + 60 кредитов
+        </button>
+        <button
+          type="button"
+          disabled={isActionLoading}
+          onClick={onTopup60}
+          className="rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-black text-white/90 active:scale-95 disabled:opacity-60 inline-flex items-center justify-center gap-2"
+        >
+          <Coins size={16} />
+          Докупить 60 кредитов
+        </button>
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+        <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--text-muted)] font-black">Промокод</p>
+        <div className="mt-3 flex items-center gap-2">
+          <input
+            type="text"
+            value={promoCode}
+            onChange={(e) => onPromoCodeChange(e.target.value.toUpperCase())}
+            placeholder="Введите промокод"
+            className="h-11 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 text-sm font-bold text-white outline-none focus:border-[var(--primary)]"
+          />
+          <button
+            type="button"
+            disabled={isActionLoading}
+            onClick={onApplyPromo}
+            className="h-11 rounded-xl border border-[var(--primary)]/30 bg-[var(--primary)]/15 px-3 text-xs font-black text-[var(--primary)] active:scale-95 disabled:opacity-60 inline-flex items-center gap-1"
+          >
+            <TicketPercent size={14} />
+            Активировать
+          </button>
+        </div>
+      </div>
+
+      {billing.error ? (
+        <div className="mt-4 rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-xs font-bold text-rose-200">
+          {billing.error}
+        </div>
+      ) : null}
+
+      <button
+        type="button"
+        onClick={onClose}
+        className="mt-5 w-full rounded-2xl border border-white/15 px-4 py-3 font-black text-white/80 transition-all hover:text-white active:scale-95"
+      >
+        Закрыть
+      </button>
+    </div>
+  </div>
 );
 
 interface ChildInviteCodeModalProps {
