@@ -12,6 +12,7 @@ import Shop from "./components/Shop";
 import AIAssistant from "./components/AIAssistant";
 import SettingsModal from "./components/SettingsModal";
 import AddChildScreen from "./components/AddChildScreen";
+import AppSplash from "./components/AppSplash";
 
 import {
   LayoutDashboard,
@@ -116,6 +117,178 @@ function taskBelongsToChild(task: any, child: any): boolean {
   return false;
 }
 
+function resolveDreamImage(kid: any): string {
+  const candidate =
+    kid?.dream_image_url ||
+    kid?.dream_image_data ||
+    kid?.dream_image_base64 ||
+    kid?.dream_image_b64 ||
+    kid?.dream_image ||
+    kid?.dream?.image_url ||
+    kid?.dream?.image_data ||
+    kid?.dream?.image_base64 ||
+    kid?.dream?.image_b64 ||
+    kid?.dream?.generated_image_url ||
+    kid?.dream?.generated_image ||
+    kid?.dream?.image ||
+    "";
+  const raw = String(candidate || "").trim();
+  if (raw) return raw;
+  return "https://api.dicebear.com/7.x/shapes/svg?seed=dream";
+}
+
+function resolveActiveDreamImage(dream: any, kid: any): string {
+  const candidate =
+    dream?.image_url ||
+    dream?.image_data ||
+    dream?.image_base64 ||
+    dream?.image_b64 ||
+    dream?.generated_image_url ||
+    dream?.generated_image ||
+    dream?.image ||
+    dream?.dream_image_url ||
+    dream?.dream_image_data ||
+    dream?.dream_image_base64 ||
+    dream?.dream_image_b64 ||
+    dream?.dream_image ||
+    kid?.dream?.generated_image_url ||
+    kid?.dream?.generated_image ||
+      kid?.dream?.image ||
+    resolveDreamImage(kid);
+  return String(candidate || "").trim() || resolveDreamImage(kid);
+}
+
+function isPlaceholderDreamImage(src: string): boolean {
+  const lower = String(src || "").toLowerCase();
+  if (!lower) return true;
+  if (lower.includes("api.dicebear.com/7.x/shapes/svg")) return true;
+  if (lower.includes("seed=dream")) return true;
+  if (lower.includes("dream-placeholder")) return true;
+  return false;
+}
+
+function hasMeaningfulDreamTitle(kid: any): boolean {
+  const title = String(kid?.dream?.title || "").trim();
+  if (!title) return false;
+  return title.toLowerCase() !== "мечта";
+}
+
+function hasUsableDreamImage(kid: any): boolean {
+  const src = String(
+    kid?.dream?.image ||
+    kid?.dream?.image_url ||
+      kid?.dream?.image_data ||
+      kid?.dream?.image_base64 ||
+      kid?.dream?.image_b64 ||
+      kid?.dream?.generated_image_url ||
+      kid?.dream?.generated_image ||
+      kid?.dream?.dream_image_url ||
+      kid?.dream?.dream_image_data ||
+      kid?.dream?.dream_image_base64 ||
+      kid?.dream?.dream_image_b64 ||
+      kid?.dream_image_url ||
+      kid?.dream_image_data ||
+      kid?.dream_image_base64 ||
+      kid?.dream_image_b64 ||
+      kid?.dream_image ||
+      ""
+  ).trim();
+  if (!src) return false;
+  const lower = src.toLowerCase();
+  if (lower.includes("api.dicebear.com/7.x/shapes/svg")) return false;
+  if (lower.includes("seed=dream")) return false;
+  if (lower.includes("dream-placeholder")) return false;
+  return true;
+}
+
+function normalizeLookupText(value: any): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+type RewardImageIndex = {
+  byRewardId: Record<string, string>;
+  byChildTitle: Record<string, string>;
+  byChildTitlePrice: Record<string, string>;
+  byGlobalTitlePrice: Record<string, string>;
+};
+
+function buildRewardImageIndex(rewards: any[]): RewardImageIndex {
+  const byRewardId: Record<string, string> = {};
+  const byChildTitle: Record<string, string> = {};
+  const byChildTitlePrice: Record<string, string> = {};
+  const byGlobalTitlePrice: Record<string, string> = {};
+  const byGlobalTitlePriceConflicts = new Set<string>();
+
+  for (const reward of rewards || []) {
+    const image = String(reward?.image_url || reward?.reward_image_url || "").trim();
+    if (!image) continue;
+
+    const rewardId = String(reward?.id || reward?.reward_id || "").trim();
+    if (rewardId) byRewardId[rewardId] = image;
+
+    const childId = String(reward?.child_id || "").trim();
+    const title = normalizeLookupText(reward?.title || reward?.reward_title);
+    const price = Number(reward?.price ?? reward?.reward_price ?? 0) || 0;
+
+    if (childId && title) {
+      byChildTitle[`${childId}__${title}`] = image;
+      if (price > 0) {
+        byChildTitlePrice[`${childId}__${title}__${price}`] = image;
+      }
+    }
+
+    // Fallback для старых/битых purchase-записей без reward_id или с неверным child_id:
+    // используем только глобально-уникальную пару title+price, чтобы не подмешивать чужие картинки.
+    if (title && price > 0) {
+      const globalKey = `${title}__${price}`;
+      const current = byGlobalTitlePrice[globalKey];
+      if (!current) {
+        byGlobalTitlePrice[globalKey] = image;
+      } else if (current !== image) {
+        byGlobalTitlePriceConflicts.add(globalKey);
+      }
+    }
+  }
+
+  for (const key of byGlobalTitlePriceConflicts) {
+    delete byGlobalTitlePrice[key];
+  }
+
+  return { byRewardId, byChildTitle, byChildTitlePrice, byGlobalTitlePrice };
+}
+
+function applyRewardImageIndexToPurchases(
+  purchasesMap: Record<string, any[]>,
+  index: RewardImageIndex
+): Record<string, any[]> {
+  const next: Record<string, any[]> = {};
+
+  for (const [childId, purchases] of Object.entries(purchasesMap || {})) {
+    next[childId] = (purchases || []).map((purchase: any) => {
+      const existing =
+        String(purchase?.reward_image_url || "").trim() ||
+        String(purchase?.image_url || "").trim() ||
+        "";
+      if (existing) return purchase;
+
+      const rewardId = String(purchase?.reward_id || purchase?.id || "").trim();
+      const title = normalizeLookupText(purchase?.reward_title || purchase?.title);
+      const price = Number(purchase?.price ?? purchase?.reward_price ?? 0) || 0;
+
+      const byId = rewardId ? index.byRewardId[rewardId] : "";
+      const byStrict = childId && title ? index.byChildTitlePrice[`${childId}__${title}__${price}`] : "";
+      const bySoft = childId && title ? index.byChildTitle[`${childId}__${title}`] : "";
+      const byGlobalStrict = title && price > 0 ? index.byGlobalTitlePrice[`${title}__${price}`] : "";
+      const resolved = byId || byStrict || bySoft || byGlobalStrict || "";
+
+      if (!resolved) return purchase;
+      return { ...purchase, reward_image_url: resolved };
+    });
+  }
+
+  return next;
+}
+
 const App: React.FC = () => {
   console.log("[APP RENDER]");
 
@@ -132,6 +305,8 @@ const App: React.FC = () => {
     return (saved as Theme) || Theme.DEEP_PURPLE;
   });
   const [activeTab, setActiveTab] = useState<Tab>(Tab.DASHBOARD);
+  const [missionIdeaDraft, setMissionIdeaDraft] = useState<string>("");
+  const [missionIdeaNonce, setMissionIdeaNonce] = useState<number>(0);
 
   const [children, setChildren] = useState<Child[]>(INITIAL_CHILDREN);
   const [selectedChildId, setSelectedChildId] = useState<string>(
@@ -139,17 +314,32 @@ const App: React.FC = () => {
   );
   const selectedChildIdRef = useRef<string>(selectedChildId);
 
+  const [isAppBootLoading, setIsAppBootLoading] = useState(true);
+  const [isBootFading, setIsBootFading] = useState(false);
+  const [isAuthResolved, setIsAuthResolved] = useState(false);
+
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAddChildOpen, setIsAddChildOpen] = useState(false);
 
   const [tasks, setTasks] = useState<any[]>([]);
   const [apiChildren, setApiChildren] = useState<any[]>([]);
+  const [pendingDreamsByChild, setPendingDreamsByChild] = useState<Record<string, any>>({});
   const stickyRemovedTaskIdsRef = useRef<Map<string, number>>(new Map());
   const [apiError, setApiError] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
   const [isInitialDataLoading, setIsInitialDataLoading] = useState(true);
   const [childPurchases, setChildPurchases] = useState<Record<string, any[]>>({});
   const [childHistory, setChildHistory] = useState<Record<string, any[]>>({});
+  const rewardImageIndexRef = useRef<RewardImageIndex>({
+    byRewardId: {},
+    byChildTitle: {},
+    byChildTitlePrice: {},
+    byGlobalTitlePrice: {},
+  });
+  const dreamImageCacheRef = useRef<Record<string, string>>({});
+  const dreamFallbackFetchedAtRef = useRef<Record<string, number>>({});
+  const rewardsHydrationInFlightRef = useRef(false);
+  const rewardsIndexFetchedAtRef = useRef(0);
 
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [parentCode, setParentCode] = useState<string>("");
@@ -163,6 +353,7 @@ const App: React.FC = () => {
   // identityKey: уникально для TG-акка (tg_user_id) или web fallback (fw_web_user_id)
   const [identityKey, setIdentityKey] = useState<string>("");
   const INVITE_KEY = useMemo(() => parentInviteStorageKey(identityKey), [identityKey]);
+  const bootStartedAtRef = useRef<number>(Date.now());
   const APP_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
   const getAppCacheKey = useCallback((code: string) => makeInviteScopedKey("app-core", code), []);
   const getRewardsCacheKey = useCallback((code: string) => makeInviteScopedKey("rewards", code), []);
@@ -199,6 +390,10 @@ const App: React.FC = () => {
     if (!parentCode) return;
     setIsInitialDataLoading(true);
     setLastSyncAt(null);
+    rewardImageIndexRef.current = { byRewardId: {}, byChildTitle: {}, byChildTitlePrice: {}, byGlobalTitlePrice: {} };
+    dreamFallbackFetchedAtRef.current = {};
+    rewardsHydrationInFlightRef.current = false;
+    rewardsIndexFetchedAtRef.current = 0;
   }, [parentCode]);
 
   // Telegram: ready/expand + layout
@@ -226,6 +421,14 @@ const App: React.FC = () => {
     document.body.setAttribute("data-theme", `${theme}`);
   }, [theme]);
 
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      setIsBootFading(true);
+      window.setTimeout(() => setIsAppBootLoading(false), 320);
+    }, 12000);
+    return () => window.clearTimeout(id);
+  }, []);
+
   // compute identityKey once
   useEffect(() => {
     const id = getTgUserId();
@@ -246,43 +449,48 @@ const App: React.FC = () => {
       if (!identityKey) {
         setParentCode("");
         setIsInviteModalOpen(true);
+        setIsAuthResolved(true);
         return;
       }
 
-      const saved = await tgCloudGet(INVITE_KEY);
-      console.log('[APP] Cloud storage parentCode:', saved);
-      console.log('[APP] identityKey:', identityKey);
-      console.log('[APP] INVITE_KEY:', INVITE_KEY);
+      try {
+        const saved = await tgCloudGet(INVITE_KEY);
+        console.log('[APP] Cloud storage parentCode:', saved);
+        console.log('[APP] identityKey:', identityKey);
+        console.log('[APP] INVITE_KEY:', INVITE_KEY);
 
-      // ФИКС: если сохранён TEST_BROWSER или пустой код — игнорируем
-      if (saved === 'TEST_BROWSER' || !saved) {
-        console.log('[APP] Invalid/empty code in cloud, clearing and opening modal');
+        // ФИКС: если сохранён TEST_BROWSER или пустой код — игнорируем
+        if (saved === 'TEST_BROWSER' || !saved) {
+          console.log('[APP] Invalid/empty code in cloud, clearing and opening modal');
 
-        // ОЧИСТИТЬ Cloud Storage
-        await tgCloudSet(INVITE_KEY, '');
+          // ОЧИСТИТЬ Cloud Storage
+          await tgCloudSet(INVITE_KEY, '');
 
-        setParentCode("");
-        setIsInviteModalOpen(true);
-        return;
-      }
-
-      if (saved) {
-        setParentCode(saved);
-        console.log('[APP] parentCode SET from cloud:', saved);
-        setIsInviteModalOpen(false);
-
-        // Загрузить коды семьи
-        try {
-          const codes = await parentApi.getFamilyCodes(saved);
-          setPartnerCode(codes.partnerCode || undefined);
-          setFriendCodes(codes.friendCodes);
-          console.log('[FAMILY CODES] (restored)', codes);
-        } catch (err) {
-          console.error('[FAMILY CODES] ERROR:', err);
+          setParentCode("");
+          setIsInviteModalOpen(true);
+          return;
         }
-      } else {
-        setParentCode("");
-        setIsInviteModalOpen(true);
+
+        if (saved) {
+          setParentCode(saved);
+          console.log('[APP] parentCode SET from cloud:', saved);
+          setIsInviteModalOpen(false);
+
+          // Загрузить коды семьи
+          try {
+            const codes = await parentApi.getFamilyCodes(saved);
+            setPartnerCode(codes.partnerCode || undefined);
+            setFriendCodes(codes.friendCodes);
+            console.log('[FAMILY CODES] (restored)', codes);
+          } catch (err) {
+            console.error('[FAMILY CODES] ERROR:', err);
+          }
+        } else {
+          setParentCode("");
+          setIsInviteModalOpen(true);
+        }
+      } finally {
+        setIsAuthResolved(true);
       }
     })();
   }, [identityKey, INVITE_KEY]);
@@ -344,6 +552,7 @@ useEffect(() => {
         }
       } finally {
         setIsAuthLoading(false);
+        setIsAuthResolved(true);
       }
     } else {
       console.log('[NEW AUTH] No Telegram initData - skip');
@@ -352,6 +561,7 @@ useEffect(() => {
       if (!parentCode) {
         setIsInviteModalOpen(true);
       }
+      setIsAuthResolved(true);
     }
   };
 
@@ -359,14 +569,31 @@ useEffect(() => {
   initAuth();
 }, []);
 
+useEffect(() => {
+  console.log("[AUTH STATE]", {
+    identityKey,
+    INVITE_KEY,
+    parentCode,
+    isInviteModalOpen,
+  });
+}, [identityKey, INVITE_KEY, parentCode, isInviteModalOpen]);
+
   useEffect(() => {
-    console.log("[AUTH STATE]", {
-      identityKey,
-      INVITE_KEY,
-      parentCode,
-      isInviteModalOpen,
-    });
-  }, [identityKey, INVITE_KEY, parentCode, isInviteModalOpen]);
+    if (!isAuthResolved) return;
+
+    const isDataReady = parentCode ? !isInitialDataLoading : true;
+    if (!isDataReady) return;
+
+    const elapsed = Date.now() - bootStartedAtRef.current;
+    const minDelay = Math.max(0, 1300 - elapsed);
+
+    const id = window.setTimeout(() => {
+      setIsBootFading(true);
+      window.setTimeout(() => setIsAppBootLoading(false), 320);
+    }, minDelay);
+
+    return () => window.clearTimeout(id);
+  }, [isAuthResolved, parentCode, isInitialDataLoading]);
 
   // ===== refreshTasks =====
   const parentCodeRef = useRef<string>("");
@@ -379,15 +606,27 @@ useEffect(() => {
     const snapshot = readSessionCache<{
       children: any[];
       tasks: any[];
+      pendingDreamsByChild?: Record<string, any>;
       childPurchases: Record<string, any[]>;
       childHistory: Record<string, any[]>;
       selectedChildId?: string;
     }>(getAppCacheKey(parentCode), APP_CACHE_MAX_AGE_MS);
 
     if (!snapshot) return;
+    const snapshotImages: Record<string, string> = {};
+    for (const kid of snapshot.children || []) {
+      const img = String(kid?.dream?.image || "").trim();
+      if (img && !isPlaceholderDreamImage(img)) {
+        snapshotImages[String(kid?.id || "")] = img;
+      }
+    }
+    if (Object.keys(snapshotImages).length > 0) {
+      dreamImageCacheRef.current = { ...dreamImageCacheRef.current, ...snapshotImages };
+    }
     setApiChildren(snapshot.children || []);
     setChildren((snapshot.children || []) as any);
     setTasks(snapshot.tasks || []);
+    setPendingDreamsByChild(snapshot.pendingDreamsByChild || {});
     setChildPurchases(snapshot.childPurchases || {});
     setChildHistory(snapshot.childHistory || {});
     if (snapshot.selectedChildId) {
@@ -399,13 +638,16 @@ useEffect(() => {
   const refreshTasks = useCallback(async () => {
     const code = parentCodeRef.current;
 
-if (!code) {
-  setApiChildren([]);
-  setTasks([]);
-  setChildPurchases({});
-  // childHistory сбросится только при явном logout
-  return;
-}
+    if (!code) {
+      setApiChildren([]);
+      setTasks([]);
+      setPendingDreamsByChild({});
+      setChildPurchases({});
+      // childHistory сбросится только при явном logout
+      setIsInitialDataLoading(false);
+      setLastSyncAt(Date.now());
+      return;
+    }
 
     try {
       console.log("[auto-refresh] tick", new Date().toLocaleTimeString());
@@ -414,44 +656,185 @@ if (!code) {
       const kidsResp = await parentApi.listChildren(code);
       const rawKids = kidsResp?.children ?? [];
 
-      // ТРАНСФОРМАЦИЯ: добавляем dream, missions, activities
-      const nextKids = rawKids.map((kid: any) => ({
-        ...kid,
-        apiChildId: kid.id,
-        inviteCode: kid.invite_code || "",
-        gender: kid.gender || 'male',
-        balance: kid.balance,
-        dream: {
-          title: kid.dream_title || "Мечта",
-          image: "https://api.dicebear.com/7.x/shapes/svg?seed=dream",
-          current: kid.dream_current || kid.balance?.confirmed || 0,
-          price: kid.dream_target || 10000
-        },
-        missions: [],
-        activities: []
-      }));
+      const prevKidsById: Record<string, any> = {};
+      for (const prevKid of children || []) {
+        if (prevKid?.id) prevKidsById[String(prevKid.id)] = prevKid;
+      }
 
-      setApiChildren(nextKids);
-      setChildren(nextKids as any);
+      // ТРАНСФОРМАЦИЯ: добавляем dream, missions, activities
+      const nextKids = rawKids.map((kid: any) => {
+        const prevKid = prevKidsById[String(kid?.id || "")];
+        const prevDreamImage = prevKid?.dream?.image || "";
+        const cachedImage = dreamImageCacheRef.current[String(kid?.id || "")] || "";
+        return {
+          ...kid,
+          apiChildId: kid.id,
+          inviteCode: kid.invite_code || "",
+          gender: kid.gender || 'male',
+          balance: kid.balance,
+          dream: {
+            title: kid.dream_title || prevKid?.dream?.title || "Мечта",
+            image: cachedImage || prevDreamImage || resolveDreamImage(kid),
+            current: kid.dream_current ?? prevKid?.dream?.current ?? kid.balance?.confirmed ?? 0,
+            price: kid.dream_target ?? prevKid?.dream?.price ?? 10000
+          },
+          missions: [],
+          activities: []
+        };
+      });
+
+      const resp = await parentApi.getTasks(code);
+      let hydratedKids = nextKids;
+
+      let nextPendingDreamsByChild: Record<string, any> = {};
+      let nextPurchasesMap: Record<string, any[]> = {};
+      let nextHistoryMap: Record<string, any[]> = {};
+
+      // pending dreams (нужны для родительского одобрения новой мечты)
+      try {
+        const pendingDreamsResp = await parentApi.getPendingDreams(code);
+        const pendingDreams = pendingDreamsResp?.dreams ?? [];
+
+        const pendingDreamsMap: Record<string, any> = {};
+        for (const dream of pendingDreams) {
+          const childId = String(dream?.child_id || "");
+          if (!childId) continue;
+          pendingDreamsMap[childId] = dream;
+        }
+        nextPendingDreamsByChild = pendingDreamsMap;
+        setPendingDreamsByChild(pendingDreamsMap);
+      } catch (e) {
+        console.error("[dreams/pending] FAILED:", e);
+        nextPendingDreamsByChild = {};
+        setPendingDreamsByChild({});
+      }
+
+      // active dreams (title/current/target/image) для родительского dream dashboard
+      try {
+        const activeDreamsResp = await parentApi.getActiveDreams(code);
+        const activeDreams = activeDreamsResp?.dreams ?? [];
+        const dreamsByChild: Record<string, any> = {};
+        for (const dream of activeDreams) {
+          const childId = String(dream?.child_id || "");
+          if (!childId) continue;
+          dreamsByChild[childId] = dream;
+        }
+
+        const prevKidsById: Record<string, any> = {};
+        for (const prevKid of apiChildren || []) {
+          if (prevKid?.id) prevKidsById[String(prevKid.id)] = prevKid;
+        }
+
+        hydratedKids = nextKids.map((kid: any) => {
+          const childId = String(kid?.id || "");
+          const activeDream = dreamsByChild[childId];
+          if (!activeDream) return kid;
+
+          const prevKid = prevKidsById[childId];
+          let imageFromDream = resolveActiveDreamImage(activeDream, prevKid || kid);
+          if (prevKid && hasUsableDreamImage(prevKid) && isPlaceholderDreamImage(imageFromDream)) {
+            imageFromDream = resolveDreamImage(prevKid);
+          }
+          if (imageFromDream && !isPlaceholderDreamImage(imageFromDream)) {
+            dreamImageCacheRef.current[childId] = imageFromDream;
+          }
+          const currentFromDream = Number(activeDream?.current_amount ?? kid?.dream?.current ?? 0) || 0;
+          const targetFromDream = Number(activeDream?.target_amount ?? kid?.dream?.price ?? 10000) || 10000;
+          const titleFromDream = String(activeDream?.title || kid?.dream?.title || "Мечта");
+
+          return {
+            ...kid,
+            dream: {
+              ...kid.dream,
+              title: titleFromDream,
+              current: currentFromDream,
+              price: targetFromDream,
+              image: imageFromDream,
+            },
+          };
+        });
+      } catch (e) {
+        console.error("[dreams/active] FAILED:", e);
+        hydratedKids = nextKids;
+      }
+
+      // Fallback: если активные мечты не вернулись для части детей, добираем через child invite (/api/dreams/my).
+      const DREAM_MY_MISSING_RETRY_MS = 20 * 1000;
+      const DREAM_MY_SYNC_REFRESH_MS = 10 * 60 * 1000;
+      const nowTs = Date.now();
+      const kidsMissingDream = hydratedKids.filter((kid: any) => {
+        const inviteCode = String(kid?.inviteCode || "").trim();
+        if (!inviteCode) return false;
+        const kidId = String(kid?.id || "");
+        const lastFetchedAt = dreamFallbackFetchedAtRef.current[kidId] || 0;
+        const missingData = !hasMeaningfulDreamTitle(kid) || !hasUsableDreamImage(kid);
+        if (!lastFetchedAt) return true; // хотя бы один раз гидрируем /api/dreams/my для каждого ребёнка
+        if (missingData) return nowTs - lastFetchedAt > DREAM_MY_MISSING_RETRY_MS;
+        return nowTs - lastFetchedAt > DREAM_MY_SYNC_REFRESH_MS;
+      });
+      if (kidsMissingDream.length > 0) {
+        try {
+          kidsMissingDream.forEach((kid: any) => {
+            const kidId = String(kid?.id || "");
+            if (!kidId) return;
+            dreamFallbackFetchedAtRef.current[kidId] = nowTs;
+          });
+          const fallbackResults = await Promise.allSettled(
+            kidsMissingDream.map((kid: any) => parentApi.getMyDream(String(kid.inviteCode || "").trim()))
+          );
+
+          const fallbackByKidId: Record<string, any> = {};
+          kidsMissingDream.forEach((kid: any, index: number) => {
+            const result = fallbackResults[index];
+            if (result?.status !== "fulfilled") return;
+            const dream = result.value?.dream;
+            if (!dream) return;
+            const title = String(dream?.title || "").trim();
+            if (!title) return;
+            fallbackByKidId[String(kid.id || "")] = dream;
+          });
+
+          if (Object.keys(fallbackByKidId).length > 0) {
+            hydratedKids = hydratedKids.map((kid: any) => {
+              const fallbackDream = fallbackByKidId[String(kid?.id || "")];
+              if (!fallbackDream) return kid;
+              const image = resolveActiveDreamImage(fallbackDream, kid);
+              if (image && !isPlaceholderDreamImage(image)) {
+                dreamImageCacheRef.current[String(kid?.id || "")] = image;
+              }
+              return {
+                ...kid,
+                dream: {
+                  ...kid.dream,
+                  title: String(fallbackDream?.title || kid?.dream?.title || "Мечта"),
+                  current: Number(fallbackDream?.current_amount ?? kid?.dream?.current ?? 0) || 0,
+                  price: Number(fallbackDream?.target_amount ?? kid?.dream?.price ?? 10000) || 10000,
+                  image,
+                },
+              };
+            });
+          }
+        } catch (e) {
+          console.error("[dreams/my fallback] FAILED:", e);
+        }
+      }
+
+      setApiChildren(hydratedKids);
+      setChildren(hydratedKids as any);
 
       // Установить первого ребёнка ВСЕГДА (если не выбран вручную)
-      if (nextKids.length > 0) {
+      if (hydratedKids.length > 0) {
         const currentSelected = selectedChildIdRef.current;
-        const firstKid = nextKids[0].id;
+        const firstKid = hydratedKids[0].id;
         
         console.log('[auto-refresh] currentSelected:', currentSelected, 'firstKid:', firstKid);
         
-        if (!currentSelected || !nextKids.find(k => k.id === currentSelected)) {
+        if (!currentSelected || !hydratedKids.find(k => k.id === currentSelected)) {
           console.log('[auto-refresh] ВЫБИРАЕМ ПЕРВОГО (нет выбранного или не найден):', firstKid);
           setSelectedChildId(firstKid);
           selectedChildIdRef.current = firstKid;
         }
       }
-
-      const resp = await parentApi.getTasks(code);
-
-      let nextPurchasesMap: Record<string, any[]> = {};
-      let nextHistoryMap: Record<string, any[]> = {};
 
       // purchases
       try {
@@ -460,11 +843,79 @@ if (!code) {
 
         const purchasesMap: Record<string, any[]> = {};
         for (const p of allPurchases) {
+          const normalizedPurchase = {
+            ...p,
+            reward_image_url:
+              String(p?.reward_image_url || "").trim() ||
+              String(p?.image_url || "").trim() ||
+              "",
+          };
+
           if (!purchasesMap[p.child_id]) purchasesMap[p.child_id] = [];
-          purchasesMap[p.child_id].push(p);
+          purchasesMap[p.child_id].push(normalizedPurchase);
         }
-        nextPurchasesMap = purchasesMap;
-        setChildPurchases(purchasesMap);
+
+        const hasMissingPurchaseImages = allPurchases.some(
+          (p: any) =>
+            !String(p?.reward_image_url || "").trim() &&
+            !String(p?.image_url || "").trim()
+        );
+
+        const cachedIndex = rewardImageIndexRef.current;
+        const hasCachedIndex =
+          Object.keys(cachedIndex.byRewardId).length > 0 ||
+          Object.keys(cachedIndex.byChildTitle).length > 0 ||
+          Object.keys(cachedIndex.byChildTitlePrice).length > 0 ||
+          Object.keys(cachedIndex.byGlobalTitlePrice).length > 0;
+
+        const runtimePurchasesMap =
+          hasMissingPurchaseImages && hasCachedIndex
+            ? applyRewardImageIndexToPurchases(purchasesMap, cachedIndex)
+            : purchasesMap;
+
+        nextPurchasesMap = runtimePurchasesMap;
+        setChildPurchases(runtimePurchasesMap);
+
+        const hasUnresolvedPurchaseImages = Object.values(runtimePurchasesMap).some((items: any) =>
+          (items || []).some(
+            (p: any) =>
+              !String(p?.reward_image_url || "").trim() &&
+              !String(p?.image_url || "").trim()
+          )
+        );
+
+        const REWARDS_INDEX_REFRESH_MS = 15 * 60 * 1000;
+        const REWARDS_INDEX_UNRESOLVED_RETRY_MS = 15 * 1000;
+        const rewardsIndexAgeMs = Date.now() - rewardsIndexFetchedAtRef.current;
+        const shouldRefreshRewardsIndex =
+          hasUnresolvedPurchaseImages &&
+          !rewardsHydrationInFlightRef.current &&
+          (
+            !hasCachedIndex ||
+            rewardsIndexAgeMs > REWARDS_INDEX_REFRESH_MS ||
+            rewardsIndexAgeMs > REWARDS_INDEX_UNRESOLVED_RETRY_MS
+          );
+
+        if (shouldRefreshRewardsIndex) {
+          rewardsHydrationInFlightRef.current = true;
+          void (async () => {
+            try {
+              const rewardsResp = await parentApi.listRewards(code);
+              const rewards = rewardsResp?.rewards ?? [];
+              const freshIndex = buildRewardImageIndex(rewards);
+
+              rewardImageIndexRef.current = freshIndex;
+              rewardsIndexFetchedAtRef.current = Date.now();
+
+              if (parentCodeRef.current !== code) return;
+              setChildPurchases((prev) => applyRewardImageIndexToPurchases(prev, freshIndex));
+            } catch (rewardsErr) {
+              console.error("[rewards hydration] FAILED:", rewardsErr);
+            } finally {
+              rewardsHydrationInFlightRef.current = false;
+            }
+          })();
+        }
       } catch (e) {
         console.error("[purchases] failed:", e);
         nextPurchasesMap = {};
@@ -521,22 +972,33 @@ if (!code) {
       // Rewards prefetch is disabled because payload can be very heavy (base64 images),
       // which blocks initial app loading in WebView/VPN scenarios.
       // Shop fetches rewards on demand.
+      const compactPurchasesMap: Record<string, any[]> = {};
+      for (const [childId, purchases] of Object.entries(nextPurchasesMap)) {
+        compactPurchasesMap[childId] = (purchases || []).map((p: any) => {
+          const image = String(p?.reward_image_url || "").trim();
+          return {
+            ...p,
+            reward_image_url: image.startsWith("data:") ? "" : image,
+          };
+        });
+      }
 
       writeSessionCache(getAppCacheKey(code), {
-        children: nextKids,
+        children: hydratedKids,
         tasks: nextTasks,
-        childPurchases: nextPurchasesMap,
+        pendingDreamsByChild: nextPendingDreamsByChild,
+        childPurchases: compactPurchasesMap,
         childHistory: nextHistoryMap,
-        selectedChildId: selectedChildIdRef.current || nextKids[0]?.id || "",
+        selectedChildId: selectedChildIdRef.current || hydratedKids[0]?.id || "",
       });
-      setIsInitialDataLoading(false);
 
-      console.log("[auto-refresh] children/tasks:", nextKids.length, nextTasks.length);
+      console.log("[auto-refresh] children/tasks:", hydratedKids.length, nextTasks.length);
     } catch (e: any) {
       const msg = e?.message || String(e);
       setApiError(msg);
       console.error("PARENT API FAIL:", e);
     } finally {
+      setIsInitialDataLoading(false);
       setLastSyncAt(Date.now());
     }
   }, [getAppCacheKey, getRewardsCacheKey]);
@@ -738,6 +1200,18 @@ if (!code) {
     );
   }, [uiChildren, selectedChildId]);
 
+  const handleAddMissionIdea = useCallback((idea: string) => {
+    const title = String(idea || "").trim();
+    if (!title) return;
+    setMissionIdeaDraft(title);
+    setMissionIdeaNonce((prev) => prev + 1);
+    setActiveTab(Tab.MISSIONS);
+  }, []);
+
+  const handleConsumeMissionIdea = useCallback(() => {
+    setMissionIdeaDraft("");
+  }, []);
+
   const apiChildId = (selectedChild as any)?.apiChildId;
   const pendingPrizesCount =
     childPurchases[apiChildId]?.filter((p: any) => p.status === "pending").length ??
@@ -745,6 +1219,24 @@ if (!code) {
   const pendingMissionsCount = selectedChild
     ? ((selectedChild as any).missions?.filter((m: any) => m.status === "pending")?.length ?? 0)
     : 0;
+  const selectedPendingDream = selectedChild
+    ? (pendingDreamsByChild[(selectedChild as any)?.apiChildId || ""] ||
+      pendingDreamsByChild[(selectedChild as any)?.id || ""] ||
+      null)
+    : null;
+
+  const handleSetDreamGoal = useCallback(
+    async (dreamId: string, targetAmount: number) => {
+      const code = parentCodeRef.current;
+      if (!code) {
+        throw new Error("Код родителя не найден.");
+      }
+      await parentApi.setDreamGoal(code, dreamId, targetAmount);
+      clearAppCache(code);
+      await refreshTasks();
+    },
+    [clearAppCache, refreshTasks]
+  );
 
   const toggleTheme = () => {
     setTheme((prev) => {
@@ -758,6 +1250,10 @@ if (!code) {
   };
 
   const handleUpdateChild = (updated: Child) => {
+    const updatedImage = String((updated as any)?.dream?.image || "").trim();
+    if (updatedImage && !isPlaceholderDreamImage(updatedImage)) {
+      dreamImageCacheRef.current[String((updated as any)?.id || "")] = updatedImage;
+    }
     setChildren((prev) =>
       prev.map((c: any) => (c.id === (updated as any).id ? updated : c))
     );
@@ -806,6 +1302,7 @@ if (!code) {
     setIsInviteModalOpen(true);
     setChildren([]);
     setApiChildren([]);
+    setPendingDreamsByChild({});
     setSelectedChildId("");
     selectedChildIdRef.current = "";
   };
@@ -843,6 +1340,8 @@ if (!code) {
                 onUpdateChild={handleUpdateChild}
                 onTaskAction={onTaskAction as any}
                 pendingPurchases={childPurchases[apiChildId] || []}
+                pendingDream={selectedPendingDream}
+                onSetDreamGoal={handleSetDreamGoal}
               />
             ) : (
               <div className="text-center py-12 text-white/60">
@@ -861,6 +1360,9 @@ if (!code) {
             onTaskAction={onTaskAction as any}
             parentCode={parentCode}
             onRefresh={refreshTasks as any}
+            prefillMissionTitle={missionIdeaDraft}
+            prefillMissionNonce={missionIdeaNonce}
+            onConsumePrefill={handleConsumeMissionIdea}
           />
         ) : (
           <div className="text-center py-12 text-white/60">
@@ -880,7 +1382,11 @@ if (!code) {
 
       case Tab.AI_ASSISTANT:
         return selectedChild ? (
-          <AIAssistant child={selectedChild} />
+          <AIAssistant
+            child={selectedChild}
+            inviteCode={parentCode}
+            onAddMissionIdea={handleAddMissionIdea}
+          />
         ) : (
           <div className="text-center py-12 text-white/60">
             Выберите ребёнка
@@ -893,6 +1399,8 @@ if (!code) {
             child={selectedChild}
             onUpdateChild={handleUpdateChild}
             onTaskAction={onTaskAction as any}
+            pendingDream={selectedPendingDream}
+            onSetDreamGoal={handleSetDreamGoal}
           />
         ) : (
           <div className="text-center py-12 text-white/60">
@@ -903,6 +1411,10 @@ if (!code) {
   };
 
   // ===== Auth gate =====
+  if (!isAuthResolved || isAppBootLoading || isInitialDataLoading) {
+    return <AppSplash isFading={isBootFading} />;
+  }
+
   if (!parentCode) {
     return (
       <div
@@ -999,49 +1511,10 @@ if (!code) {
     );
   }
 
-  if (isInitialDataLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6 bg-black text-white">
-        <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white/[0.04] p-7">
-          <div className="h-1 w-full overflow-hidden rounded-full bg-white/10">
-            <div className="h-full w-1/3 bg-[var(--primary)] animate-[appBootBar_1.2s_linear_infinite]" />
-          </div>
-          <style>{`
-            @keyframes appBootBar {
-              0% { transform: translateX(-100%); }
-              100% { transform: translateX(350%); }
-            }
-          `}</style>
-          <div className="mt-5 text-center">
-            <p className="text-lg font-black">Загрузка данных семьи...</p>
-            <p className="mt-2 text-xs uppercase tracking-[0.2em] text-[var(--text-muted)]">
-              Подтягиваем миссии, награды, баланс и историю
-            </p>
-          </div>
-          {apiError ? (
-            <div className="mt-5 rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4">
-              <p className="text-sm text-rose-300">Ошибка API: {getReadableApiError(apiError)}</p>
-              <button
-                onClick={() => refreshTasks()}
-                className="mt-3 w-full rounded-xl bg-rose-500/20 py-3 text-xs font-black uppercase tracking-widest text-rose-200 hover:bg-rose-500/30"
-              >
-                Повторить загрузку
-              </button>
-            </div>
-          ) : (
-            <div className="mt-4 text-center text-[11px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
-              Открываем приложение...
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="h-screen flex flex-col transition-colors duration-500 bg-black text-white w-full max-w-full overflow-x-hidden">
-      <header className="w-full px-4 pt-5 pb-2 sticky top-0 z-40 bg-black max-w-full">
-        <div className="flex items-center justify-between mb-4">
+    <div className="h-screen h-[100dvh] min-h-screen flex flex-col transition-colors duration-500 bg-black text-white w-full max-w-full overflow-hidden overflow-x-clip">
+      <header className="w-full px-4 pt-[max(env(safe-area-inset-top),0.75rem)] pb-0 sticky top-0 z-40 bg-black max-w-full">
+        <div className="flex items-center justify-between mb-2">
           <h1 className="text-3xl font-black tracking-tight text-center">
             В<span className="text-amber-400">Э</span>Й!
           </h1>
@@ -1077,11 +1550,11 @@ if (!code) {
         />
       </header>
 
-      <main className="flex-1 overflow-y-auto scrollArea max-w-3xl mx-auto px-4 md:px-6 mt-6 pb-40 w-full max-w-full box-border">
+      <main className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain scrollArea max-w-3xl mx-auto px-4 md:px-6 mt-2 pb-[calc(10rem+env(safe-area-inset-bottom))] w-full max-w-full box-border">
         {renderContent()}
       </main>
 
-      <div className="fixed bottom-8 left-0 right-0 z-50 px-4 md:px-6 w-full max-w-full box-border">
+      <div className="fixed bottom-[max(env(safe-area-inset-bottom),1rem)] left-0 right-0 z-50 px-4 md:px-6 w-full max-w-full box-border">
         <nav className="max-w-3xl mx-auto bg-white/[0.04] backdrop-blur-3xl border border-white/10 rounded-[2.5rem] py-4 px-6 md:px-8 shadow-[0_25px_60px_rgba(0,0,0,0.8)] flex items-center justify-between transition-all duration-500 w-full max-w-full box-border">
           <NavButton
             active={activeTab === Tab.DASHBOARD}

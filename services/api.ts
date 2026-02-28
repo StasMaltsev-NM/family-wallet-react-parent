@@ -258,6 +258,33 @@ export const parentApi = {
     }, inviteCode);
   },
 
+  createRewardsBatch(
+    inviteCode: string,
+    childIds: string[],
+    title: string,
+    price: number,
+    description?: string,
+    isPermanent: boolean = true
+  ) {
+    const normalizedChildIds = Array.from(new Set((childIds || []).map((id) => String(id || '').trim()).filter(Boolean)));
+    const payload: Record<string, any> = {
+      child_ids: normalizedChildIds,
+      title,
+      price,
+      description: description || '',
+      icon: '🎁',
+      is_permanent: isPermanent ? 1 : 0
+    };
+    // Совместимость с backend-реализациями, где обязателен child_id даже при batch-передаче.
+    if (normalizedChildIds.length === 1) {
+      payload.child_id = normalizedChildIds[0];
+    }
+    return request<{ reward_id?: string; reward_ids?: string[]; message?: string }>("/api/rewards/create", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }, inviteCode);
+  },
+
   listRewards(inviteCode: string) {
     return request<{ rewards: any[] }>("/api/rewards/list", {
       method: "GET",
@@ -313,6 +340,50 @@ export const parentApi = {
       "/api/family/codes",
       {
         method: "GET",
+      },
+      inviteCode
+    );
+  },
+
+  getPendingDreams(inviteCode: string) {
+    return request<{ dreams: any[] }>(
+      "/api/dreams/pending",
+      {
+        method: "GET",
+      },
+      inviteCode
+    );
+  },
+
+  getActiveDreams(inviteCode: string) {
+    return request<{ dreams: any[] }>(
+      "/api/dreams/active",
+      {
+        method: "GET",
+      },
+      inviteCode
+    );
+  },
+
+  getMyDream(inviteCode: string) {
+    return request<{ dream?: any }>(
+      "/api/dreams/my",
+      {
+        method: "GET",
+      },
+      inviteCode
+    );
+  },
+
+  setDreamGoal(inviteCode: string, dreamId: string, targetAmount: number) {
+    return request<{ message: string }>(
+      "/api/dreams/set-goal",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          dream_id: dreamId,
+          target_amount: targetAmount,
+        }),
       },
       inviteCode
     );

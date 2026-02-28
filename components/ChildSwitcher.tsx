@@ -14,7 +14,7 @@ interface Props {
 
 const ChildSwitcher: React.FC<Props> = ({ children, selectedId, onSelect, onAdd, childPurchases }) => {
   return (
-    <div className="flex overflow-x-auto no-scrollbar gap-6 items-center pt-4 pb-6 pl-5 pr-20 -mx-5 snap-x snap-mandatory">
+    <div className="flex w-full max-w-full overflow-x-auto overflow-y-visible no-scrollbar gap-5 items-center pt-2 pb-2 pl-5 pr-6 snap-x snap-mandatory">
       {children.map(child => {
         const isSelected = child.id === selectedId;
         
@@ -39,7 +39,7 @@ const ChildSwitcher: React.FC<Props> = ({ children, selectedId, onSelect, onAdd,
           <button
             key={child.id}
             onClick={() => onSelect(child.id)}
-            className={`flex flex-col items-center gap-3 transition-all duration-300 flex-shrink-0 snap-center ${isSelected ? 'scale-110' : 'hover:scale-105'}`}
+            className={`flex flex-col items-center gap-3 transition-all duration-300 flex-shrink-0 snap-center first:ml-1 last:mr-1 ${isSelected ? 'scale-110' : 'hover:scale-105'}`}
           >
             {/* Внешний контейнер (Кольцо Уведомления - Желтое) */}
             <div className={`relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500
@@ -71,12 +71,20 @@ const ChildSwitcher: React.FC<Props> = ({ children, selectedId, onSelect, onAdd,
         );
       })}
       
-      <button 
-        onClick={onAdd}
-        className="w-16 h-16 rounded-full border-[3px] border-dashed border-[var(--text-muted)]/30 flex items-center justify-center text-[var(--text-muted)] hover:border-[var(--primary)] hover:text-[var(--primary)] transition-all flex-shrink-0 mb-7"
-      >
-        <Plus size={32} />
-      </button>
+      <div className="flex flex-col items-center gap-3 flex-shrink-0 snap-center -translate-y-1">
+        <button 
+          onClick={onAdd}
+          className="w-16 h-16 rounded-full border-[3px] border-dashed border-[var(--text-muted)]/30 flex items-center justify-center text-[var(--text-muted)] hover:border-[var(--primary)] hover:text-[var(--primary)] transition-all"
+        >
+          <Plus size={32} />
+        </button>
+        <span
+          aria-hidden="true"
+          className="text-[11px] font-black uppercase tracking-widest opacity-0 select-none pointer-events-none"
+        >
+          ADD
+        </span>
+      </div>
     </div>
   );
 };

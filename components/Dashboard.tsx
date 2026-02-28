@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Child, Activity } from '../types';
 import { 
   Sparkles, 
@@ -19,7 +19,15 @@ import {
 } from 'lucide-react';
 import { editImageWithAI } from '../services/gemini';
 import { useInstantAction } from '../hooks/useInstantAction';
-import { GenderIcon } from './GenderIcon';
+
+type PendingDream = {
+  id: string;
+  title: string;
+  child_id: string;
+  child_name?: string;
+  status?: string;
+  created_at?: string;
+};
 
 interface Props {
   child: Child;
@@ -28,12 +36,63 @@ interface Props {
   // API-экшен из App.tsx
   onTaskAction: (taskId: string, action: "confirm" | "reject") => Promise<void>;
   pendingPurchases?: any[];
+  pendingDream?: PendingDream | null;
+  onSetDreamGoal?: (dreamId: string, targetAmount: number) => Promise<void>;
 }
 
-const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendingPurchases = [] }) => {
+function resolveDreamImageSrc(dream: any): string {
+  const src = String(
+    dream?.image_url ||
+      dream?.image ||
+      dream?.dream_image_url ||
+      dream?.dream_image ||
+      ''
+  ).trim();
+  if (!src) return 'https://api.dicebear.com/7.x/shapes/svg?seed=dream';
+  return src;
+}
+
+function resolvePendingRewardImageSrc(purchase: any): string {
+  const variants = [
+    purchase?.reward_image_url,
+    purchase?.reward_image,
+    purchase?.image_url,
+    purchase?.image,
+  ];
+  for (const value of variants) {
+    const src = String(value || '').trim();
+    if (src) return src;
+  }
+  return '';
+}
+
+function formatCompactStars(value: number): string {
+  const abs = Math.abs(value);
+  const compact = (num: number) => {
+    const shown = num >= 10 ? num.toFixed(0) : num.toFixed(1);
+    return shown.replace(/\.0$/, "");
+  };
+
+  if (abs >= 1_000_000_000) return `${compact(value / 1_000_000_000)}млрд`;
+  if (abs >= 1_000_000) return `${compact(value / 1_000_000)}м`;
+  if (abs >= 1_000) return `${compact(value / 1_000)}к`;
+  return String(Math.trunc(value));
+}
+
+const Dashboard: React.FC<Props> = ({
+  child,
+  onUpdateChild,
+  onTaskAction,
+  pendingPurchases = [],
+  pendingDream = null,
+  onSetDreamGoal,
+}) => {
   const [isEditingDream, setIsEditingDream] = useState(false);
   const [editPrompt, setEditPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [dreamGoalInput, setDreamGoalInput] = useState('');
+  const [dreamGoalError, setDreamGoalError] = useState<string | null>(null);
+  const [isDreamGoalSaving, setIsDreamGoalSaving] = useState(false);
   const { runInstant, isPending } = useInstantAction();
   
   const pendingMissions = child.missions.filter(m => m.status === 'pending');
@@ -41,12 +100,27 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
   const [isPrizesExpanded, setIsPrizesExpanded] = useState(pendingPurchases.length > 0);
   const [isActivityExpanded, setIsActivityExpanded] = useState(false);
 
-  const progress = Math.min(100, (child.dream.current / child.dream.price) * 100);
+  const dreamCurrent = Number(child?.dream?.current ?? 0) || 0;
+  const dreamPrice = Math.max(1, Number(child?.dream?.price ?? 0) || 0);
+  const dreamRemaining = Math.max(0, dreamPrice - dreamCurrent);
+  const progress = Math.min(100, (dreamCurrent / dreamPrice) * 100);
+  const hasPendingDream = Boolean(pendingDream?.id);
+  const dreamImageSrc = resolveDreamImageSrc(child?.dream);
+  const confirmedBalance = Math.trunc(Number(child?.balance?.confirmed ?? 0) || 0);
+  const compactBalance = formatCompactStars(confirmedBalance);
+
+  useEffect(() => {
+    if (hasPendingDream) {
+      setDreamGoalInput('');
+      setDreamGoalError(null);
+      setIsEditingDream(false);
+    }
+  }, [hasPendingDream, pendingDream?.id]);
 
   const handleAIEdit = async () => {
     if (!editPrompt) return;
     setIsGenerating(true);
-    const result = await editImageWithAI(child.dream.image, `Примени эти визуальные изменения к изображению мечты: ${editPrompt}`);
+    const result = await editImageWithAI(dreamImageSrc, `Примени эти визуальные изменения к изображению мечты: ${editPrompt}`);
     if (result) {
       onUpdateChild({
         ...child,
@@ -104,79 +178,123 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
     }
   };
 
+  const handleDreamGoalSubmit = async () => {
+    if (!pendingDream?.id || !onSetDreamGoal || isDreamGoalSaving) return;
+    const amount = Number(dreamGoalInput);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setDreamGoalError('Введите сумму цели больше 0.');
+      return;
+    }
+    setDreamGoalError(null);
+    setIsDreamGoalSaving(true);
+    try {
+      await onSetDreamGoal(pendingDream.id, Math.round(amount));
+    } catch (err: any) {
+      setDreamGoalError(err?.message || 'Не удалось установить сумму мечты.');
+    } finally {
+      setIsDreamGoalSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-5 animate-in fade-in slide-in-from-bottom-6 duration-700 pb-20">
       
-      {/* 1. Блок «Детская мечта» */}
-      {child.dream.title && child.dream.title !== "Мечта" && (
-      <div className="bg-[var(--bg-card)] rounded-[2.5rem] overflow-hidden border border-[var(--primary)]/30 shadow-2xl flex flex-row items-stretch h-40 group w-full max-w-full">
-        <div className="relative w-40 flex-shrink-0 overflow-hidden">
-          <img 
-            src={child.dream.image} 
-            alt={child.dream.title} 
-            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000"
-          />
-          <div className="absolute inset-0 bg-black/30" />
-          <button 
-            onClick={() => setIsEditingDream(true)}
-            className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-lg p-2.5 rounded-xl text-white/90 hover:text-white transition-all border border-white/10"
-          >
-            <Sparkles size={20} />
-          </button>
-        </div>
-        
-        <div className="flex-1 p-6 flex flex-col justify-between min-w-0">
-          <div className="flex justify-between items-start gap-3">
-            <div className="flex-1 min-w-0">
-              <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.25em] mb-1">Мечта ребенка</p>
-              <h3 className="text-xl font-black truncate text-white leading-tight">{child.dream.title}</h3>
-            </div>
-            <div className="text-right flex-shrink-0">
-              <p className="text-2xl font-black text-[var(--primary)] flex items-center justify-end gap-1">
-                {child.dream.current} <Star size={20} fill="currentColor" />
-              </p>
-              <p className="text-[11px] text-[var(--text-muted)] uppercase font-bold tracking-widest">из {child.dream.price}</p>
-            </div>
-          </div>
-
-          <div className="mt-auto">
-            <div className="relative h-2.5 bg-black/50 rounded-full overflow-hidden mb-2.5 border border-white/5">
-              <div 
-                className="absolute h-full bg-gradient-to-r from-[var(--primary)] to-indigo-400 transition-all duration-1000"
-                style={{ width: `${progress}%` }}
+      {/* 1. Блок «Детская мечта» / одобрение новой мечты */}
+      {hasPendingDream ? (
+        <div className="bg-[var(--bg-card)] rounded-[2.5rem] border border-amber-400/40 shadow-2xl p-6 sm:p-7">
+          <p className="text-[10px] font-black uppercase tracking-[0.25em] text-amber-300 mb-2">Новая мечта от ребенка</p>
+          <h3 className="text-2xl font-black text-white leading-tight mb-5 truncate">{pendingDream?.title}</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-start">
+            <div>
+              <input
+                type="number"
+                min={1}
+                inputMode="numeric"
+                placeholder="Введите сумму цели в звёздах"
+                value={dreamGoalInput}
+                onChange={(e) => setDreamGoalInput(e.target.value)}
+                className="w-full rounded-2xl bg-black/50 border border-white/10 px-4 py-3 text-white font-black outline-none focus:border-amber-300/70"
               />
+              {dreamGoalError ? (
+                <p className="mt-2 text-[12px] text-rose-300 font-bold">{dreamGoalError}</p>
+              ) : (
+                <p className="mt-2 text-[11px] uppercase tracking-widest text-[var(--text-muted)] font-bold">Родитель задаёт цель накопления</p>
+              )}
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-[11px] font-black text-[var(--text-muted)] uppercase tracking-[0.15em]">Прогресс до цели</span>
-              <span className="text-lg font-black text-white">{Math.round(progress)}%</span>
-            </div>
+            <button
+              onClick={handleDreamGoalSubmit}
+              disabled={isDreamGoalSaving}
+              className="h-12 px-6 rounded-2xl bg-amber-400 text-black font-black uppercase tracking-wide shadow-xl shadow-amber-500/20 disabled:opacity-60 min-w-[170px]"
+            >
+              {isDreamGoalSaving ? 'Сохраняем…' : 'Установить сумму'}
+            </button>
           </div>
         </div>
-      </div>
+      ) : (
+        child.dream.title && child.dream.title !== "Мечта" && (
+          <div className="bg-[var(--bg-card)] rounded-[2.5rem] overflow-hidden border border-[var(--primary)]/30 shadow-2xl flex flex-row items-stretch h-36 sm:h-40 group w-full max-w-full">
+            <div className="relative w-36 sm:w-40 flex-shrink-0 overflow-hidden">
+              <img
+                src={dreamImageSrc}
+                alt={child.dream.title}
+                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000"
+                loading="lazy"
+                decoding="async"
+              />
+              <div className="absolute inset-0 bg-black/30" />
+              
+            </div>
+
+            <div className="flex-1 p-5 sm:p-6 flex flex-col justify-between min-w-0">
+              <div className="mb-2 min-w-0">
+                <div className="flex items-baseline gap-2 min-w-0">
+                  <h3 className="text-lg sm:text-xl font-black text-white truncate">{child.dream.title}</h3>
+                  <span className="text-[11px] font-bold text-[var(--text-muted)] whitespace-nowrap">мечта ребенка</span>
+                </div>
+              </div>
+              <div className="flex justify-end mb-3">
+                <p className="text-[22px] sm:text-2xl font-black text-[var(--primary)] flex items-center gap-1.5 whitespace-nowrap">
+                  <span>{dreamRemaining}</span>
+                  <span className="text-white/50">/</span>
+                  <span>{dreamPrice}</span>
+                  <Star size={18} fill="currentColor" />
+                </p>
+              </div>
+              <div className="relative h-2.5 bg-black/50 rounded-full overflow-hidden border border-white/5">
+                <div
+                  className="absolute h-full bg-gradient-to-r from-[var(--primary)] to-indigo-400 transition-all duration-1000"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        )
       )}
 
       {/* 2. Баланс */}
       <div className="grid grid-cols-2 gap-5 w-full max-w-full">
-        <div className="bg-[var(--bg-card)] p-6 rounded-[2.2rem] border border-[var(--border)] shadow-xl flex items-center gap-5 w-full max-w-full min-w-0">
-          <div className="w-14 h-14 bg-emerald-500/10 rounded-2xl flex items-center justify-center text-emerald-400">
-            <ArrowUpRight size={28} />
+        <div className="relative bg-[var(--bg-card)] p-6 rounded-[2.2rem] border border-[var(--border)] shadow-xl w-full max-w-full min-w-0">
+          <div className="absolute top-4 right-4 w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-400">
+            <ArrowUpRight size={18} />
           </div>
-          <div>
-            <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.2em] mb-1">Баланс</p>
-            <p className="text-3xl font-black text-white flex items-center gap-2">
-              {child.balance.confirmed} <Star size={20} className="text-emerald-400" fill="currentColor" />
+          <div className="min-w-0 pr-12">
+            <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.2em] mb-2">Баланс</p>
+            <p className="text-[34px] sm:text-[42px] leading-none font-black text-white flex items-center gap-1 min-w-0 whitespace-nowrap">
+              <span title={String(confirmedBalance)}>{compactBalance}</span>
+              <Star size={16} className="text-emerald-400 shrink-0" fill="currentColor" />
             </p>
           </div>
         </div>
 
-        <div className="bg-[var(--bg-card)] p-6 rounded-[2.2rem] border border-[var(--border)] shadow-xl flex items-center gap-5 w-full max-w-full min-w-0">
-          <div className="w-14 h-14 bg-amber-500/10 rounded-2xl flex items-center justify-center text-amber-400">
-            <Timer size={28} />
+        <div className="relative bg-[var(--bg-card)] p-6 rounded-[2.2rem] border border-[var(--border)] shadow-xl w-full max-w-full min-w-0">
+          <div className="absolute top-4 right-4 w-10 h-10 bg-amber-500/10 rounded-xl flex items-center justify-center text-amber-400">
+            <Timer size={18} />
           </div>
-          <div>
-            <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.2em] mb-1">Проверка</p>
-            <p className="text-3xl font-black text-white/90 flex items-center gap-2">
-              {child.balance.pending} <Star size={20} className="text-amber-500/50" fill="currentColor" />
+          <div className="pr-12">
+            <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.2em] mb-2">Проверка</p>
+            <p className="text-[34px] sm:text-[42px] leading-none font-black text-white/90 flex items-center gap-1 whitespace-nowrap">
+              <span>{child.balance.pending}</span>
+              <Star size={16} className="text-amber-500/60 shrink-0" fill="currentColor" />
             </p>
           </div>
         </div>
@@ -185,12 +303,22 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
       {/* 3. Дашборд миссий */}
       <div className={`bg-[var(--bg-card)] rounded-[2.5rem] border transition-all duration-300 ${isMissionsExpanded ? 'border-amber-400/50 shadow-xl' : 'border-[var(--border)] shadow-lg'}`}>
         <button onClick={() => setIsMissionsExpanded(!isMissionsExpanded)} className="w-full flex items-center justify-between p-7">
-          <div className={`p-3.5 rounded-2xl ${isMissionsExpanded ? 'bg-amber-400/20 text-amber-400 shadow-inner' : 'bg-white/5 text-[var(--text-muted)]'}`}>
-            <ClipboardCheck size={26} />
+          <div className="basis-[88px] shrink-0 flex justify-start">
+            <div className={`p-3.5 rounded-2xl ${isMissionsExpanded ? 'bg-amber-400/20 text-amber-400 shadow-inner' : 'bg-white/5 text-[var(--text-muted)]'}`}>
+              <ClipboardCheck size={26} />
+            </div>
           </div>
-          <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white flex-1 text-center">Миссии на проверку</h4>
-          {pendingMissions.length > 0 && <span className="bg-amber-400 text-black text-[12px] font-black px-3 py-1.5 rounded-full shadow-lg mr-2">{pendingMissions.length}</span>}
-          <ChevronDown size={24} className={`text-[var(--text-muted)] transition-transform duration-500 ${isMissionsExpanded ? 'rotate-180' : ''}`} />
+          <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white flex-1 text-center px-2">Миссии на проверку</h4>
+          <div className="basis-[88px] shrink-0 flex items-center justify-end gap-2">
+            <div className="w-11 h-11 shrink-0 flex items-center justify-center">
+              {pendingMissions.length > 0 && (
+                <span className="inline-flex items-center justify-center w-11 h-11 bg-amber-400 text-black text-[12px] font-black rounded-full shadow-lg">
+                  {pendingMissions.length}
+                </span>
+              )}
+            </div>
+            <ChevronDown size={24} className={`text-[var(--text-muted)] transition-transform duration-500 ${isMissionsExpanded ? 'rotate-180' : ''}`} />
+          </div>
         </button>
 
         {isMissionsExpanded && (
@@ -230,14 +358,24 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
       {/* 4. Награды */}
       <div className={`bg-[var(--bg-card)] rounded-[2.5rem] border transition-all duration-300 ${isPrizesExpanded ? 'border-[var(--primary)]/50 shadow-xl' : 'border-[var(--border)] shadow-lg'}`}>
         <button onClick={() => setIsPrizesExpanded(!isPrizesExpanded)} className="w-full flex items-center justify-between p-7">
-          <div className={`p-3.5 rounded-2xl ${isPrizesExpanded ? 'bg-[var(--primary)]/20 text-[var(--primary)] shadow-inner' : 'bg-white/5 text-[var(--text-muted)]'}`}>
-            <Gift size={26} />
+          <div className="basis-[88px] shrink-0 flex justify-start">
+            <div className={`p-3.5 rounded-2xl ${isPrizesExpanded ? 'bg-[var(--primary)]/20 text-[var(--primary)] shadow-inner' : 'bg-white/5 text-[var(--text-muted)]'}`}>
+              <Gift size={26} />
+            </div>
           </div>
-          <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white flex-1 text-center leading-tight">
+          <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white flex-1 text-center leading-tight px-2">
             Вручить<br/>награды
           </h4>
-          {pendingPurchases.length > 0 && <span className="bg-[var(--primary)] text-black text-[12px] font-black px-3 py-1.5 rounded-full shadow-lg mr-2">{pendingPurchases.length}</span>}
-          <ChevronDown size={24} className={`text-[var(--text-muted)] transition-transform duration-500 ${isPrizesExpanded ? 'rotate-180' : ''}`} />
+          <div className="basis-[88px] shrink-0 flex items-center justify-end gap-2">
+            <div className="w-11 h-11 shrink-0 flex items-center justify-center">
+              {pendingPurchases.length > 0 && (
+                <span className="inline-flex items-center justify-center w-11 h-11 bg-[var(--primary)] text-black text-[12px] font-black rounded-full shadow-lg">
+                  {pendingPurchases.length}
+                </span>
+              )}
+            </div>
+            <ChevronDown size={24} className={`text-[var(--text-muted)] transition-transform duration-500 ${isPrizesExpanded ? 'rotate-180' : ''}`} />
+          </div>
         </button>
         
         {isPrizesExpanded && (
@@ -245,14 +383,26 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
             {pendingPurchases.length === 0 ? (
               <p className="text-center py-6 text-[12px] font-black text-[var(--text-muted)] uppercase tracking-widest">Нет наград к выдаче</p>
             ) : (
-              pendingPurchases.map(p => (
-                <div key={p.id} className="flex items-center gap-6 p-6 bg-white/[0.03] rounded-[2.2rem] border border-white/10 shadow-lg hover:bg-white/[0.05] transition-all">
-                  {/* Увеличенная картинка награды */}
+              pendingPurchases.map((p) => {
+                const rewardImageSrc = resolvePendingRewardImageSrc(p);
+                return (
+                <div key={p.id} className="flex items-center gap-5 p-6 bg-white/[0.03] rounded-[2.2rem] border border-white/10 shadow-lg hover:bg-white/[0.05] transition-all">
                   <div className="relative flex-shrink-0">
-                    <div className="w-20 h-20 rounded-[1.5rem] flex items-center justify-center text-5xl border-2 border-white/10 shadow-xl bg-white/5">{p.reward_icon}</div>
+                    <div className="w-14 h-14 rounded-[1.1rem] flex items-center justify-center border border-white/10 shadow-lg bg-white/5 overflow-hidden">
+                      {rewardImageSrc ? (
+                        <img
+                          src={rewardImageSrc}
+                          alt={p.reward_title || 'reward'}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      ) : (
+                        <span className="text-3xl leading-none">{p.reward_icon || '🎁'}</span>
+                      )}
+                    </div>
                   </div>
                   
-                  {/* Инфо блок */}
                   <div className="flex-1 min-w-0">
                     <h5 className="text-xl font-black text-white truncate leading-tight mb-2">{p.reward_title}</h5>
                     <div className="flex flex-col gap-1.5">
@@ -267,7 +417,8 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
                     </div>
                   </div>
                 </div>
-              ))
+                );
+              })
             )}
           </div>
         )}
@@ -276,11 +427,23 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
       {/* 5. Активность (Выпадающий список) */}
       <div className={`bg-[var(--bg-card)] rounded-[2.5rem] border transition-all duration-300 ${isActivityExpanded ? 'border-white/20 shadow-xl' : 'border-[var(--border)] shadow-sm'}`}>
         <button onClick={() => setIsActivityExpanded(!isActivityExpanded)} className="w-full flex items-center justify-between p-7">
-          <div className={`p-3.5 rounded-2xl ${isActivityExpanded ? 'bg-white/10 text-white shadow-inner' : 'bg-white/5 text-[var(--text-muted)]'}`}>
-            <History size={26} />
+          <div className="basis-[88px] shrink-0 flex justify-start">
+            <div className={`p-3.5 rounded-2xl ${isActivityExpanded ? 'bg-white/10 text-white shadow-inner' : 'bg-white/5 text-[var(--text-muted)]'}`}>
+              <History size={26} />
+            </div>
           </div>
-          <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white flex-1 text-center">Активность</h4>
-          <ChevronDown size={24} className={`text-[var(--text-muted)] transition-transform duration-500 ${isActivityExpanded ? 'rotate-180' : ''}`} />
+          <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white flex-1 text-center px-2">Активность</h4>
+          <div className="basis-[88px] shrink-0 flex items-center justify-end gap-2">
+            <div className="w-11 h-11 shrink-0 flex items-center justify-center">
+              <span
+                className="inline-flex items-center justify-center w-11 h-11 bg-[var(--primary)] text-black text-[12px] font-black rounded-full shadow-lg opacity-0 pointer-events-none select-none"
+                aria-hidden="true"
+              >
+                0
+              </span>
+            </div>
+            <ChevronDown size={24} className={`-translate-x-[20px] text-[var(--text-muted)] transition-transform duration-500 ${isActivityExpanded ? 'rotate-180' : ''}`} />
+          </div>
         </button>
 
         {isActivityExpanded && (
@@ -331,20 +494,22 @@ const Dashboard: React.FC<Props> = ({ child, onUpdateChild, onTaskAction, pendin
       <div className="bg-[var(--bg-card)] rounded-[2.5rem] border border-[var(--border)] overflow-hidden shadow-xl relative">
         <div className="p-7 bg-black/20">
           <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-5">
+            <div className="basis-[88px] shrink-0 flex justify-start">
               <div className="p-3.5 rounded-2xl bg-indigo-500/10 text-indigo-400">
                 <MapPin size={26} />
               </div>
-              <div>
-                <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white">Где мой ребенок</h4>
-                <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mt-1">
-                  Геолокация и маршрут скоро появятся
-                </p>
-              </div>
             </div>
-            <span className="px-3 py-1.5 rounded-full bg-indigo-500/15 text-indigo-300 text-[10px] font-black uppercase tracking-widest border border-indigo-400/30">
-              Скоро
-            </span>
+            <div className="flex-1 min-w-0 text-center px-2">
+              <h4 className="text-lg font-black uppercase tracking-[0.2em] text-white">Где мой ребенок</h4>
+              <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mt-1 max-w-[320px] mx-auto">
+                Геолокация и маршрут скоро появятся
+              </p>
+            </div>
+            <div className="basis-[88px] shrink-0 flex justify-end">
+              <span className="px-3 py-1.5 rounded-full bg-indigo-500/15 text-indigo-300 text-[10px] font-black uppercase tracking-widest border border-indigo-400/30">
+                Скоро
+              </span>
+            </div>
           </div>
         </div>
 
