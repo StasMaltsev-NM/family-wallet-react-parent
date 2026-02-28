@@ -336,6 +336,7 @@ const App: React.FC = () => {
     byChildTitlePrice: {},
     byGlobalTitlePrice: {},
   });
+  const dreamImageCacheRef = useRef<Record<string, string>>({});
   const dreamFallbackFetchedAtRef = useRef<Record<string, number>>({});
   const rewardsHydrationInFlightRef = useRef(false);
   const rewardsIndexFetchedAtRef = useRef(0);
@@ -612,6 +613,16 @@ useEffect(() => {
     }>(getAppCacheKey(parentCode), APP_CACHE_MAX_AGE_MS);
 
     if (!snapshot) return;
+    const snapshotImages: Record<string, string> = {};
+    for (const kid of snapshot.children || []) {
+      const img = String(kid?.dream?.image || "").trim();
+      if (img && !isPlaceholderDreamImage(img)) {
+        snapshotImages[String(kid?.id || "")] = img;
+      }
+    }
+    if (Object.keys(snapshotImages).length > 0) {
+      dreamImageCacheRef.current = { ...dreamImageCacheRef.current, ...snapshotImages };
+    }
     setApiChildren(snapshot.children || []);
     setChildren((snapshot.children || []) as any);
     setTasks(snapshot.tasks || []);
@@ -654,6 +665,7 @@ useEffect(() => {
       const nextKids = rawKids.map((kid: any) => {
         const prevKid = prevKidsById[String(kid?.id || "")];
         const prevDreamImage = prevKid?.dream?.image || "";
+        const cachedImage = dreamImageCacheRef.current[String(kid?.id || "")] || "";
         return {
           ...kid,
           apiChildId: kid.id,
@@ -662,7 +674,7 @@ useEffect(() => {
           balance: kid.balance,
           dream: {
             title: kid.dream_title || prevKid?.dream?.title || "Мечта",
-            image: prevDreamImage || resolveDreamImage(kid),
+            image: cachedImage || prevDreamImage || resolveDreamImage(kid),
             current: kid.dream_current ?? prevKid?.dream?.current ?? kid.balance?.confirmed ?? 0,
             price: kid.dream_target ?? prevKid?.dream?.price ?? 10000
           },
@@ -722,6 +734,9 @@ useEffect(() => {
           let imageFromDream = resolveActiveDreamImage(activeDream, prevKid || kid);
           if (prevKid && hasUsableDreamImage(prevKid) && isPlaceholderDreamImage(imageFromDream)) {
             imageFromDream = resolveDreamImage(prevKid);
+          }
+          if (imageFromDream && !isPlaceholderDreamImage(imageFromDream)) {
+            dreamImageCacheRef.current[childId] = imageFromDream;
           }
           const currentFromDream = Number(activeDream?.current_amount ?? kid?.dream?.current ?? 0) || 0;
           const targetFromDream = Number(activeDream?.target_amount ?? kid?.dream?.price ?? 10000) || 10000;
@@ -783,6 +798,10 @@ useEffect(() => {
             hydratedKids = hydratedKids.map((kid: any) => {
               const fallbackDream = fallbackByKidId[String(kid?.id || "")];
               if (!fallbackDream) return kid;
+              const image = resolveActiveDreamImage(fallbackDream, kid);
+              if (image && !isPlaceholderDreamImage(image)) {
+                dreamImageCacheRef.current[String(kid?.id || "")] = image;
+              }
               return {
                 ...kid,
                 dream: {
@@ -790,7 +809,7 @@ useEffect(() => {
                   title: String(fallbackDream?.title || kid?.dream?.title || "Мечта"),
                   current: Number(fallbackDream?.current_amount ?? kid?.dream?.current ?? 0) || 0,
                   price: Number(fallbackDream?.target_amount ?? kid?.dream?.price ?? 10000) || 10000,
-                  image: resolveActiveDreamImage(fallbackDream, kid),
+                  image,
                 },
               };
             });
@@ -1231,6 +1250,10 @@ useEffect(() => {
   };
 
   const handleUpdateChild = (updated: Child) => {
+    const updatedImage = String((updated as any)?.dream?.image || "").trim();
+    if (updatedImage && !isPlaceholderDreamImage(updatedImage)) {
+      dreamImageCacheRef.current[String((updated as any)?.id || "")] = updatedImage;
+    }
     setChildren((prev) =>
       prev.map((c: any) => (c.id === (updated as any).id ? updated : c))
     );
