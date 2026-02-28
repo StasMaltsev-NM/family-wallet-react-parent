@@ -242,12 +242,7 @@ const Dashboard: React.FC<Props> = ({
                 decoding="async"
               />
               <div className="absolute inset-0 bg-black/30" />
-              <button
-                onClick={() => setIsEditingDream(true)}
-                className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-lg p-2.5 rounded-xl text-white/90 hover:text-white transition-all border border-white/10"
-              >
-                <Sparkles size={20} />
-              </button>
+              
             </div>
 
             <div className="flex-1 p-5 sm:p-6 flex flex-col justify-between min-w-0">

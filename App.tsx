@@ -153,9 +153,18 @@ function resolveActiveDreamImage(dream: any, kid: any): string {
     dream?.dream_image ||
     kid?.dream?.generated_image_url ||
     kid?.dream?.generated_image ||
-    kid?.dream?.image ||
+      kid?.dream?.image ||
     resolveDreamImage(kid);
   return String(candidate || "").trim() || resolveDreamImage(kid);
+}
+
+function isPlaceholderDreamImage(src: string): boolean {
+  const lower = String(src || "").toLowerCase();
+  if (!lower) return true;
+  if (lower.includes("api.dicebear.com/7.x/shapes/svg")) return true;
+  if (lower.includes("seed=dream")) return true;
+  if (lower.includes("dream-placeholder")) return true;
+  return false;
 }
 
 function hasMeaningfulDreamTitle(kid: any): boolean {
@@ -636,22 +645,31 @@ useEffect(() => {
       const kidsResp = await parentApi.listChildren(code);
       const rawKids = kidsResp?.children ?? [];
 
+      const prevKidsById: Record<string, any> = {};
+      for (const prevKid of children || []) {
+        if (prevKid?.id) prevKidsById[String(prevKid.id)] = prevKid;
+      }
+
       // ТРАНСФОРМАЦИЯ: добавляем dream, missions, activities
-      const nextKids = rawKids.map((kid: any) => ({
-        ...kid,
-        apiChildId: kid.id,
-        inviteCode: kid.invite_code || "",
-        gender: kid.gender || 'male',
-        balance: kid.balance,
-        dream: {
-          title: kid.dream_title || "Мечта",
-          image: resolveDreamImage(kid),
-          current: kid.dream_current || kid.balance?.confirmed || 0,
-          price: kid.dream_target || 10000
-        },
-        missions: [],
-        activities: []
-      }));
+      const nextKids = rawKids.map((kid: any) => {
+        const prevKid = prevKidsById[String(kid?.id || "")];
+        const prevDreamImage = prevKid?.dream?.image || "";
+        return {
+          ...kid,
+          apiChildId: kid.id,
+          inviteCode: kid.invite_code || "",
+          gender: kid.gender || 'male',
+          balance: kid.balance,
+          dream: {
+            title: kid.dream_title || prevKid?.dream?.title || "Мечта",
+            image: prevDreamImage || resolveDreamImage(kid),
+            current: kid.dream_current ?? prevKid?.dream?.current ?? kid.balance?.confirmed ?? 0,
+            price: kid.dream_target ?? prevKid?.dream?.price ?? 10000
+          },
+          missions: [],
+          activities: []
+        };
+      });
 
       const resp = await parentApi.getTasks(code);
       let hydratedKids = nextKids;
@@ -690,12 +708,21 @@ useEffect(() => {
           dreamsByChild[childId] = dream;
         }
 
+        const prevKidsById: Record<string, any> = {};
+        for (const prevKid of apiChildren || []) {
+          if (prevKid?.id) prevKidsById[String(prevKid.id)] = prevKid;
+        }
+
         hydratedKids = nextKids.map((kid: any) => {
           const childId = String(kid?.id || "");
           const activeDream = dreamsByChild[childId];
           if (!activeDream) return kid;
 
-          const imageFromDream = resolveActiveDreamImage(activeDream, kid);
+          const prevKid = prevKidsById[childId];
+          let imageFromDream = resolveActiveDreamImage(activeDream, prevKid || kid);
+          if (prevKid && hasUsableDreamImage(prevKid) && isPlaceholderDreamImage(imageFromDream)) {
+            imageFromDream = resolveDreamImage(prevKid);
+          }
           const currentFromDream = Number(activeDream?.current_amount ?? kid?.dream?.current ?? 0) || 0;
           const targetFromDream = Number(activeDream?.target_amount ?? kid?.dream?.price ?? 10000) || 10000;
           const titleFromDream = String(activeDream?.title || kid?.dream?.title || "Мечта");
