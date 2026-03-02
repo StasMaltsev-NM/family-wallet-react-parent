@@ -505,6 +505,23 @@ export const authApi = {
       invite_code?: string;
       family_name?: string;
       tg_user_id?: string;
+      onboarding?: {
+        type: 'welcome_trial';
+        credits_added: number;
+        expires_at: string | null;
+        message: string;
+      } | null;
+      billing_trial?: {
+        activated?: boolean;
+        credits_added?: number;
+        expires_at?: string | null;
+        current_balance?: number | null;
+      } | null;
+      referral_bonus?: {
+        granted?: boolean;
+        credits_added?: number;
+        current_balance?: number | null;
+      } | null;
     }>('/api/auth/telegram', {
       method: 'POST',
       body: JSON.stringify({ initData, inviteCode })
