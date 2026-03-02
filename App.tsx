@@ -874,7 +874,7 @@ const App: React.FC = () => {
       const lines: string[] = [];
       if (trialActivated) {
         lines.push(
-          `Активирована бесплатная подписка на 30 дней и начислено ${creditsAdded || 60} кредитов.`
+          `Активирована бесплатная подписка на 14 дней и начислено ${creditsAdded || 60} кредитов.`
         );
       }
       if (expiresAt) {
