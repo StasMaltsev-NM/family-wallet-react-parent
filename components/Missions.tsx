@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Child, Mission } from "../types";
 import {
   Plus,
@@ -29,6 +29,9 @@ interface Props {
   onRefresh: () => Promise<void> | void;
   canCreateMissions?: boolean;
   creationBlockedReason?: string;
+  prefillMissionTitle?: string;
+  prefillMissionNonce?: number;
+  onConsumePrefill?: () => void;
 }
 // Реальная структура задач из backend
 export type ApiTask = {
@@ -73,10 +76,14 @@ const Missions: React.FC<Props> = ({
   onRefresh,
   canCreateMissions = true,
   creationBlockedReason = "Создание миссий временно недоступно.",
+  prefillMissionTitle,
+  prefillMissionNonce,
+  onConsumePrefill,
 }) => {
   const [isAdding, setIsAdding] = useState(false);
   const { runInstant, isPending } = useInstantAction();
   const isCreatingMission = isPending("mission:create");
+  const rewardInputRef = useRef<HTMLInputElement | null>(null);
   const [actionFeedback, setActionFeedback] = useState<{
     type: "success" | "error" | "info";
     message: string;
@@ -115,6 +122,26 @@ const Missions: React.FC<Props> = ({
       setSelectedChildIds([child.id]);
     }
   }, [allChildren, child.id, isAdding, selectedChildIds.length]);
+
+  useEffect(() => {
+    if (!prefillMissionTitle || !prefillMissionNonce) return;
+    const title = String(prefillMissionTitle || "").trim();
+    if (!title) return;
+
+    setActionFeedback(null);
+    setIsAdding(true);
+    setNewMission({
+      title,
+      reward: "",
+      isRecurring: false,
+      isTeam: false,
+      recurrenceType: "daily",
+      selectedDays: [],
+    });
+    setSelectedChildIds(allChildren.length === 1 ? [allChildren[0].id] : [child.id]);
+    setTimeout(() => rewardInputRef.current?.focus(), 120);
+    if (onConsumePrefill) onConsumePrefill();
+  }, [prefillMissionTitle, prefillMissionNonce, allChildren, child.id, onConsumePrefill]);
 const sortedMissions: Mission[] = useMemo(() => {
   const list = Array.isArray(child.missions) ? child.missions : [];
 
@@ -522,6 +549,7 @@ const handleAddMission = async () => {
                   />
                   <div className="relative">
                     <input
+                      ref={rewardInputRef}
                       type="number"
                       placeholder="Награда (звёзд)"
                       className="w-full h-16 rounded-2xl px-6 font-bold text-lg bg-black/50 border border-white/10 outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"

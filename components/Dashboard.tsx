@@ -2,8 +2,6 @@
 import React, { useEffect, useState } from 'react';
 import { Child, Activity } from '../types';
 import { 
-  Sparkles, 
-  Loader2, 
   ArrowUpRight, 
   Timer, 
   Gift, 
@@ -17,7 +15,6 @@ import {
   MapPin,
   ShieldCheck
 } from 'lucide-react';
-import { editImageWithAI } from '../services/gemini';
 import { useInstantAction } from '../hooks/useInstantAction';
 
 type PendingDream = {
@@ -87,9 +84,6 @@ const Dashboard: React.FC<Props> = ({
   pendingDream = null,
   onSetDreamGoal,
 }) => {
-  const [isEditingDream, setIsEditingDream] = useState(false);
-  const [editPrompt, setEditPrompt] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
   const [dreamGoalInput, setDreamGoalInput] = useState('');
   const [dreamGoalError, setDreamGoalError] = useState<string | null>(null);
   const [isDreamGoalSaving, setIsDreamGoalSaving] = useState(false);
@@ -113,24 +107,8 @@ const Dashboard: React.FC<Props> = ({
     if (hasPendingDream) {
       setDreamGoalInput('');
       setDreamGoalError(null);
-      setIsEditingDream(false);
     }
   }, [hasPendingDream, pendingDream?.id]);
-
-  const handleAIEdit = async () => {
-    if (!editPrompt) return;
-    setIsGenerating(true);
-    const result = await editImageWithAI(dreamImageSrc, `Примени эти визуальные изменения к изображению мечты: ${editPrompt}`);
-    if (result) {
-      onUpdateChild({
-        ...child,
-        dream: { ...child.dream, image: result }
-      });
-      setEditPrompt('');
-      setIsEditingDream(false);
-    }
-    setIsGenerating(false);
-  };
 
   const handleMissionAction = (missionId: string, action: 'confirm' | 'reject') => {
     let updatedMissions = [...child.missions];
@@ -242,12 +220,6 @@ const Dashboard: React.FC<Props> = ({
                 decoding="async"
               />
               <div className="absolute inset-0 bg-black/30" />
-              <button
-                onClick={() => setIsEditingDream(true)}
-                className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-lg p-2.5 rounded-xl text-white/90 hover:text-white transition-all border border-white/10"
-              >
-                <Sparkles size={20} />
-              </button>
             </div>
 
             <div className="flex-1 p-5 sm:p-6 flex flex-col justify-between min-w-0">
@@ -530,28 +502,6 @@ const Dashboard: React.FC<Props> = ({
         </div>
       </div>
 
-      {isEditingDream && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-2xl">
-          <div className="bg-[var(--bg-card)] w-full max-sm rounded-[3rem] p-10 border border-[var(--primary)]/40 shadow-2xl animate-in zoom-in-95 duration-300">
-            <h3 className="text-2xl font-black mb-6 flex items-center gap-4 text-white">
-              <Sparkles className="text-[var(--primary)]" />
-              ИИ-Редактор
-            </h3>
-            <textarea
-              className="w-full rounded-2xl p-6 text-lg font-bold bg-black/50 border border-white/10 outline-none transition-all mb-8 h-48 resize-none focus:ring-2 focus:ring-[var(--primary)] focus:bg-black/70 shadow-inner"
-              placeholder="Как изменим мечту?"
-              value={editPrompt}
-              onChange={(e) => setEditPrompt(e.target.value)}
-            />
-            <div className="flex gap-4">
-              <button onClick={() => setIsEditingDream(false)} className="flex-1 py-5 text-sm font-black text-[var(--text-muted)] hover:text-white transition-colors uppercase tracking-widest">Отмена</button>
-              <button disabled={isGenerating || !editPrompt} onClick={handleAIEdit} className="btn-primary flex-[2] py-5 text-lg font-black rounded-2xl shadow-xl shadow-[var(--primary)]/30">
-                {isGenerating ? <Loader2 className="animate-spin mx-auto" /> : 'Обновить'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

@@ -5,6 +5,7 @@ import {
   TrendingUp,
   BrainCircuit,
   Lightbulb,
+  Plus,
   Loader2,
   RefreshCw,
   MessageSquareQuote,
@@ -16,6 +17,7 @@ import { getAIContent, getAIReportBlock, type AssistantReportBlock } from '../se
 interface Props {
   child: Child;
   inviteCode: string;
+  onAddMissionIdea?: (idea: string) => void;
 }
 
 const EMPTY_BLOCKS: Record<AssistantReportBlock, string> = {
@@ -80,7 +82,7 @@ const normalizeCachedIdeas = (value: unknown): string => {
   return text.toLowerCase().includes('ошибка генерации') ? '' : text;
 };
 
-const AIAssistant: React.FC<Props> = ({ child, inviteCode }) => {
+const AIAssistant: React.FC<Props> = ({ child, inviteCode, onAddMissionIdea }) => {
   const mountedRef = useRef(true);
   const cacheKey = useMemo(
     () => `fw_ai_assistant:${AI_CACHE_VERSION}:${inviteCode}:${child.id}`,
@@ -438,6 +440,7 @@ const AIAssistant: React.FC<Props> = ({ child, inviteCode }) => {
           isLoading={isMissionsLoading}
           onRefresh={handleRefreshMissions}
           kind="missions"
+          onAddIdea={onAddMissionIdea}
         />
         <IdeaCard
           icon={<Gift size={22} className="text-orange-400" />}
@@ -501,6 +504,7 @@ const IdeaCard = ({
   isLoading,
   onRefresh,
   kind = 'missions',
+  onAddIdea,
 }: {
   icon: React.ReactNode;
   title: string;
@@ -508,6 +512,7 @@ const IdeaCard = ({
   isLoading: boolean;
   onRefresh: () => void;
   kind?: 'missions' | 'rewards';
+  onAddIdea?: (idea: string) => void;
 }) => (
   <div className="bg-[var(--bg-card)] rounded-[2.5rem] p-8 border border-[var(--border)] relative overflow-hidden group">
     <div className="flex items-center justify-between mb-6">
@@ -535,7 +540,17 @@ const IdeaCard = ({
           {getIdeaItems(ideas, kind).map((item: string, idx: number) => (
             <li key={idx} className="flex items-center gap-3 text-white/80 font-bold text-sm bg-white/[0.02] p-3 rounded-xl border border-white/5">
               <span className="w-6 h-6 rounded-lg bg-[var(--primary)]/20 text-[var(--primary)] flex items-center justify-center text-[10px] font-black">{idx + 1}</span>
-              {item.trim()}
+              <span className="flex-1 min-w-0">{item.trim()}</span>
+              {kind === 'missions' && onAddIdea ? (
+                <button
+                  onClick={() => onAddIdea(item)}
+                  className="w-8 h-8 shrink-0 rounded-lg bg-[var(--primary)]/15 text-[var(--primary)] border border-[var(--primary)]/35 flex items-center justify-center hover:bg-[var(--primary)] hover:text-white transition-all active:scale-95"
+                  title="Добавить миссию из идеи"
+                  aria-label="Добавить миссию"
+                >
+                  <Plus size={14} />
+                </button>
+              ) : null}
             </li>
           ))}
         </ul>

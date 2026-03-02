@@ -485,7 +485,10 @@ const App: React.FC = () => {
   const [selectedChildId, setSelectedChildId] = useState<string>(
     INITIAL_CHILDREN[0]?.id ?? ""
   );
+  const [missionIdeaDraft, setMissionIdeaDraft] = useState<string>("");
+  const [missionIdeaNonce, setMissionIdeaNonce] = useState<number>(0);
   const selectedChildIdRef = useRef<string>(selectedChildId);
+  const latestChildrenRef = useRef<Child[]>(INITIAL_CHILDREN);
 
   const [isAppBootLoading, setIsAppBootLoading] = useState(true);
   const [isBootFading, setIsBootFading] = useState(false);
@@ -555,6 +558,10 @@ const App: React.FC = () => {
     }
     return raw;
   }, []);
+
+  useEffect(() => {
+    latestChildrenRef.current = children;
+  }, [children]);
 
   const handleCopyChildCode = useCallback(async () => {
     if (!createdChildInvite?.code) return;
@@ -1047,6 +1054,35 @@ const App: React.FC = () => {
         }
       }
 
+      // Не затираем уже полученную dream-картинку заглушкой при автообновлении.
+      const prevKidsById = new Map<string, any>();
+      for (const prevKid of latestChildrenRef.current || []) {
+        const prevApiId = String((prevKid as any)?.apiChildId || "").trim();
+        const prevId = String((prevKid as any)?.id || "").trim();
+        if (prevApiId) prevKidsById.set(prevApiId, prevKid);
+        if (prevId) prevKidsById.set(prevId, prevKid);
+      }
+
+      hydratedKids = hydratedKids.map((kid: any) => {
+        const keyApi = String(kid?.apiChildId || "").trim();
+        const keyId = String(kid?.id || "").trim();
+        const prevKid = prevKidsById.get(keyApi) || prevKidsById.get(keyId);
+        if (!prevKid) return kid;
+
+        const keepPrevImage = !hasUsableDreamImage(kid) && hasUsableDreamImage(prevKid);
+        const keepPrevTitle = !hasMeaningfulDreamTitle(kid) && hasMeaningfulDreamTitle(prevKid);
+        if (!keepPrevImage && !keepPrevTitle) return kid;
+
+        return {
+          ...kid,
+          dream: {
+            ...kid.dream,
+            title: keepPrevTitle ? String(prevKid?.dream?.title || kid?.dream?.title || "Мечта") : kid?.dream?.title,
+            image: keepPrevImage ? resolveDreamImage(prevKid) : kid?.dream?.image,
+          },
+        };
+      });
+
       setApiChildren(hydratedKids);
       setChildren(hydratedKids as any);
 
@@ -1447,6 +1483,21 @@ const App: React.FC = () => {
     );
   }, [uiChildren, selectedChildId]);
 
+  const handleAddMissionIdea = useCallback((idea: string) => {
+    const normalized = String(idea || "")
+      .replace(/\(\s*\d+\s*зв[её]зд?\s*\)/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!normalized) return;
+    setMissionIdeaDraft(normalized);
+    setMissionIdeaNonce((prev) => prev + 1);
+    setActiveTab(Tab.MISSIONS);
+  }, []);
+
+  const handleConsumeMissionIdea = useCallback(() => {
+    setMissionIdeaDraft("");
+  }, []);
+
   const apiChildId = (selectedChild as any)?.apiChildId;
   const pendingPrizesCount =
     childPurchases[apiChildId]?.filter((p: any) => p.status === "pending").length ??
@@ -1678,6 +1729,9 @@ const App: React.FC = () => {
             onRefresh={refreshTasks as any}
             canCreateMissions={billing.canCreateMissions}
             creationBlockedReason="Создание миссий доступно только при активной подписке."
+            prefillMissionTitle={missionIdeaDraft}
+            prefillMissionNonce={missionIdeaNonce}
+            onConsumePrefill={handleConsumeMissionIdea}
           />
         ) : (
           <div className="text-center py-12 text-white/60">
@@ -1700,7 +1754,7 @@ const App: React.FC = () => {
       case Tab.AI_ASSISTANT:
         return selectedChild ? (
           billing.canUseAI ? (
-            <AIAssistant child={selectedChild} inviteCode={parentCode} />
+            <AIAssistant child={selectedChild} inviteCode={parentCode} onAddMissionIdea={handleAddMissionIdea} />
           ) : (
             <div className="rounded-[2.4rem] border border-white/10 bg-[var(--bg-card)] p-7">
               <h3 className="text-xl font-black text-white">ИИ недоступен</h3>
