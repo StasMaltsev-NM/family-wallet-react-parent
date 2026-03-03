@@ -2017,16 +2017,6 @@ const App: React.FC = () => {
           </h1>
 
           <div className="flex gap-2 items-center">
-            {isAdminEntryEnabled ? (
-              <button
-                onClick={openAdminModal}
-                className="p-2.5 rounded-full bg-white/5 text-[var(--text-muted)] hover:text-[var(--primary)] transition-all border border-white/5"
-                title="Админ статистика"
-              >
-                <BarChart3 size={20} />
-              </button>
-            ) : null}
-
             <button
               onClick={openBillingModal}
               className="px-3 py-2 rounded-full bg-white/5 text-[var(--text-muted)] hover:text-[var(--primary)] transition-all border border-white/5 inline-flex items-center gap-2"

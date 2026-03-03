@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>FW Admin</title>
+    <style>
+      :root {
+        --bg: #05060b;
+        --panel: #0d0f17;
+        --panel2: #131725;
+        --text: #f2f4ff;
+        --muted: #9aa3be;
+        --accent: #7b5cff;
+        --ok: #43dca5;
+        --err: #ff5c8a;
+        --border: rgba(255,255,255,.12);
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+      body { min-height: 100vh; }
+      .wrap { width: min(980px, 100%); margin: 0 auto; padding: calc(env(safe-area-inset-top) + 14px) 14px 24px; }
+      .h1 { font-size: 28px; font-weight: 900; letter-spacing: .01em; margin: 0 0 12px; }
+      .card { background: linear-gradient(180deg, var(--panel), var(--panel2)); border: 1px solid var(--border); border-radius: 18px; padding: 14px; }
+      .grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+      @media (min-width: 760px) { .grid { grid-template-columns: 1fr 1fr; } }
+      label { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .14em; font-weight: 800; margin-bottom: 6px; }
+      input { width: 100%; height: 46px; border-radius: 12px; border: 1px solid var(--border); background: #090b12; color: var(--text); padding: 0 12px; font-size: 16px; }
+      .controls { display: grid; grid-template-columns: 1fr; gap: 10px; }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; }
+      .btn { height: 42px; border-radius: 12px; border: 1px solid var(--border); background: #111528; color: var(--text); padding: 0 14px; font-weight: 800; cursor: pointer; }
+      .btn.primary { background: var(--accent); border-color: transparent; }
+      .btn.ghost { background: rgba(255,255,255,.03); }
+      .btn.day.active { background: #60e0b0; color: #05150f; border-color: transparent; }
+      .stat { padding: 12px; border: 1px solid var(--border); border-radius: 14px; background: rgba(0,0,0,.25); }
+      .stat .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .14em; font-weight: 900; }
+      .stat .v { margin-top: 4px; font-size: 32px; font-weight: 900; line-height: 1; }
+      .meta { margin-top: 8px; font-size: 12px; color: var(--muted); }
+      .ok { color: var(--ok); }
+      .err { color: var(--err); }
+      pre { margin: 0; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: #090b12; color: #cfd5ea; font-size: 12px; overflow: auto; max-height: 280px; }
+      .hidden { display: none; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1 class="h1">FW Admin Portal</h1>
+
+      <div class="card">
+        <div class="controls">
+          <div>
+            <label for="apiUrl">API URL</label>
+            <input id="apiUrl" placeholder="https://...workers.dev" />
+          </div>
+          <div>
+            <label for="adminKey">Admin API Key</label>
+            <input id="adminKey" type="password" placeholder="fw_admin_..." />
+          </div>
+          <div class="row">
+            <button class="btn day active" data-days="7">7 дней</button>
+            <button class="btn day" data-days="14">14 дней</button>
+            <button class="btn day" data-days="30">30 дней</button>
+            <button id="refreshBtn" class="btn primary">Обновить</button>
+            <button id="clearBtn" class="btn ghost">Очистить ключ</button>
+          </div>
+          <div id="status" class="meta">Готово к загрузке.</div>
+        </div>
+      </div>
+
+      <div style="height:10px"></div>
+
+      <div class="grid" id="statsGrid">
+        <div class="stat"><div class="k">Новые семьи</div><div class="v" id="newFamilies">—</div></div>
+        <div class="stat"><div class="k">DAU / WAU / MAU</div><div class="v" id="activeF">—</div></div>
+        <div class="stat"><div class="k">Миссии создано</div><div class="v" id="missionsCreated">—</div></div>
+        <div class="stat"><div class="k">Награды создано</div><div class="v" id="rewardsCreated">—</div></div>
+        <div class="stat"><div class="k">AI запросы</div><div class="v" id="aiReq">—</div></div>
+        <div class="stat"><div class="k">Успех генераций</div><div class="v" id="imgSuccess">—</div></div>
+        <div class="stat"><div class="k">MRR (оценка)</div><div class="v" id="mrr">—</div></div>
+        <div class="stat"><div class="k">Ошибки API</div><div class="v" id="apiErr">—</div></div>
+      </div>
+
+      <div style="height:10px"></div>
+      <div class="card">
+        <label>Raw JSON</label>
+        <pre id="rawJson">{}</pre>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        const LS_URL = "fw_admin_portal_api_url";
+        const LS_KEY = "fw_admin_portal_admin_key";
+        const DEFAULT_URL = "https://family-wallet-api.maltsevstas21.workers.dev";
+
+        const apiUrlEl = document.getElementById("apiUrl");
+        const adminKeyEl = document.getElementById("adminKey");
+        const refreshBtn = document.getElementById("refreshBtn");
+        const clearBtn = document.getElementById("clearBtn");
+        const statusEl = document.getElementById("status");
+
+        let periodDays = 7;
+
+        function setStatus(text, kind) {
+          statusEl.textContent = text;
+          statusEl.classList.remove("ok", "err");
+          if (kind) statusEl.classList.add(kind);
+        }
+
+        function num(v, fallback) {
+          const n = Number(v);
+          return Number.isFinite(n) ? n : fallback;
+        }
+
+        function setText(id, value) {
+          const el = document.getElementById(id);
+          if (el) el.textContent = value;
+        }
+
+        function render(data) {
+          setText("newFamilies", String(num(data?.funnel?.new_families, 0)));
+          setText(
+            "activeF",
+            `${num(data?.activity?.families_active?.dau, 0)} / ${num(data?.activity?.families_active?.wau, 0)} / ${num(data?.activity?.families_active?.mau, 0)}`
+          );
+          setText("missionsCreated", String(num(data?.activity?.missions?.created, 0)));
+          setText("rewardsCreated", String(num(data?.activity?.rewards?.created, 0)));
+          setText("aiReq", String(num(data?.ai?.requests?.total, 0)));
+          setText("imgSuccess", `${num(data?.images?.success_pct, 0).toFixed(1)}%`);
+          setText("mrr", `${num(data?.billing?.revenue?.mrr_estimate_rub, 0)} ₽`);
+          setText("apiErr", String(num(data?.api_errors?.total, 0)));
+          setText("rawJson", JSON.stringify(data, null, 2));
+        }
+
+        async function fetchStats() {
+          const apiUrl = String(apiUrlEl.value || "").trim().replace(/\/$/, "");
+          const adminKey = String(adminKeyEl.value || "").trim();
+
+          if (!apiUrl) {
+            setStatus("Укажите API URL", "err");
+            return;
+          }
+          if (!adminKey) {
+            setStatus("Укажите Admin API Key", "err");
+            return;
+          }
+
+          localStorage.setItem(LS_URL, apiUrl);
+          localStorage.setItem(LS_KEY, adminKey);
+
+          setStatus("Загрузка...", null);
+          refreshBtn.disabled = true;
+
+          try {
+            const res = await fetch(`${apiUrl}/api/admin/stats?period_days=${periodDays}`, {
+              method: "GET",
+              headers: { "X-Admin-Key": adminKey },
+            });
+            const data = await res.json().catch(() => ({}));
+
+            if (!res.ok) {
+              const code = data?.code || res.status;
+              const msg = data?.error || "Ошибка API";
+              throw new Error(`${code}: ${msg}`);
+            }
+
+            render(data);
+            setStatus(`Обновлено: ${new Date().toLocaleString("ru-RU")}`, "ok");
+          } catch (err) {
+            setStatus(String(err?.message || err), "err");
+          } finally {
+            refreshBtn.disabled = false;
+          }
+        }
+
+        document.querySelectorAll(".btn.day").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const d = Number(btn.getAttribute("data-days") || "7");
+            periodDays = [7, 14, 30].includes(d) ? d : 7;
+            document.querySelectorAll(".btn.day").forEach((b) => b.classList.remove("active"));
+            btn.classList.add("active");
+            fetchStats();
+          });
+        });
+
+        refreshBtn.addEventListener("click", fetchStats);
+
+        clearBtn.addEventListener("click", () => {
+          localStorage.removeItem(LS_KEY);
+          adminKeyEl.value = "";
+          setStatus("Ключ очищен", null);
+        });
+
+        apiUrlEl.value = localStorage.getItem(LS_URL) || DEFAULT_URL;
+        adminKeyEl.value = localStorage.getItem(LS_KEY) || "";
+
+        if (adminKeyEl.value) {
+          fetchStats();
+        }
+      })();
+    </script>
+  </body>
+</html>
