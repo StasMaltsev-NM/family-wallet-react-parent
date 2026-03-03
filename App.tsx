@@ -27,9 +27,11 @@ import {
   LogOut,
   Copy,
   Check,
+  BarChart3,
+  RefreshCw,
 } from "lucide-react";
 
-import { parentApi, type BillingStatusResponse } from "./services/api";
+import { parentApi, adminApi, type BillingStatusResponse, type AdminStatsResponse } from "./services/api";
 import { authApi } from "./services/api";
 import { makeInviteScopedKey, readSessionCache, writeSessionCache, removeSessionCache } from "./services/cache";
 // TEMP DEBUG
@@ -82,6 +84,11 @@ async function sha256Short(input: string): Promise<string> {
 function parentInviteStorageKey(identityKey: string) {
   if (!identityKey) return ""; // НЕ СОЗДАЁМ КЛЮЧ, ЕСЛИ identityKey ПУСТОЙ!
   return `fw_parent_invite_${identityKey}`;
+}
+
+function adminEntryStorageKey(identityKey: string) {
+  if (!identityKey) return "";
+  return `fw_admin_entry_enabled_${identityKey}`;
 }
 
 async function tgCloudGet(key: string): Promise<string> {
@@ -523,6 +530,12 @@ const App: React.FC = () => {
   const [billingBanner, setBillingBanner] = useState<BillingBannerState>(null);
   const [authOnboarding, setAuthOnboarding] = useState<AuthOnboardingState>(null);
   const shownOnboardingKeyRef = useRef("");
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [adminPeriodDays, setAdminPeriodDays] = useState<number>(7);
+  const [adminStats, setAdminStats] = useState<AdminStatsResponse | null>(null);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminError, setAdminError] = useState<string | null>(null);
+  const [isAdminEntryEnabled, setIsAdminEntryEnabled] = useState(false);
 
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [parentCode, setParentCode] = useState<string>("");
@@ -538,6 +551,7 @@ const App: React.FC = () => {
   // identityKey: уникально для TG-акка (tg_user_id) или web fallback (fw_web_user_id)
   const [identityKey, setIdentityKey] = useState<string>("");
   const INVITE_KEY = useMemo(() => parentInviteStorageKey(identityKey), [identityKey]);
+  const ADMIN_ENTRY_KEY = useMemo(() => adminEntryStorageKey(identityKey), [identityKey]);
   const bootStartedAtRef = useRef<number>(Date.now());
   const APP_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
   const getAppCacheKey = useCallback((code: string) => makeInviteScopedKey("app-core", code), []);
@@ -558,6 +572,64 @@ const App: React.FC = () => {
     }
     return raw;
   }, []);
+
+  useEffect(() => {
+    if (!ADMIN_ENTRY_KEY) {
+      setIsAdminEntryEnabled(false);
+      return;
+    }
+    try {
+      const cached = String(localStorage.getItem(ADMIN_ENTRY_KEY) || "").trim();
+      setIsAdminEntryEnabled(cached === "1");
+    } catch {
+      setIsAdminEntryEnabled(false);
+    }
+  }, [ADMIN_ENTRY_KEY]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const invite = String(parentCode || "").trim();
+
+    if (!invite) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    (async () => {
+      try {
+        const stats = await adminApi.getStatsByInvite(invite, 7);
+        if (cancelled) return;
+        setIsAdminEntryEnabled(true);
+        if (ADMIN_ENTRY_KEY) {
+          try {
+            localStorage.setItem(ADMIN_ENTRY_KEY, "1");
+          } catch {
+            // ignore storage errors
+          }
+        }
+        setAdminStats((prev) => prev ?? stats);
+        setAdminError(null);
+      } catch (err: any) {
+        if (cancelled) return;
+        const raw = String(err?.message || "");
+        if (raw.includes("FORBIDDEN")) {
+          setIsAdminEntryEnabled(false);
+          if (ADMIN_ENTRY_KEY) {
+            try {
+              localStorage.removeItem(ADMIN_ENTRY_KEY);
+            } catch {
+              // ignore storage errors
+            }
+          }
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ADMIN_ENTRY_KEY, parentCode]);
 
   useEffect(() => {
     latestChildrenRef.current = children;
@@ -1601,6 +1673,37 @@ const App: React.FC = () => {
     setBillingPromoCode("");
   }, []);
 
+  const loadAdminStats = useCallback(
+    async (override?: { days?: number }) => {
+      const days = Math.max(1, Math.min(90, Number(override?.days ?? adminPeriodDays) || 7));
+      const inviteCode = String(parentCodeRef.current || parentCode || "").trim();
+      if (!inviteCode) {
+        setAdminError("Нет parent invite code для загрузки админ-статистики.");
+        return;
+      }
+
+      setAdminLoading(true);
+      setAdminError(null);
+      try {
+        const stats = await adminApi.getStatsByInvite(inviteCode, days);
+        setAdminStats(stats);
+        setAdminPeriodDays(days);
+      } catch (err: any) {
+        const raw = String(err?.message || "Не удалось загрузить статистику");
+        setAdminError(raw.includes("FORBIDDEN") ? "Нет доступа к админ-статистике для текущего аккаунта." : raw);
+      } finally {
+        setAdminLoading(false);
+      }
+    },
+    [adminPeriodDays, parentCode]
+  );
+
+  const openAdminModal = useCallback(() => {
+    setIsAdminModalOpen(true);
+    setAdminError(null);
+    void loadAdminStats({ days: adminPeriodDays });
+  }, [adminPeriodDays, loadAdminStats]);
+
   const requireCapability = useCallback(
     (allowed: boolean, message: string) => {
       if (allowed) return true;
@@ -1679,6 +1782,9 @@ const App: React.FC = () => {
           <div className="text-6xl mb-4">👋</div>
           <h2 className="text-2xl font-bold mb-2 text-white">Добро пожаловать!</h2>
           <p className="text-white/60 mb-6">Добавьте первого ребёнка, чтобы начать</p>
+          <p className="text-white/45 mb-6 text-xs">
+            Если вход выполнен по коду друга, создаётся новая семья с пустым стартом — это нормальное поведение.
+          </p>
           <button
             onClick={() => {
               if (!requireCapability(billing.canCreateChildren, "Создание новых профилей доступно только при активной подписке.")) return;
@@ -1911,6 +2017,16 @@ const App: React.FC = () => {
           </h1>
 
           <div className="flex gap-2 items-center">
+            {isAdminEntryEnabled ? (
+              <button
+                onClick={openAdminModal}
+                className="p-2.5 rounded-full bg-white/5 text-[var(--text-muted)] hover:text-[var(--primary)] transition-all border border-white/5"
+                title="Админ статистика"
+              >
+                <BarChart3 size={20} />
+              </button>
+            ) : null}
+
             <button
               onClick={openBillingModal}
               className="px-3 py-2 rounded-full bg-white/5 text-[var(--text-muted)] hover:text-[var(--primary)] transition-all border border-white/5 inline-flex items-center gap-2"
@@ -2036,6 +2152,21 @@ const App: React.FC = () => {
           onTopup60={() => handleCreateCheckout("topup_60")}
           onApplyPromo={handleRedeemPromo}
           isActionLoading={billingActionLoading}
+        />
+      ) : null}
+
+      {isAdminModalOpen ? (
+        <AdminStatsModal
+          periodDays={adminPeriodDays}
+          onPeriodDaysChange={(days) => {
+            setAdminPeriodDays(days);
+            void loadAdminStats({ days });
+          }}
+          stats={adminStats}
+          loading={adminLoading}
+          error={adminError}
+          onRefresh={() => void loadAdminStats()}
+          onClose={() => setIsAdminModalOpen(false)}
         />
       ) : null}
 
@@ -2202,6 +2333,16 @@ interface AuthOnboardingModalProps {
   onClose: () => void;
 }
 
+interface AdminStatsModalProps {
+  periodDays: number;
+  onPeriodDaysChange: (value: number) => void;
+  stats: AdminStatsResponse | null;
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+  onClose: () => void;
+}
+
 const AuthOnboardingModal: React.FC<AuthOnboardingModalProps> = ({
   onboarding,
   onClose,
@@ -2238,6 +2379,141 @@ const AuthOnboardingModal: React.FC<AuthOnboardingModalProps> = ({
     </div>
   </div>
 );
+
+const AdminStatsModal: React.FC<AdminStatsModalProps> = ({
+  periodDays,
+  onPeriodDaysChange,
+  stats,
+  loading,
+  error,
+  onRefresh,
+  onClose,
+}) => {
+  const hasStats = Boolean(stats);
+  const dau = Number(stats?.activity?.families_active?.dau ?? 0);
+  const wau = Number(stats?.activity?.families_active?.wau ?? 0);
+  const mau = Number(stats?.activity?.families_active?.mau ?? 0);
+  const display = (value: string) => (hasStats ? value : "—");
+
+  const cards = [
+    {
+      label: "Новые семьи",
+      value: display(String(Number(stats?.funnel?.new_families ?? 0))),
+    },
+    {
+      label: "DAU / WAU / MAU",
+      value: display(`${dau} / ${wau} / ${mau}`),
+    },
+    {
+      label: "Миссии создано",
+      value: display(String(Number(stats?.activity?.missions?.created ?? 0))),
+    },
+    {
+      label: "Награды создано",
+      value: display(String(Number(stats?.activity?.rewards?.created ?? 0))),
+    },
+    {
+      label: "AI запросы",
+      value: display(String(Number(stats?.ai?.requests?.total ?? 0))),
+    },
+    {
+      label: "Успех генераций",
+      value: display(`${Number(stats?.images?.success_pct ?? 0).toFixed(1)}%`),
+    },
+    {
+      label: "MRR (оценка)",
+      value: display(`${Number(stats?.billing?.revenue?.mrr_estimate_rub ?? 0)} ₽`),
+    },
+    {
+      label: "Ошибки API",
+      value: display(String(Number(stats?.api_errors?.total ?? 0))),
+    },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-[131] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/85 backdrop-blur-xl" onClick={onClose} />
+      <div className="relative w-full max-w-2xl max-h-[86vh] overflow-y-auto rounded-[2rem] border border-white/10 bg-[#0B0B10] p-5 sm:p-7 shadow-[0_30px_80px_rgba(0,0,0,0.8)]">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-xl font-black tracking-tight text-white inline-flex items-center gap-2">
+            <BarChart3 size={20} className="text-[var(--primary)]" />
+            Админ статистика
+          </h3>
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={loading}
+            className="h-10 px-4 rounded-xl border border-white/15 bg-white/5 text-xs font-black text-white/90 inline-flex items-center gap-2 active:scale-95 disabled:opacity-60"
+          >
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+            Обновить
+          </button>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--text-muted)] font-black">Доступ</p>
+          <p className="mt-2 text-xs font-bold text-white/70">
+            Статистика загружается автоматически по текущему parent-коду.
+          </p>
+          <div className="mt-3 flex items-center gap-2">
+            {[7, 14, 30].map((days) => (
+              <button
+                key={days}
+                type="button"
+                onClick={() => onPeriodDaysChange(days)}
+                className={`h-9 px-3 rounded-lg text-xs font-black transition-all ${
+                  periodDays === days
+                    ? "bg-[var(--primary)] text-white"
+                    : "border border-white/15 bg-white/5 text-white/80"
+                }`}
+              >
+                {days} дней
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {error ? (
+          <div className="mt-4 rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-xs font-bold text-rose-200">
+            {error}
+          </div>
+        ) : null}
+
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {cards.map((card) => (
+            <div key={card.label} className="rounded-xl border border-white/10 bg-black/30 p-3">
+              <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)] font-black">{card.label}</div>
+              <div className="mt-1 text-lg font-black text-white">{card.value}</div>
+            </div>
+          ))}
+        </div>
+
+        {stats ? (
+          <details className="mt-4 rounded-xl border border-white/10 bg-black/25 p-3">
+            <summary className="cursor-pointer text-xs font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">
+              RAW JSON
+            </summary>
+            <pre className="mt-3 text-[11px] leading-relaxed text-white/75 overflow-x-auto whitespace-pre-wrap break-all">
+              {JSON.stringify(stats, null, 2)}
+            </pre>
+          </details>
+        ) : (
+          <div className="mt-4 rounded-xl border border-white/10 bg-black/25 px-3 py-4 text-xs font-bold text-white/60">
+            {loading ? "Загрузка статистики..." : "Откройте модалку повторно или нажмите «Обновить», если данные ещё не подтянулись."}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-5 w-full rounded-2xl border border-white/15 px-4 py-3 font-black text-white/80 transition-all hover:text-white active:scale-95"
+        >
+          Закрыть
+        </button>
+      </div>
+    </div>
+  );
+};
 
 const BillingModal: React.FC<BillingModalProps> = ({
   billing,
