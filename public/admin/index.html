@@ -78,6 +78,10 @@
         <div class="stat"><div class="k">Успех генераций</div><div class="v" id="imgSuccess">—</div></div>
         <div class="stat"><div class="k">MRR (оценка)</div><div class="v" id="mrr">—</div></div>
         <div class="stat"><div class="k">Ошибки API</div><div class="v" id="apiErr">—</div></div>
+        <div class="stat"><div class="k">Активированные friend-коды</div><div class="v" id="friendCodesActivated">—</div></div>
+        <div class="stat"><div class="k">Среднее детей на семью</div><div class="v" id="avgChildrenPerFamily">—</div></div>
+        <div class="stat"><div class="k">Семьи с 2 родителями</div><div class="v" id="familiesTwoParents">—</div></div>
+        <div class="stat"><div class="k">Платящих пользователей</div><div class="v" id="paidUsers">—</div></div>
       </div>
 
       <div style="height:10px"></div>
@@ -112,6 +116,14 @@
           return Number.isFinite(n) ? n : fallback;
         }
 
+        function hasValue(v) {
+          return v !== undefined && v !== null && String(v) !== "";
+        }
+
+        function metric(v, fallback = "—") {
+          return hasValue(v) ? String(v) : fallback;
+        }
+
         function setText(id, value) {
           const el = document.getElementById(id);
           if (el) el.textContent = value;
@@ -129,6 +141,35 @@
           setText("imgSuccess", `${num(data?.images?.success_pct, 0).toFixed(1)}%`);
           setText("mrr", `${num(data?.billing?.revenue?.mrr_estimate_rub, 0)} ₽`);
           setText("apiErr", String(num(data?.api_errors?.total, 0)));
+
+          setText("friendCodesActivated", String(num(data?.referrals?.activated_friend_codes, 0)));
+
+          const avgChildrenRaw =
+            hasValue(data?.extra?.avg_children_per_family)
+              ? data?.extra?.avg_children_per_family
+              : hasValue(data?.activity?.children_total) && num(data?.activity?.families_total, 0) > 0
+              ? num(data?.activity?.children_total, 0) / num(data?.activity?.families_total, 1)
+              : null;
+          setText(
+            "avgChildrenPerFamily",
+            avgChildrenRaw === null ? "—" : Number(avgChildrenRaw).toFixed(2)
+          );
+
+          setText(
+            "familiesTwoParents",
+            metric(
+              data?.referrals?.families_with_two_parent_codes ??
+                data?.extra?.families_with_two_parent_codes
+            )
+          );
+
+          const paidUsersRaw =
+            data?.billing?.subscriptions?.active_paid_families ??
+            data?.billing?.subscriptions?.active ??
+            data?.billing?.payments?.paid_users ??
+            data?.billing?.revenue?.paid_users;
+          setText("paidUsers", metric(paidUsersRaw));
+
           setText("rawJson", JSON.stringify(data, null, 2));
         }
 
