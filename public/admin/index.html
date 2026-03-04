@@ -77,7 +77,8 @@
         <div class="stat"><div class="k">AI запросы</div><div class="v" id="aiReq">—</div></div>
         <div class="stat"><div class="k">Успех генераций</div><div class="v" id="imgSuccess">—</div></div>
         <div class="stat"><div class="k">MRR (оценка)</div><div class="v" id="mrr">—</div></div>
-        <div class="stat"><div class="k">Ошибки API</div><div class="v" id="apiErr">—</div></div>
+        <div class="stat"><div class="k">Ошибки API (все)</div><div class="v" id="apiErr">—</div></div>
+        <div class="stat"><div class="k">Критичные API</div><div class="v" id="apiErrCritical">—</div></div>
         <div class="stat"><div class="k">Активированные friend-коды</div><div class="v" id="friendCodesActivated">—</div></div>
         <div class="stat"><div class="k">Среднее детей на семью</div><div class="v" id="avgChildrenPerFamily">—</div></div>
         <div class="stat"><div class="k">Семьи с 2 родителями</div><div class="v" id="familiesTwoParents">—</div></div>
@@ -124,6 +125,16 @@
           return hasValue(v) ? String(v) : fallback;
         }
 
+        function sumByCode(items, matcher) {
+          if (!Array.isArray(items)) return 0;
+          return items.reduce((acc, row) => {
+            const code = String(row?.code || "");
+            const count = Number(row?.count || 0);
+            if (!Number.isFinite(count)) return acc;
+            return matcher(code) ? acc + count : acc;
+          }, 0);
+        }
+
         function setText(id, value) {
           const el = document.getElementById(id);
           if (el) el.textContent = value;
@@ -141,6 +152,16 @@
           setText("imgSuccess", `${num(data?.images?.success_pct, 0).toFixed(1)}%`);
           setText("mrr", `${num(data?.billing?.revenue?.mrr_estimate_rub, 0)} ₽`);
           setText("apiErr", String(num(data?.api_errors?.total, 0)));
+          const criticalApiErrors = sumByCode(
+            data?.api_errors?.by_code,
+            (code) =>
+              code === "INTERNAL_ERROR" ||
+              code === "AI_ERROR" ||
+              code === "PAYMENT_CREATE_FAILED" ||
+              code === "DB_ERROR" ||
+              code === "NETWORK_ERROR"
+          );
+          setText("apiErrCritical", String(criticalApiErrors));
 
           setText("friendCodesActivated", String(num(data?.referrals?.activated_friend_codes, 0)));
 
@@ -164,10 +185,10 @@
           );
 
           const paidUsersRaw =
-            data?.billing?.subscriptions?.active_paid_families ??
-            data?.billing?.subscriptions?.active ??
             data?.billing?.payments?.paid_users ??
-            data?.billing?.revenue?.paid_users;
+            data?.billing?.payments?.users_paid ??
+            data?.billing?.revenue?.paid_users ??
+            data?.billing?.subscriptions?.active_paid_families;
           setText("paidUsers", metric(paidUsersRaw));
 
           setText("rawJson", JSON.stringify(data, null, 2));
