@@ -76,13 +76,17 @@
         <div class="stat"><div class="k">Награды создано</div><div class="v" id="rewardsCreated">—</div></div>
         <div class="stat"><div class="k">AI запросы</div><div class="v" id="aiReq">—</div></div>
         <div class="stat"><div class="k">Успех генераций</div><div class="v" id="imgSuccess">—</div></div>
-        <div class="stat"><div class="k">MRR (оценка)</div><div class="v" id="mrr">—</div></div>
+        <div class="stat"><div class="k">Выручка (период)</div><div class="v" id="periodRevenue">—</div></div>
         <div class="stat"><div class="k">Ошибки API (все)</div><div class="v" id="apiErr">—</div></div>
         <div class="stat"><div class="k">Критичные API</div><div class="v" id="apiErrCritical">—</div></div>
         <div class="stat"><div class="k">Активированные friend-коды</div><div class="v" id="friendCodesActivated">—</div></div>
         <div class="stat"><div class="k">Среднее детей на семью</div><div class="v" id="avgChildrenPerFamily">—</div></div>
         <div class="stat"><div class="k">Семьи с 2 родителями</div><div class="v" id="familiesTwoParents">—</div></div>
-        <div class="stat"><div class="k">Платящих пользователей</div><div class="v" id="paidUsers">—</div></div>
+        <div class="stat">
+          <div class="k">Платящих семей</div>
+          <div class="v" id="paidFamilies">—</div>
+          <div class="meta" id="paidFamiliesHint"></div>
+        </div>
       </div>
 
       <div style="height:10px"></div>
@@ -135,6 +139,14 @@
           }, 0);
         }
 
+        function sumPaidPayments(paymentsSection) {
+          if (!paymentsSection || typeof paymentsSection !== "object") return 0;
+          return Object.values(paymentsSection).reduce((acc, item) => {
+            const paid = num(item?.paid, 0);
+            return acc + (Number.isFinite(paid) ? paid : 0);
+          }, 0);
+        }
+
         function setText(id, value) {
           const el = document.getElementById(id);
           if (el) el.textContent = value;
@@ -150,7 +162,7 @@
           setText("rewardsCreated", String(num(data?.activity?.rewards?.created, 0)));
           setText("aiReq", String(num(data?.ai?.requests?.total, 0)));
           setText("imgSuccess", `${num(data?.images?.success_pct, 0).toFixed(1)}%`);
-          setText("mrr", `${num(data?.billing?.revenue?.mrr_estimate_rub, 0)} ₽`);
+          setText("periodRevenue", `${num(data?.billing?.revenue?.period_revenue_rub, 0)} ₽`);
           setText("apiErr", String(num(data?.api_errors?.total, 0)));
           const criticalApiErrors = sumByCode(
             data?.api_errors?.by_code,
@@ -184,12 +196,18 @@
             )
           );
 
-          const paidUsersRaw =
-            data?.billing?.payments?.paid_users ??
-            data?.billing?.payments?.users_paid ??
-            data?.billing?.revenue?.paid_users ??
-            data?.billing?.subscriptions?.active_paid_families;
-          setText("paidUsers", metric(paidUsersRaw));
+          const paidFamiliesExact =
+            data?.billing?.payments?.paid_families ??
+            data?.billing?.revenue?.paid_families_period ??
+            data?.billing?.revenue?.paid_families;
+          const paidFamiliesFallback = sumPaidPayments(data?.billing?.payments);
+          const useFallback = !hasValue(paidFamiliesExact);
+          const paidFamiliesValue = useFallback ? paidFamiliesFallback : Number(paidFamiliesExact);
+          setText("paidFamilies", String(Number.isFinite(paidFamiliesValue) ? paidFamiliesValue : 0));
+          setText(
+            "paidFamiliesHint",
+            useFallback ? "Временно: по числу успешных оплат (нужен отдельный backend-показатель)" : ""
+          );
 
           setText("rawJson", JSON.stringify(data, null, 2));
         }
