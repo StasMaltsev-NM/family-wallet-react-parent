@@ -60,7 +60,10 @@ const SettingsModal: React.FC<Props> = ({ children, setChildren, onDeleteChild, 
               <Heart size={20} className="text-rose-500" />
               <p className="text-[12px] font-black text-[var(--text-muted)] uppercase tracking-[0.3em]">Пригласите другие семьи</p>
             </div>
-            <p className="text-[11px] text-[var(--text-muted)] px-3 -mt-2 leading-relaxed font-medium">Поделитесь этими кодами с друзьями, чтобы они тоже могли управлять финансами своей семьи.</p>
+            <p className="text-[11px] text-[var(--text-muted)] px-3 -mt-2 leading-relaxed font-medium">
+              Поделитесь кодами с другими семьями и получите до +60 кредитов
+              <span className="text-white/50"> (3 активации × +20).</span>
+            </p>
             <div className="grid gap-4">
               {friendCodes.map((code, index) => {
                 const id = `f${index}`;

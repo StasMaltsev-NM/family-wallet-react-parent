@@ -11,6 +11,8 @@ interface Props {
   allChildren: Child[];
   inviteCode: string;
   currentChild?: Child;
+  canCreateRewards?: boolean;
+  creationBlockedReason?: string;
 }
 
 type RewardsCacheEnvelope = {
@@ -82,7 +84,13 @@ function writeRuntimeRewardsCache(key: string, data: Prize[]): void {
   runtimeRewardsCache.set(key, { ts: Date.now(), data });
 }
 
-const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
+const Shop: React.FC<Props> = ({
+  allChildren,
+  inviteCode,
+  currentChild,
+  canCreateRewards = true,
+  creationBlockedReason = 'Создание наград доступно только при активной подписке.',
+}) => {
   const REWARDS_CACHE_TTL_MS = 90_000;
   const REWARDS_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
   const REWARDS_MIN_REFRESH_GAP_MS = 4_000;
@@ -467,6 +475,13 @@ const Shop: React.FC<Props> = ({ allChildren, inviteCode, currentChild }) => {
   };
 
 const handleCreateReward = async () => {
+  if (!canCreateRewards) {
+    setCreateFeedback({
+      type: 'info',
+      message: creationBlockedReason,
+    });
+    return;
+  }
   if (isPending('create-reward') || createSubmitLockRef.current) return;
   createSubmitLockRef.current = true;
 
@@ -660,8 +675,17 @@ const handleCreateReward = async () => {
           <p className="text-[var(--text-muted)] text-[11px] font-bold uppercase tracking-[0.2em] mt-1.5">Чем порадовать ребенка?</p>
         </div>
         <button 
-          onClick={() => setIsAdding(true)}
-          disabled={isAnyRewardsLoading}
+          onClick={() => {
+            if (!canCreateRewards) {
+              setCreateFeedback({
+                type: 'info',
+                message: creationBlockedReason,
+              });
+              return;
+            }
+            setIsAdding(true);
+          }}
+          disabled={isAnyRewardsLoading || !canCreateRewards}
           className="p-4 bg-[var(--primary)]/10 border border-[var(--primary)]/20 rounded-[1.5rem] text-[var(--primary)] hover:bg-[var(--primary)] hover:text-white active:scale-[0.96] transition-all shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"
         >
           {isAnyRewardsLoading ? (

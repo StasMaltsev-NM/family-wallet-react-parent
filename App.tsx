@@ -21,12 +21,17 @@ import {
   Sparkles,
   Settings,
   Palette,
+  Coins,
+  CreditCard,
+  TicketPercent,
   LogOut,
   Copy,
   Check,
+  BarChart3,
+  RefreshCw,
 } from "lucide-react";
 
-import { parentApi } from "./services/api";
+import { parentApi, adminApi, type BillingStatusResponse, type AdminStatsResponse } from "./services/api";
 import { authApi } from "./services/api";
 import { makeInviteScopedKey, readSessionCache, writeSessionCache, removeSessionCache } from "./services/cache";
 // TEMP DEBUG
@@ -51,6 +56,19 @@ function getTgUserId(): string {
   return id || "";
 }
 
+function getOrCreateWebIdentity(): string {
+  const key = "fw_web_user_id";
+  try {
+    const existing = String(localStorage.getItem(key) || "").trim();
+    if (existing) return existing;
+    const created = `web_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    localStorage.setItem(key, created);
+    return created;
+  } catch {
+    return `web_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+}
+
 async function sha256Short(input: string): Promise<string> {
   try {
     const enc = new TextEncoder().encode(input);
@@ -64,8 +82,13 @@ async function sha256Short(input: string): Promise<string> {
 }
 
 function parentInviteStorageKey(identityKey: string) {
-    if (!identityKey) return ""; // НЕ СОЗДАЁМ КЛЮЧ, ЕСЛИ identityKey ПУСТОЙ!
+  if (!identityKey) return ""; // НЕ СОЗДАЁМ КЛЮЧ, ЕСЛИ identityKey ПУСТОЙ!
   return `fw_parent_invite_${identityKey}`;
+}
+
+function adminEntryStorageKey(identityKey: string) {
+  if (!identityKey) return "";
+  return `fw_admin_entry_enabled_${identityKey}`;
 }
 
 async function tgCloudGet(key: string): Promise<string> {
@@ -93,6 +116,76 @@ async function tgCloudDel(key: string): Promise<void> {
   await new Promise((resolve) => {
     tg.CloudStorage.removeItem(key, () => resolve(true));
   });
+}
+
+function sanitizeInviteCode(value: any): string {
+  const code = String(value || "").trim();
+  if (!code) return "";
+  if (code.toUpperCase() === "TEST_BROWSER") return "";
+  return code;
+}
+
+function localInviteGet(key: string): string {
+  if (!key) return "";
+  try {
+    return sanitizeInviteCode(localStorage.getItem(key) || "");
+  } catch {
+    return "";
+  }
+}
+
+function localInviteSet(key: string, value: string): void {
+  if (!key) return;
+  try {
+    localStorage.setItem(key, sanitizeInviteCode(value));
+  } catch {
+    // ignore
+  }
+}
+
+function localInviteRemove(key: string): void {
+  if (!key) return;
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
+}
+
+async function readSavedInviteCode(key: string): Promise<string> {
+  if (!key) return "";
+  const [cloudRaw, localRaw] = await Promise.all([tgCloudGet(key), Promise.resolve(localInviteGet(key))]);
+  const cloudCode = sanitizeInviteCode(cloudRaw);
+  const localCode = sanitizeInviteCode(localRaw);
+  const resolved = cloudCode || localCode || "";
+
+  if (resolved) {
+    if (!cloudCode) await tgCloudSet(key, resolved);
+    if (!localCode) localInviteSet(key, resolved);
+    return resolved;
+  }
+
+  localInviteRemove(key);
+  await tgCloudDel(key);
+  return "";
+}
+
+async function writeSavedInviteCode(key: string, code: string): Promise<void> {
+  if (!key) return;
+  const normalized = sanitizeInviteCode(code);
+  if (!normalized) {
+    localInviteRemove(key);
+    await tgCloudDel(key);
+    return;
+  }
+  localInviteSet(key, normalized);
+  await tgCloudSet(key, normalized);
+}
+
+async function clearSavedInviteCode(key: string): Promise<void> {
+  if (!key) return;
+  localInviteRemove(key);
+  await tgCloudDel(key);
 }
 
 // backend task.status -> UI mission.status
@@ -153,18 +246,9 @@ function resolveActiveDreamImage(dream: any, kid: any): string {
     dream?.dream_image ||
     kid?.dream?.generated_image_url ||
     kid?.dream?.generated_image ||
-      kid?.dream?.image ||
+    kid?.dream?.image ||
     resolveDreamImage(kid);
   return String(candidate || "").trim() || resolveDreamImage(kid);
-}
-
-function isPlaceholderDreamImage(src: string): boolean {
-  const lower = String(src || "").toLowerCase();
-  if (!lower) return true;
-  if (lower.includes("api.dicebear.com/7.x/shapes/svg")) return true;
-  if (lower.includes("seed=dream")) return true;
-  if (lower.includes("dream-placeholder")) return true;
-  return false;
 }
 
 function hasMeaningfulDreamTitle(kid: any): boolean {
@@ -289,6 +373,104 @@ function applyRewardImageIndexToPurchases(
   return next;
 }
 
+type BillingUiState = {
+  loading: boolean;
+  loaded: boolean;
+  error: string | null;
+  planCode: string;
+  planActive: boolean;
+  expiresAt: string | null;
+  creditsBalance: number;
+  creditsSpendable: boolean;
+  canCreateChildren: boolean;
+  canCreateMissions: boolean;
+  canCreateRewards: boolean;
+  canUseAI: boolean;
+  canGenerateImages: boolean;
+};
+
+const BILLING_DEFAULT_STATE: BillingUiState = {
+  loading: false,
+  loaded: false,
+  error: null,
+  planCode: "free",
+  planActive: true,
+  expiresAt: null,
+  creditsBalance: 0,
+  creditsSpendable: true,
+  canCreateChildren: true,
+  canCreateMissions: true,
+  canCreateRewards: true,
+  canUseAI: true,
+  canGenerateImages: true,
+};
+
+type BillingBannerState = {
+  type: "info" | "error" | "success";
+  message: string;
+} | null;
+
+type AuthOnboardingState = {
+  message: string;
+  creditsAdded: number;
+  expiresAt: string | null;
+  referralCreditsAdded: number;
+} | null;
+
+function normalizeBillingState(raw: BillingStatusResponse): BillingUiState {
+  const planActive = Boolean(raw?.plan?.active);
+  return {
+    loading: false,
+    loaded: true,
+    error: null,
+    planCode: String(raw?.plan?.code || "free"),
+    planActive,
+    expiresAt: raw?.plan?.expires_at || null,
+    creditsBalance: Math.max(0, Number(raw?.credits?.balance ?? 0) || 0),
+    creditsSpendable: Boolean(raw?.credits?.spendable ?? true),
+    canCreateChildren: Boolean(raw?.capabilities?.can_create_children ?? planActive),
+    canCreateMissions: Boolean(raw?.capabilities?.can_create_missions ?? planActive),
+    canCreateRewards: Boolean(raw?.capabilities?.can_create_rewards ?? planActive),
+    canUseAI: Boolean(raw?.capabilities?.can_use_ai ?? planActive),
+    canGenerateImages: Boolean(raw?.capabilities?.can_generate_images ?? planActive),
+  };
+}
+
+function compactCredits(value: number): string {
+  const n = Math.max(0, Math.trunc(Number(value) || 0));
+  if (n >= 1_000_000) return `${Math.floor(n / 1_000_000)}M`;
+  if (n >= 1_000) return `${Math.floor(n / 1_000)}K`;
+  return String(n);
+}
+
+function formatBillingDate(value: string | null): string {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  const [datePart, timePart] = raw.split(" ");
+  if (datePart && datePart.includes("-")) {
+    const parts = datePart.split("-");
+    if (parts.length === 3) {
+      const [y, m, d] = parts;
+      const hhmm = timePart ? ` ${timePart.slice(0, 5)}` : "";
+      return `${d}.${m}.${y}${hhmm}`;
+    }
+  }
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toLocaleString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  return raw;
+}
+
 const App: React.FC = () => {
   console.log("[APP RENDER]");
 
@@ -312,7 +494,15 @@ const App: React.FC = () => {
   const [selectedChildId, setSelectedChildId] = useState<string>(
     INITIAL_CHILDREN[0]?.id ?? ""
   );
+  const [missionIdeaDraft, setMissionIdeaDraft] = useState<string>("");
+  const [missionIdeaNonce, setMissionIdeaNonce] = useState<number>(0);
   const selectedChildIdRef = useRef<string>(selectedChildId);
+  const latestChildrenRef = useRef<Child[]>(INITIAL_CHILDREN);
+
+  const [isAppBootLoading, setIsAppBootLoading] = useState(true);
+  const [isBootFading, setIsBootFading] = useState(false);
+  const [isAuthResolved, setIsAuthResolved] = useState(false);
+  const [isAuthBootstrapping, setIsAuthBootstrapping] = useState(true);
 
   const [isAppBootLoading, setIsAppBootLoading] = useState(true);
   const [isBootFading, setIsBootFading] = useState(false);
@@ -336,10 +526,22 @@ const App: React.FC = () => {
     byChildTitlePrice: {},
     byGlobalTitlePrice: {},
   });
-  const dreamImageCacheRef = useRef<Record<string, string>>({});
   const dreamFallbackFetchedAtRef = useRef<Record<string, number>>({});
   const rewardsHydrationInFlightRef = useRef(false);
   const rewardsIndexFetchedAtRef = useRef(0);
+  const [billing, setBilling] = useState<BillingUiState>(BILLING_DEFAULT_STATE);
+  const [isBillingModalOpen, setIsBillingModalOpen] = useState(false);
+  const [billingPromoCode, setBillingPromoCode] = useState("");
+  const [billingActionLoading, setBillingActionLoading] = useState(false);
+  const [billingBanner, setBillingBanner] = useState<BillingBannerState>(null);
+  const [authOnboarding, setAuthOnboarding] = useState<AuthOnboardingState>(null);
+  const shownOnboardingKeyRef = useRef("");
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [adminPeriodDays, setAdminPeriodDays] = useState<number>(7);
+  const [adminStats, setAdminStats] = useState<AdminStatsResponse | null>(null);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminError, setAdminError] = useState<string | null>(null);
+  const [isAdminEntryEnabled, setIsAdminEntryEnabled] = useState(false);
 
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [parentCode, setParentCode] = useState<string>("");
@@ -350,9 +552,12 @@ const App: React.FC = () => {
   const [authError, setAuthError] = useState<string | null>(null);
   const [createdChildInvite, setCreatedChildInvite] = useState<{ name: string; code: string } | null>(null);
   const [isChildCodeCopied, setIsChildCodeCopied] = useState(false);
+  const [isIdentityReady, setIsIdentityReady] = useState(false);
+  const bootAuthAttemptedRef = useRef(false);
   // identityKey: уникально для TG-акка (tg_user_id) или web fallback (fw_web_user_id)
   const [identityKey, setIdentityKey] = useState<string>("");
   const INVITE_KEY = useMemo(() => parentInviteStorageKey(identityKey), [identityKey]);
+  const ADMIN_ENTRY_KEY = useMemo(() => adminEntryStorageKey(identityKey), [identityKey]);
   const bootStartedAtRef = useRef<number>(Date.now());
   const APP_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
   const getAppCacheKey = useCallback((code: string) => makeInviteScopedKey("app-core", code), []);
@@ -374,6 +579,68 @@ const App: React.FC = () => {
     return raw;
   }, []);
 
+  useEffect(() => {
+    if (!ADMIN_ENTRY_KEY) {
+      setIsAdminEntryEnabled(false);
+      return;
+    }
+    try {
+      const cached = String(localStorage.getItem(ADMIN_ENTRY_KEY) || "").trim();
+      setIsAdminEntryEnabled(cached === "1");
+    } catch {
+      setIsAdminEntryEnabled(false);
+    }
+  }, [ADMIN_ENTRY_KEY]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const invite = String(parentCode || "").trim();
+
+    if (!invite) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    (async () => {
+      try {
+        const stats = await adminApi.getStatsByInvite(invite, 7);
+        if (cancelled) return;
+        setIsAdminEntryEnabled(true);
+        if (ADMIN_ENTRY_KEY) {
+          try {
+            localStorage.setItem(ADMIN_ENTRY_KEY, "1");
+          } catch {
+            // ignore storage errors
+          }
+        }
+        setAdminStats((prev) => prev ?? stats);
+        setAdminError(null);
+      } catch (err: any) {
+        if (cancelled) return;
+        const raw = String(err?.message || "");
+        if (raw.includes("FORBIDDEN")) {
+          setIsAdminEntryEnabled(false);
+          if (ADMIN_ENTRY_KEY) {
+            try {
+              localStorage.removeItem(ADMIN_ENTRY_KEY);
+            } catch {
+              // ignore storage errors
+            }
+          }
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ADMIN_ENTRY_KEY, parentCode]);
+
+  useEffect(() => {
+    latestChildrenRef.current = children;
+  }, [children]);
+
   const handleCopyChildCode = useCallback(async () => {
     if (!createdChildInvite?.code) return;
     try {
@@ -394,6 +661,7 @@ const App: React.FC = () => {
     dreamFallbackFetchedAtRef.current = {};
     rewardsHydrationInFlightRef.current = false;
     rewardsIndexFetchedAtRef.current = 0;
+    setBilling((prev) => ({ ...prev, loading: true, error: null }));
   }, [parentCode]);
 
   // Telegram: ready/expand + layout
@@ -421,60 +689,79 @@ const App: React.FC = () => {
     document.body.setAttribute("data-theme", `${theme}`);
   }, [theme]);
 
+  // compute identityKey with retry (Telegram initData may arrive slightly later)
   useEffect(() => {
-    const id = window.setTimeout(() => {
-      setIsBootFading(true);
-      window.setTimeout(() => setIsAppBootLoading(false), 320);
-    }, 12000);
-    return () => window.clearTimeout(id);
-  }, []);
+    let cancelled = false;
 
-  // compute identityKey once
-  useEffect(() => {
-    const id = getTgUserId();
-    const key = id ? `id_${id}` : "";
-    setIdentityKey(key);
+    const resolveIdentity = async () => {
+      const attempts = 25;
+      const delayMs = 120;
 
-    console.log("[IDENTITY]", {
-      rawId: id,
-      identityKey: key,
-      hasTG: !!getTg(),
-      initDataLen: String(getTg()?.initData ?? "").length,
-    });
+      for (let i = 0; i < attempts; i += 1) {
+        const id = getTgUserId();
+        if (id) {
+          const key = `id_${id}`;
+          if (!cancelled) {
+            setIdentityKey(key);
+            setIsIdentityReady(true);
+            console.log("[IDENTITY]", {
+              rawId: id,
+              identityKey: key,
+              hasTG: !!getTg(),
+              initDataLen: String(getTg()?.initData ?? "").length,
+            });
+          }
+          return;
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+      }
+
+      const fallbackKey = getOrCreateWebIdentity();
+      if (!cancelled) {
+        setIdentityKey(fallbackKey);
+        setIsIdentityReady(true);
+        console.log("[IDENTITY] fallback web identity", {
+          identityKey: fallbackKey,
+          hasTG: !!getTg(),
+          initDataLen: String(getTg()?.initData ?? "").length,
+        });
+      }
+    };
+
+    resolveIdentity();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // load parentCode for this identityKey
   useEffect(() => {
+    let cancelled = false;
     (async () => {
-      if (!identityKey) {
+      if (!isIdentityReady) return;
+      if (!identityKey || !INVITE_KEY) {
+        if (cancelled) return;
         setParentCode("");
         setIsInviteModalOpen(true);
+        setAuthError(null);
         setIsAuthResolved(true);
         return;
       }
 
       try {
-        const saved = await tgCloudGet(INVITE_KEY);
+        setIsAuthResolved(false);
+        const saved = await readSavedInviteCode(INVITE_KEY);
+        if (cancelled) return;
         console.log('[APP] Cloud storage parentCode:', saved);
         console.log('[APP] identityKey:', identityKey);
         console.log('[APP] INVITE_KEY:', INVITE_KEY);
 
-        // ФИКС: если сохранён TEST_BROWSER или пустой код — игнорируем
-        if (saved === 'TEST_BROWSER' || !saved) {
-          console.log('[APP] Invalid/empty code in cloud, clearing and opening modal');
-
-          // ОЧИСТИТЬ Cloud Storage
-          await tgCloudSet(INVITE_KEY, '');
-
-          setParentCode("");
-          setIsInviteModalOpen(true);
-          return;
-        }
-
         if (saved) {
           setParentCode(saved);
+          setCodeDraft(saved);
           console.log('[APP] parentCode SET from cloud:', saved);
           setIsInviteModalOpen(false);
+          setAuthError(null);
 
           // Загрузить коды семьи
           try {
@@ -490,84 +777,68 @@ const App: React.FC = () => {
           setIsInviteModalOpen(true);
         }
       } finally {
+        if (cancelled) return;
         setIsAuthResolved(true);
       }
     })();
-  }, [identityKey, INVITE_KEY]);
-  // NEW AUTH: backend Telegram auth via initData
-useEffect(() => {
-  // Новый AUTH через backend (приоритет!)
-  const initAuth = async () => {
-    const tg = getTg();
-    const initData = tg?.initData ?? "";
-    
-    const p = new URLSearchParams(initData);
-    console.log("[NEW AUTH] initData len:", initData.length);
-    console.log("[NEW AUTH] initData head:", initData.slice(0, 300));
-    console.log("[NEW AUTH] hash:", p.get("hash"));
-    console.log("[NEW AUTH] keys:", Array.from(p.keys()));
-    
-      if (initData && !isInviteModalOpen) { // ← ДОБАВЬ !isInviteModalOpen
-      console.log('[NEW AUTH] Запускаем (даже если parentCode есть)', { initData: initData.substring(0, 50) + '...' });
+    return () => {
+      cancelled = true;
+    };
+  }, [isIdentityReady, identityKey, INVITE_KEY]);
+  // NEW AUTH: backend Telegram auth via initData.
+  // Важно: выполняем только после чтения сохранённого кода из CloudStorage.
+  useEffect(() => {
+    if (!isIdentityReady || !isAuthResolved || bootAuthAttemptedRef.current) return;
+    bootAuthAttemptedRef.current = true;
+
+    const initAuth = async () => {
+      const tg = getTg();
+      const initData = tg?.initData ?? "";
+      setIsAuthBootstrapping(true);
+
+      if (!initData) {
+        if (!parentCode) setIsInviteModalOpen(true);
+        setIsAuthBootstrapping(false);
+        return;
+      }
+
       setIsAuthLoading(true);
-      
       try {
         const result = await authApi.authenticateWithTelegram(initData, parentCode || undefined);
-        console.log('[NEW AUTH] SUCCESS:', result);
-        
-        if (result.status === 'authenticated' && result.invite_code) {
-          const newCode = result.invite_code;
-          
-          // УСТАНОВИТЬ КОД СРАЗУ!
-          setParentCode(newCode);
-          parentCodeRef.current = newCode;  // ← КРИТИЧНО!
-          
-          setIsInviteModalOpen(false);
-          await tgCloudSet(INVITE_KEY, newCode); // Сохраняем в Cloud
-          
-          // ПЕРЕЗАГРУЗИТЬ ДАННЫЕ НОВОЙ СЕМЬИ!
-          setTimeout(() => refreshTasks(), 1000);
+        console.log("[NEW AUTH] SUCCESS:", result);
 
-          // Загрузить коды семьи
+        if (result.status === "authenticated" && result.invite_code) {
+          showAuthOnboarding(result);
+          const newCode = result.invite_code;
+          setParentCode(newCode);
+          setIsInviteModalOpen(false);
+          setAuthError(null);
+          await writeSavedInviteCode(INVITE_KEY, newCode);
+
           try {
             const codes = await parentApi.getFamilyCodes(newCode);
             setPartnerCode(codes.partnerCode || undefined);
-            setFriendCodes(codes.friendCodes);
-            console.log('[FAMILY CODES]', codes);
+            setFriendCodes(codes.friendCodes || []);
           } catch (err) {
-            console.error('[FAMILY CODES] ERROR:', err);
+            console.error("[FAMILY CODES] ERROR:", err);
           }
-        } else if (result.status === 'needs_invite') {
+        } else if (!parentCode) {
           setIsInviteModalOpen(true);
         }
-        
-        setAuthError(null);
       } catch (err: any) {
-        console.error('[NEW AUTH] FAILED:', err);
-        setAuthError(err.message || 'Ошибка авторизации');
-        
-        // Fallback к старому AUTH
+        console.error("[NEW AUTH] FAILED:", err);
         if (!parentCode) {
+          setAuthError(err?.message || "Ошибка авторизации");
           setIsInviteModalOpen(true);
         }
       } finally {
         setIsAuthLoading(false);
-        setIsAuthResolved(true);
+        setIsAuthBootstrapping(false);
       }
-    } else {
-      console.log('[NEW AUTH] No Telegram initData - skip');
-      
-      // Fallback к старому AUTH только если НЕТ initData
-      if (!parentCode) {
-        setIsInviteModalOpen(true);
-      }
-      setIsAuthResolved(true);
-    }
-  };
+    };
 
-  // Запускаем ВСЕГДА (приоритет новому AUTH!)
-  initAuth();
-}, []);
+    initAuth();
+  }, [isIdentityReady, isAuthResolved, INVITE_KEY, parentCode]);
 
 useEffect(() => {
   console.log("[AUTH STATE]", {
@@ -594,6 +865,23 @@ useEffect(() => {
 
     return () => window.clearTimeout(id);
   }, [isAuthResolved, parentCode, isInitialDataLoading]);
+
+  useEffect(() => {
+    if (!isIdentityReady || !isAuthResolved || isAuthBootstrapping) return;
+
+    const isDataReady = parentCode ? !isInitialDataLoading : true;
+    if (!isDataReady) return;
+
+    const elapsed = Date.now() - bootStartedAtRef.current;
+    const minDelay = Math.max(0, 1300 - elapsed);
+
+    const id = window.setTimeout(() => {
+      setIsBootFading(true);
+      window.setTimeout(() => setIsAppBootLoading(false), 320);
+    }, minDelay);
+
+    return () => window.clearTimeout(id);
+  }, [isIdentityReady, isAuthResolved, isAuthBootstrapping, parentCode, isInitialDataLoading]);
 
   // ===== refreshTasks =====
   const parentCodeRef = useRef<string>("");
@@ -635,6 +923,84 @@ useEffect(() => {
     }
   }, [parentCode, getAppCacheKey]);
 
+  const refreshBillingStatus = useCallback(
+    async (options?: { silent?: boolean }) => {
+      const code = parentCodeRef.current;
+      if (!code) {
+        setBilling(BILLING_DEFAULT_STATE);
+        return;
+      }
+
+      if (!options?.silent) {
+        setBilling((prev) => ({ ...prev, loading: true, error: null }));
+      }
+
+      try {
+        const status = await parentApi.getBillingStatus(code);
+        setBilling(normalizeBillingState(status));
+      } catch (err: any) {
+        console.error("[billing/status] FAILED:", err);
+        setBilling((prev) => ({
+          ...prev,
+          loading: false,
+          loaded: prev.loaded,
+          error: err?.message || "Не удалось загрузить биллинг",
+        }));
+      }
+    },
+    []
+  );
+
+  const showAuthOnboarding = useCallback(
+    (authResult: any) => {
+      const onboarding = authResult?.onboarding || null;
+      const billingTrial = authResult?.billing_trial || null;
+      const referralBonus = authResult?.referral_bonus || null;
+
+      const trialActivated = Boolean(
+        onboarding?.type === "welcome_trial" || billingTrial?.activated
+      );
+      const creditsAdded = Math.max(
+        0,
+        Number(onboarding?.credits_added ?? billingTrial?.credits_added ?? 0) || 0
+      );
+      const expiresAt = String(onboarding?.expires_at ?? billingTrial?.expires_at ?? "").trim() || null;
+      const referralCreditsAdded = Math.max(
+        0,
+        Number(referralBonus?.granted ? referralBonus?.credits_added : 0) || 0
+      );
+
+      if (!trialActivated && referralCreditsAdded <= 0) return;
+
+      const dedupKey = `${trialActivated ? 1 : 0}|${creditsAdded}|${expiresAt || ""}|${referralCreditsAdded}`;
+      if (shownOnboardingKeyRef.current === dedupKey) return;
+      shownOnboardingKeyRef.current = dedupKey;
+
+      const lines: string[] = [];
+      if (trialActivated) {
+        lines.push(
+          `Активирована бесплатная подписка на 14 дней и начислено ${creditsAdded || 60} кредитов.`
+        );
+      }
+      if (expiresAt) {
+        lines.push(`Действует до ${formatBillingDate(expiresAt)}.`);
+      }
+      if (referralCreditsAdded > 0) {
+        lines.push(`Реферальный бонус: +${referralCreditsAdded} кредитов.`);
+      }
+
+      setAuthOnboarding({
+        message: lines.join(" "),
+        creditsAdded: creditsAdded || (trialActivated ? 60 : 0),
+        expiresAt,
+        referralCreditsAdded,
+      });
+
+      void refreshBillingStatus({ silent: false });
+    },
+    [refreshBillingStatus]
+  );
+
   const refreshTasks = useCallback(async () => {
     const code = parentCodeRef.current;
 
@@ -662,26 +1028,21 @@ useEffect(() => {
       }
 
       // ТРАНСФОРМАЦИЯ: добавляем dream, missions, activities
-      const nextKids = rawKids.map((kid: any) => {
-        const prevKid = prevKidsById[String(kid?.id || "")];
-        const prevDreamImage = prevKid?.dream?.image || "";
-        const cachedImage = dreamImageCacheRef.current[String(kid?.id || "")] || "";
-        return {
-          ...kid,
-          apiChildId: kid.id,
-          inviteCode: kid.invite_code || "",
-          gender: kid.gender || 'male',
-          balance: kid.balance,
-          dream: {
-            title: kid.dream_title || prevKid?.dream?.title || "Мечта",
-            image: cachedImage || prevDreamImage || resolveDreamImage(kid),
-            current: kid.dream_current ?? prevKid?.dream?.current ?? kid.balance?.confirmed ?? 0,
-            price: kid.dream_target ?? prevKid?.dream?.price ?? 10000
-          },
-          missions: [],
-          activities: []
-        };
-      });
+      const nextKids = rawKids.map((kid: any) => ({
+        ...kid,
+        apiChildId: kid.id,
+        inviteCode: kid.invite_code || "",
+        gender: kid.gender || 'male',
+        balance: kid.balance,
+        dream: {
+          title: kid.dream_title || "Мечта",
+          image: resolveDreamImage(kid),
+          current: kid.dream_current || kid.balance?.confirmed || 0,
+          price: kid.dream_target || 10000
+        },
+        missions: [],
+        activities: []
+      }));
 
       const resp = await parentApi.getTasks(code);
       let hydratedKids = nextKids;
@@ -720,24 +1081,12 @@ useEffect(() => {
           dreamsByChild[childId] = dream;
         }
 
-        const prevKidsById: Record<string, any> = {};
-        for (const prevKid of apiChildren || []) {
-          if (prevKid?.id) prevKidsById[String(prevKid.id)] = prevKid;
-        }
-
         hydratedKids = nextKids.map((kid: any) => {
           const childId = String(kid?.id || "");
           const activeDream = dreamsByChild[childId];
           if (!activeDream) return kid;
 
-          const prevKid = prevKidsById[childId];
-          let imageFromDream = resolveActiveDreamImage(activeDream, prevKid || kid);
-          if (prevKid && hasUsableDreamImage(prevKid) && isPlaceholderDreamImage(imageFromDream)) {
-            imageFromDream = resolveDreamImage(prevKid);
-          }
-          if (imageFromDream && !isPlaceholderDreamImage(imageFromDream)) {
-            dreamImageCacheRef.current[childId] = imageFromDream;
-          }
+          const imageFromDream = resolveActiveDreamImage(activeDream, kid);
           const currentFromDream = Number(activeDream?.current_amount ?? kid?.dream?.current ?? 0) || 0;
           const targetFromDream = Number(activeDream?.target_amount ?? kid?.dream?.price ?? 10000) || 10000;
           const titleFromDream = String(activeDream?.title || kid?.dream?.title || "Мечта");
@@ -798,10 +1147,6 @@ useEffect(() => {
             hydratedKids = hydratedKids.map((kid: any) => {
               const fallbackDream = fallbackByKidId[String(kid?.id || "")];
               if (!fallbackDream) return kid;
-              const image = resolveActiveDreamImage(fallbackDream, kid);
-              if (image && !isPlaceholderDreamImage(image)) {
-                dreamImageCacheRef.current[String(kid?.id || "")] = image;
-              }
               return {
                 ...kid,
                 dream: {
@@ -809,7 +1154,7 @@ useEffect(() => {
                   title: String(fallbackDream?.title || kid?.dream?.title || "Мечта"),
                   current: Number(fallbackDream?.current_amount ?? kid?.dream?.current ?? 0) || 0,
                   price: Number(fallbackDream?.target_amount ?? kid?.dream?.price ?? 10000) || 10000,
-                  image,
+                  image: resolveActiveDreamImage(fallbackDream, kid),
                 },
               };
             });
@@ -818,6 +1163,35 @@ useEffect(() => {
           console.error("[dreams/my fallback] FAILED:", e);
         }
       }
+
+      // Не затираем уже полученную dream-картинку заглушкой при автообновлении.
+      const prevKidsById = new Map<string, any>();
+      for (const prevKid of latestChildrenRef.current || []) {
+        const prevApiId = String((prevKid as any)?.apiChildId || "").trim();
+        const prevId = String((prevKid as any)?.id || "").trim();
+        if (prevApiId) prevKidsById.set(prevApiId, prevKid);
+        if (prevId) prevKidsById.set(prevId, prevKid);
+      }
+
+      hydratedKids = hydratedKids.map((kid: any) => {
+        const keyApi = String(kid?.apiChildId || "").trim();
+        const keyId = String(kid?.id || "").trim();
+        const prevKid = prevKidsById.get(keyApi) || prevKidsById.get(keyId);
+        if (!prevKid) return kid;
+
+        const keepPrevImage = !hasUsableDreamImage(kid) && hasUsableDreamImage(prevKid);
+        const keepPrevTitle = !hasMeaningfulDreamTitle(kid) && hasMeaningfulDreamTitle(prevKid);
+        if (!keepPrevImage && !keepPrevTitle) return kid;
+
+        return {
+          ...kid,
+          dream: {
+            ...kid.dream,
+            title: keepPrevTitle ? String(prevKid?.dream?.title || kid?.dream?.title || "Мечта") : kid?.dream?.title,
+            image: keepPrevImage ? resolveDreamImage(prevKid) : kid?.dream?.image,
+          },
+        };
+      });
 
       setApiChildren(hydratedKids);
       setChildren(hydratedKids as any);
@@ -1027,6 +1401,25 @@ useEffect(() => {
     };
   }, [refreshTasks]);
 
+  useEffect(() => {
+    let alive = true;
+
+    const tick = async (silent: boolean) => {
+      if (!alive) return;
+      await refreshBillingStatus({ silent });
+    };
+
+    tick(false);
+    const id = window.setInterval(() => {
+      void tick(true);
+    }, 15000);
+
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+  }, [refreshBillingStatus, parentCode]);
+
   // task actions
   const onTaskAction = useCallback(
     async (taskId: string, action: "confirm" | "reject" | "delete") => {
@@ -1201,9 +1594,12 @@ useEffect(() => {
   }, [uiChildren, selectedChildId]);
 
   const handleAddMissionIdea = useCallback((idea: string) => {
-    const title = String(idea || "").trim();
-    if (!title) return;
-    setMissionIdeaDraft(title);
+    const normalized = String(idea || "")
+      .replace(/\(\s*\d+\s*зв[её]зд?\s*\)/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!normalized) return;
+    setMissionIdeaDraft(normalized);
     setMissionIdeaNonce((prev) => prev + 1);
     setActiveTab(Tab.MISSIONS);
   }, []);
@@ -1295,6 +1691,7 @@ useEffect(() => {
 
   const handleLogout = () => {
     clearAppCache(parentCode);
+    void clearSavedInviteCode(INVITE_KEY);
     setParentCode("");
     setPartnerCode(undefined);
     setFriendCodes([]);
@@ -1307,6 +1704,118 @@ useEffect(() => {
     selectedChildIdRef.current = "";
   };
 
+  useEffect(() => {
+    if (!billingBanner) return;
+    const timer = setTimeout(() => setBillingBanner(null), 5000);
+    return () => clearTimeout(timer);
+  }, [billingBanner]);
+
+  const openBillingModal = useCallback(() => {
+    setIsBillingModalOpen(true);
+    setBillingPromoCode("");
+  }, []);
+
+  const loadAdminStats = useCallback(
+    async (override?: { days?: number }) => {
+      const days = Math.max(1, Math.min(90, Number(override?.days ?? adminPeriodDays) || 7));
+      const inviteCode = String(parentCodeRef.current || parentCode || "").trim();
+      if (!inviteCode) {
+        setAdminError("Нет parent invite code для загрузки админ-статистики.");
+        return;
+      }
+
+      setAdminLoading(true);
+      setAdminError(null);
+      try {
+        const stats = await adminApi.getStatsByInvite(inviteCode, days);
+        setAdminStats(stats);
+        setAdminPeriodDays(days);
+      } catch (err: any) {
+        const raw = String(err?.message || "Не удалось загрузить статистику");
+        setAdminError(raw.includes("FORBIDDEN") ? "Нет доступа к админ-статистике для текущего аккаунта." : raw);
+      } finally {
+        setAdminLoading(false);
+      }
+    },
+    [adminPeriodDays, parentCode]
+  );
+
+  const openAdminModal = useCallback(() => {
+    setIsAdminModalOpen(true);
+    setAdminError(null);
+    void loadAdminStats({ days: adminPeriodDays });
+  }, [adminPeriodDays, loadAdminStats]);
+
+  const requireCapability = useCallback(
+    (allowed: boolean, message: string) => {
+      if (allowed) return true;
+      setBillingBanner({ type: "info", message });
+      openBillingModal();
+      return false;
+    },
+    [openBillingModal]
+  );
+
+  const handleCreateCheckout = useCallback(
+    async (product: "monthly_subscription" | "topup_60") => {
+      if (!parentCodeRef.current) return;
+      setBillingActionLoading(true);
+      try {
+        const response = await parentApi.createBillingCheckout(parentCodeRef.current, product);
+        const checkoutUrl = String(response?.checkout_url || "").trim();
+        if (!checkoutUrl) {
+          throw new Error("Ссылка на оплату не получена");
+        }
+        const tg = getTg();
+        if (tg?.openLink) {
+          tg.openLink(checkoutUrl);
+        } else {
+          window.open(checkoutUrl, "_blank", "noopener,noreferrer");
+        }
+        setBillingBanner({
+          type: "success",
+          message: "Окно оплаты открыто. После успешного платежа баланс обновится автоматически.",
+        });
+      } catch (err: any) {
+        setBillingBanner({
+          type: "error",
+          message: `Ошибка оплаты: ${err?.message || "Не удалось открыть оплату"}`,
+        });
+      } finally {
+        setBillingActionLoading(false);
+      }
+    },
+    []
+  );
+
+  const handleRedeemPromo = useCallback(async () => {
+    const code = String(billingPromoCode || "").trim();
+    if (!code) {
+      setBillingBanner({ type: "info", message: "Введите промокод." });
+      return;
+    }
+    if (!parentCodeRef.current) return;
+    setBillingActionLoading(true);
+    try {
+      const result = await parentApi.redeemPromoCode(parentCodeRef.current, code);
+      setBillingBanner({
+        type: result?.success ? "success" : "error",
+        message: result?.message || (result?.success ? "Промокод активирован." : "Промокод не применён."),
+      });
+      if (result?.success) {
+        setBillingPromoCode("");
+        await refreshBillingStatus({ silent: false });
+      }
+    } catch (err: any) {
+      setBillingBanner({
+        type: "error",
+        message: `Ошибка промокода: ${err?.message || "Не удалось активировать промокод"}`,
+      });
+    } finally {
+      setBillingActionLoading(false);
+    }
+  }, [billingPromoCode, refreshBillingStatus]);
+
   const renderContent = () => {
     // ЗАЩИТА ОТ NULL!
     if (!selectedChild && uiChildren.length === 0) {
@@ -1315,8 +1824,14 @@ useEffect(() => {
           <div className="text-6xl mb-4">👋</div>
           <h2 className="text-2xl font-bold mb-2 text-white">Добро пожаловать!</h2>
           <p className="text-white/60 mb-6">Добавьте первого ребёнка, чтобы начать</p>
+          <p className="text-white/45 mb-6 text-xs">
+            Если вход выполнен по коду друга, создаётся новая семья с пустым стартом — это нормальное поведение.
+          </p>
           <button
-            onClick={() => setIsAddChildOpen(true)}
+            onClick={() => {
+              if (!requireCapability(billing.canCreateChildren, "Создание новых профилей доступно только при активной подписке.")) return;
+              setIsAddChildOpen(true);
+            }}
             className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl font-semibold hover:scale-105 transition-transform"
           >
             + Добавить ребёнка
@@ -1360,6 +1875,8 @@ useEffect(() => {
             onTaskAction={onTaskAction as any}
             parentCode={parentCode}
             onRefresh={refreshTasks as any}
+            canCreateMissions={billing.canCreateMissions}
+            creationBlockedReason="Создание миссий доступно только при активной подписке."
             prefillMissionTitle={missionIdeaDraft}
             prefillMissionNonce={missionIdeaNonce}
             onConsumePrefill={handleConsumeMissionIdea}
@@ -1377,16 +1894,30 @@ useEffect(() => {
             allChildren={uiChildren}
             inviteCode={parentCode}
             currentChild={selectedChild}
+            canCreateRewards={billing.canCreateRewards}
+            creationBlockedReason="Создание наград доступно только при активной подписке."
           />
         );
 
       case Tab.AI_ASSISTANT:
         return selectedChild ? (
-          <AIAssistant
-            child={selectedChild}
-            inviteCode={parentCode}
-            onAddMissionIdea={handleAddMissionIdea}
-          />
+          billing.canUseAI ? (
+            <AIAssistant child={selectedChild} inviteCode={parentCode} onAddMissionIdea={handleAddMissionIdea} />
+          ) : (
+            <div className="rounded-[2.4rem] border border-white/10 bg-[var(--bg-card)] p-7">
+              <h3 className="text-xl font-black text-white">ИИ недоступен</h3>
+              <p className="mt-3 text-sm font-bold text-[var(--text-muted)]">
+                Для генерации аналитики нужна активная подписка.
+              </p>
+              <button
+                onClick={openBillingModal}
+                className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-[var(--primary)] px-5 py-3 text-sm font-black text-white"
+              >
+                <Coins size={16} />
+                Открыть оплату
+              </button>
+            </div>
+          )
         ) : (
           <div className="text-center py-12 text-white/60">
             Выберите ребёнка
@@ -1411,7 +1942,14 @@ useEffect(() => {
   };
 
   // ===== Auth gate =====
-  if (!isAuthResolved || isAppBootLoading || isInitialDataLoading) {
+  const shouldShowBootSplash =
+    !isIdentityReady ||
+    !isAuthResolved ||
+    isAuthBootstrapping ||
+    isAppBootLoading ||
+    (Boolean(parentCode) && isInitialDataLoading);
+
+  if (shouldShowBootSplash) {
     return <AppSplash isFading={isBootFading} />;
   }
 
@@ -1455,6 +1993,7 @@ useEffect(() => {
                   console.log('[INVITE MODAL] AUTH RESULT:', result);
                   
                   if (result.status === 'authenticated' && result.invite_code) {
+                    showAuthOnboarding(result);
                     const newCode = result.invite_code;
                     
                     // УСТАНОВИТЬ КОД СРАЗУ!
@@ -1462,7 +2001,7 @@ useEffect(() => {
                     parentCodeRef.current = newCode;  // ← КРИТИЧНО!
                     
                     // СОХРАНЯЕМ В CLOUD!
-                    await tgCloudSet(INVITE_KEY, newCode);
+                    await writeSavedInviteCode(INVITE_KEY, newCode);
                     
                     setIsInviteModalOpen(false);
                     setAuthError(null);
@@ -1492,7 +2031,7 @@ useEffect(() => {
             className="mt-3 w-full rounded-xl px-4 py-3"
             style={{ backgroundColor: "rgba(255,255,255,0.08)" }}
             onClick={async () => {
-              if (identityKey) await tgCloudDel(INVITE_KEY);
+              if (identityKey) await clearSavedInviteCode(INVITE_KEY);
               setCodeDraft("");
               setParentCode("");
               setIsInviteModalOpen(true);
@@ -1512,14 +2051,25 @@ useEffect(() => {
   }
 
   return (
-    <div className="h-screen h-[100dvh] min-h-screen flex flex-col transition-colors duration-500 bg-black text-white w-full max-w-full overflow-hidden overflow-x-clip">
-      <header className="w-full px-4 pt-[max(env(safe-area-inset-top),0.75rem)] pb-0 sticky top-0 z-40 bg-black max-w-full">
+    <div className="app-shell h-screen h-[100dvh] min-h-screen flex flex-col transition-colors duration-500 bg-black text-white w-full max-w-full overflow-hidden overflow-x-clip">
+      <header className="w-full px-4 sm:px-5 pt-[max(env(safe-area-inset-top),0.75rem)] pb-0 sticky top-0 z-40 bg-black max-w-full">
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-3xl font-black tracking-tight text-center">
             В<span className="text-amber-400">Э</span>Й!
           </h1>
 
           <div className="flex gap-2 items-center">
+            <button
+              onClick={openBillingModal}
+              className="px-3 py-2 rounded-full bg-white/5 text-[var(--text-muted)] hover:text-[var(--primary)] transition-all border border-white/5 inline-flex items-center gap-2"
+              title="Оплата и кредиты"
+            >
+              <Coins size={16} />
+              <span className="text-xs font-black tracking-wide">
+                {billing.loading ? "..." : compactCredits(billing.creditsBalance)}
+              </span>
+            </button>
+
             <button
               onClick={toggleTheme}
               className="p-2.5 rounded-full bg-white/5 text-[var(--text-muted)] hover:text-[var(--primary)] transition-all border border-white/5"
@@ -1545,10 +2095,29 @@ useEffect(() => {
             setSelectedChildId(id);
             selectedChildIdRef.current = id;
           }}
-          onAdd={() => setIsAddChildOpen(true)}
+          onAdd={() => {
+            if (!requireCapability(billing.canCreateChildren, "Создание новых профилей доступно только при активной подписке.")) return;
+            setIsAddChildOpen(true);
+          }}
           childPurchases={childPurchases}
         />
       </header>
+
+      {billingBanner ? (
+        <div className="px-4 pt-2">
+          <div
+            className={`max-w-3xl mx-auto rounded-2xl border px-4 py-3 text-sm font-bold ${
+              billingBanner.type === "error"
+                ? "border-rose-400/40 bg-rose-500/10 text-rose-200"
+                : billingBanner.type === "success"
+                  ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-200"
+                  : "border-cyan-400/40 bg-cyan-500/10 text-cyan-100"
+            }`}
+          >
+            {billingBanner.message}
+          </div>
+        </div>
+      ) : null}
 
       <main className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain scrollArea max-w-3xl mx-auto px-4 md:px-6 mt-2 pb-[calc(10rem+env(safe-area-inset-bottom))] w-full max-w-full box-border">
         {renderContent()}
@@ -1577,7 +2146,10 @@ useEffect(() => {
           />
           <NavButton
             active={activeTab === Tab.AI_ASSISTANT}
-            onClick={() => setActiveTab(Tab.AI_ASSISTANT)}
+            onClick={() => {
+              if (!requireCapability(billing.canUseAI, "ИИ доступен только при активной подписке.")) return;
+              setActiveTab(Tab.AI_ASSISTANT);
+            }}
             icon={<Sparkles size={24} />}
             label="ИИ"
           />
@@ -1591,6 +2163,7 @@ useEffect(() => {
           onDeleteChild={handleDeleteChild as any}
           onClose={() => setIsSettingsOpen(false)}
           onOpenAddChild={() => {
+            if (!requireCapability(billing.canCreateChildren, "Создание новых профилей доступно только при активной подписке.")) return;
             setIsSettingsOpen(false);
             setIsAddChildOpen(true);
           }}
@@ -1601,11 +2174,55 @@ useEffect(() => {
         />
       )}
 
+      {isBillingModalOpen ? (
+        <BillingModal
+          billing={billing}
+          promoCode={billingPromoCode}
+          onPromoCodeChange={setBillingPromoCode}
+          onClose={() => setIsBillingModalOpen(false)}
+          onBuyMonthly={() => handleCreateCheckout("monthly_subscription")}
+          onTopup60={() => handleCreateCheckout("topup_60")}
+          onApplyPromo={handleRedeemPromo}
+          isActionLoading={billingActionLoading}
+        />
+      ) : null}
+
+      {isAdminModalOpen ? (
+        <AdminStatsModal
+          periodDays={adminPeriodDays}
+          onPeriodDaysChange={(days) => {
+            setAdminPeriodDays(days);
+            void loadAdminStats({ days });
+          }}
+          stats={adminStats}
+          loading={adminLoading}
+          error={adminError}
+          onRefresh={() => void loadAdminStats()}
+          onClose={() => setIsAdminModalOpen(false)}
+        />
+      ) : null}
+
+      {authOnboarding ? (
+        <AuthOnboardingModal
+          onboarding={authOnboarding}
+          onClose={() => setAuthOnboarding(null)}
+        />
+      ) : null}
+
       {isAddChildOpen && (
         <AddChildScreen
           onCancel={() => setIsAddChildOpen(false)}
           onAdd={async (newChild: any) => {
             try {
+              if (!billing.canCreateChildren) {
+                setBillingBanner({
+                  type: "info",
+                  message: "Создание новых профилей доступно только при активной подписке.",
+                });
+                setIsAddChildOpen(false);
+                openBillingModal();
+                return;
+              }
               // СОЗДАТЬ РЕБЁНКА В API!
               if (parentCode) {
                 const response = await parentApi.addChild(parentCode, {
@@ -1730,6 +2347,292 @@ const NavButton: React.FC<NavButtonProps> = ({
     </div>
     <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>
   </button>
+);
+
+interface BillingModalProps {
+  billing: BillingUiState;
+  promoCode: string;
+  onPromoCodeChange: (value: string) => void;
+  onBuyMonthly: () => void;
+  onTopup60: () => void;
+  onApplyPromo: () => void;
+  onClose: () => void;
+  isActionLoading: boolean;
+}
+
+interface AuthOnboardingModalProps {
+  onboarding: NonNullable<AuthOnboardingState>;
+  onClose: () => void;
+}
+
+interface AdminStatsModalProps {
+  periodDays: number;
+  onPeriodDaysChange: (value: number) => void;
+  stats: AdminStatsResponse | null;
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+  onClose: () => void;
+}
+
+const AuthOnboardingModal: React.FC<AuthOnboardingModalProps> = ({
+  onboarding,
+  onClose,
+}) => (
+  <div className="fixed inset-0 z-[132] flex items-center justify-center p-4">
+    <div className="absolute inset-0 bg-black/85 backdrop-blur-xl" onClick={onClose} />
+    <div className="relative w-full max-w-md rounded-[2rem] border border-white/10 bg-[#0B0B10] p-6 sm:p-7 shadow-[0_30px_80px_rgba(0,0,0,0.8)]">
+      <h3 className="text-xl font-black tracking-tight text-white inline-flex items-center gap-2">
+        <Coins size={20} className="text-[var(--primary)]" />
+        Бесплатный доступ активирован
+      </h3>
+      <p className="mt-3 text-sm font-bold text-white/80">{onboarding.message}</p>
+
+      <div className="mt-4 grid grid-cols-1 gap-2">
+        {onboarding.creditsAdded > 0 ? (
+          <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-sm font-black text-emerald-200">
+            +{onboarding.creditsAdded} кредитов
+          </div>
+        ) : null}
+        {onboarding.expiresAt ? (
+          <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white/70">
+            Подписка до {formatBillingDate(onboarding.expiresAt)}
+          </div>
+        ) : null}
+      </div>
+
+      <button
+        type="button"
+        onClick={onClose}
+        className="mt-5 w-full rounded-2xl bg-[var(--primary)] px-4 py-3 font-black text-white transition-all active:scale-95"
+      >
+        Понятно
+      </button>
+    </div>
+  </div>
+);
+
+const AdminStatsModal: React.FC<AdminStatsModalProps> = ({
+  periodDays,
+  onPeriodDaysChange,
+  stats,
+  loading,
+  error,
+  onRefresh,
+  onClose,
+}) => {
+  const hasStats = Boolean(stats);
+  const dau = Number(stats?.activity?.families_active?.dau ?? 0);
+  const wau = Number(stats?.activity?.families_active?.wau ?? 0);
+  const mau = Number(stats?.activity?.families_active?.mau ?? 0);
+  const display = (value: string) => (hasStats ? value : "—");
+
+  const cards = [
+    {
+      label: "Новые семьи",
+      value: display(String(Number(stats?.funnel?.new_families ?? 0))),
+    },
+    {
+      label: "DAU / WAU / MAU",
+      value: display(`${dau} / ${wau} / ${mau}`),
+    },
+    {
+      label: "Миссии создано",
+      value: display(String(Number(stats?.activity?.missions?.created ?? 0))),
+    },
+    {
+      label: "Награды создано",
+      value: display(String(Number(stats?.activity?.rewards?.created ?? 0))),
+    },
+    {
+      label: "AI запросы",
+      value: display(String(Number(stats?.ai?.requests?.total ?? 0))),
+    },
+    {
+      label: "Успех генераций",
+      value: display(`${Number(stats?.images?.success_pct ?? 0).toFixed(1)}%`),
+    },
+    {
+      label: "MRR (оценка)",
+      value: display(`${Number(stats?.billing?.revenue?.mrr_estimate_rub ?? 0)} ₽`),
+    },
+    {
+      label: "Ошибки API",
+      value: display(String(Number(stats?.api_errors?.total ?? 0))),
+    },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-[131] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/85 backdrop-blur-xl" onClick={onClose} />
+      <div className="relative w-full max-w-2xl max-h-[86vh] overflow-y-auto rounded-[2rem] border border-white/10 bg-[#0B0B10] p-5 sm:p-7 shadow-[0_30px_80px_rgba(0,0,0,0.8)]">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-xl font-black tracking-tight text-white inline-flex items-center gap-2">
+            <BarChart3 size={20} className="text-[var(--primary)]" />
+            Админ статистика
+          </h3>
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={loading}
+            className="h-10 px-4 rounded-xl border border-white/15 bg-white/5 text-xs font-black text-white/90 inline-flex items-center gap-2 active:scale-95 disabled:opacity-60"
+          >
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+            Обновить
+          </button>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--text-muted)] font-black">Доступ</p>
+          <p className="mt-2 text-xs font-bold text-white/70">
+            Статистика загружается автоматически по текущему parent-коду.
+          </p>
+          <div className="mt-3 flex items-center gap-2">
+            {[7, 14, 30].map((days) => (
+              <button
+                key={days}
+                type="button"
+                onClick={() => onPeriodDaysChange(days)}
+                className={`h-9 px-3 rounded-lg text-xs font-black transition-all ${
+                  periodDays === days
+                    ? "bg-[var(--primary)] text-white"
+                    : "border border-white/15 bg-white/5 text-white/80"
+                }`}
+              >
+                {days} дней
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {error ? (
+          <div className="mt-4 rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-xs font-bold text-rose-200">
+            {error}
+          </div>
+        ) : null}
+
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {cards.map((card) => (
+            <div key={card.label} className="rounded-xl border border-white/10 bg-black/30 p-3">
+              <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)] font-black">{card.label}</div>
+              <div className="mt-1 text-lg font-black text-white">{card.value}</div>
+            </div>
+          ))}
+        </div>
+
+        {stats ? (
+          <details className="mt-4 rounded-xl border border-white/10 bg-black/25 p-3">
+            <summary className="cursor-pointer text-xs font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">
+              RAW JSON
+            </summary>
+            <pre className="mt-3 text-[11px] leading-relaxed text-white/75 overflow-x-auto whitespace-pre-wrap break-all">
+              {JSON.stringify(stats, null, 2)}
+            </pre>
+          </details>
+        ) : (
+          <div className="mt-4 rounded-xl border border-white/10 bg-black/25 px-3 py-4 text-xs font-bold text-white/60">
+            {loading ? "Загрузка статистики..." : "Откройте модалку повторно или нажмите «Обновить», если данные ещё не подтянулись."}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-5 w-full rounded-2xl border border-white/15 px-4 py-3 font-black text-white/80 transition-all hover:text-white active:scale-95"
+        >
+          Закрыть
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const BillingModal: React.FC<BillingModalProps> = ({
+  billing,
+  promoCode,
+  onPromoCodeChange,
+  onBuyMonthly,
+  onTopup60,
+  onApplyPromo,
+  onClose,
+  isActionLoading,
+}) => (
+  <div className="fixed inset-0 z-[130] flex items-center justify-center p-4">
+    <div className="absolute inset-0 bg-black/85 backdrop-blur-xl" onClick={onClose} />
+    <div className="relative w-full max-w-md rounded-[2rem] border border-white/10 bg-[#0B0B10] p-6 sm:p-7 shadow-[0_30px_80px_rgba(0,0,0,0.8)]">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-xl font-black tracking-tight text-white inline-flex items-center gap-2">
+          <Coins size={20} className="text-[var(--primary)]" />
+          Оплата и кредиты
+        </h3>
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4">
+        <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--text-muted)] font-black">Баланс кредитов</p>
+        <p className="mt-2 text-3xl font-black text-white">{billing.loading ? "..." : billing.creditsBalance}</p>
+        <p className="mt-2 text-xs font-bold text-[var(--text-muted)]">
+          План: {billing.planCode.toUpperCase()} {billing.planActive ? "• активен" : "• неактивен"}
+        </p>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-3">
+        <button
+          type="button"
+          disabled={isActionLoading}
+          onClick={onBuyMonthly}
+          className="rounded-2xl bg-[var(--primary)] px-4 py-3 text-sm font-black text-white active:scale-95 disabled:opacity-60 inline-flex items-center justify-center gap-2"
+        >
+          <CreditCard size={16} />
+          Подписка 499 ₽ + 60 кредитов
+        </button>
+        <button
+          type="button"
+          disabled={isActionLoading}
+          onClick={onTopup60}
+          className="rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-black text-white/90 active:scale-95 disabled:opacity-60 inline-flex items-center justify-center gap-2"
+        >
+          <Coins size={16} />
+          Докупить 60 кредитов
+        </button>
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+        <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--text-muted)] font-black">Промокод</p>
+        <div className="mt-3 flex items-center gap-2">
+          <input
+            type="text"
+            value={promoCode}
+            onChange={(e) => onPromoCodeChange(e.target.value.toUpperCase())}
+            placeholder="Введите промокод"
+            className="h-11 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 text-sm font-bold text-white outline-none focus:border-[var(--primary)]"
+          />
+          <button
+            type="button"
+            disabled={isActionLoading}
+            onClick={onApplyPromo}
+            className="h-11 rounded-xl border border-[var(--primary)]/30 bg-[var(--primary)]/15 px-3 text-xs font-black text-[var(--primary)] active:scale-95 disabled:opacity-60 inline-flex items-center gap-1"
+          >
+            <TicketPercent size={14} />
+            Активировать
+          </button>
+        </div>
+      </div>
+
+      {billing.error ? (
+        <div className="mt-4 rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-xs font-bold text-rose-200">
+          {billing.error}
+        </div>
+      ) : null}
+
+      <button
+        type="button"
+        onClick={onClose}
+        className="mt-5 w-full rounded-2xl border border-white/15 px-4 py-3 font-black text-white/80 transition-all hover:text-white active:scale-95"
+      >
+        Закрыть
+      </button>
+    </div>
+  </div>
 );
 
 interface ChildInviteCodeModalProps {

@@ -27,8 +27,8 @@ interface Props {
 
   // чтобы после create/confirm/reject тянуть свежие tasks
   onRefresh: () => Promise<void> | void;
-
-  // prefill from AI ideas
+  canCreateMissions?: boolean;
+  creationBlockedReason?: string;
   prefillMissionTitle?: string;
   prefillMissionNonce?: number;
   onConsumePrefill?: () => void;
@@ -74,6 +74,8 @@ const Missions: React.FC<Props> = ({
   onTaskAction,
   parentCode,
   onRefresh,
+  canCreateMissions = true,
+  creationBlockedReason = "Создание миссий временно недоступно.",
   prefillMissionTitle,
   prefillMissionNonce,
   onConsumePrefill,
@@ -82,7 +84,6 @@ const Missions: React.FC<Props> = ({
   const { runInstant, isPending } = useInstantAction();
   const isCreatingMission = isPending("mission:create");
   const rewardInputRef = useRef<HTMLInputElement | null>(null);
-  const [isPrefillMode, setIsPrefillMode] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<{
     type: "success" | "error" | "info";
     message: string;
@@ -123,46 +124,23 @@ const Missions: React.FC<Props> = ({
     }
   }, [allChildren, child.id, isAdding, selectedChildIds.length]);
 
-  const generateMissionIcon = (title: string): string => {
-    const text = String(title || "").toLowerCase();
-    if (!text) return "✅";
-    const rules: Array<[RegExp, string]> = [
-      [/чита|книг/, "📚"],
-      [/убор|поряд|убрат/, "🧹"],
-      [/посуд|мыть|стир/, "🧼"],
-      [/спорт|зарядк|бег|йог|упражн/, "🏃"],
-      [/музык|пиан|гитар|песн/, "🎵"],
-      [/урок|учеб|домашн|школ/, "📝"],
-      [/цвет|растен|полив/, "🌿"],
-      [/помог|покуп|магазин/, "🛒"],
-      [/готов|еда|кухн/, "🍽️"],
-      [/собак|кот|живот/, "🐶"],
-    ];
-    for (const [rx, emoji] of rules) {
-      if (rx.test(text)) return emoji;
-    }
-    return "✨";
-  };
-
   useEffect(() => {
     if (!prefillMissionTitle || !prefillMissionNonce) return;
     const title = String(prefillMissionTitle || "").trim();
     if (!title) return;
-    const icon = generateMissionIcon(title);
-    setNewMission((prev) => ({
-      ...prev,
+
+    setActionFeedback(null);
+    setIsAdding(true);
+    setNewMission({
       title,
-      icon,
       reward: "",
       isRecurring: false,
       isTeam: false,
       recurrenceType: "daily",
       selectedDays: [],
-    }));
-    setIsPrefillMode(true);
-    setIsAdding(true);
+    });
     setSelectedChildIds(allChildren.length === 1 ? [allChildren[0].id] : [child.id]);
-    setTimeout(() => rewardInputRef.current?.focus(), 150);
+    setTimeout(() => rewardInputRef.current?.focus(), 120);
     if (onConsumePrefill) onConsumePrefill();
   }, [prefillMissionTitle, prefillMissionNonce, allChildren, child.id, onConsumePrefill]);
 const sortedMissions: Mission[] = useMemo(() => {
@@ -261,6 +239,10 @@ const handleAction = async (
   // Реальный create через backend вынесем следующим шагом, когда подтвердим endpoint.
   const handleAddMission = async () => {
   if (isPending("mission:create")) return;
+  if (!canCreateMissions) {
+    setActionFeedback({ type: "info", message: creationBlockedReason });
+    return;
+  }
   if (!newMission.title || !newMission.reward || selectedChildIds.length === 0) {
     setActionFeedback({ type: "error", message: "Заполните название, награду и выберите ребёнка." });
     return;
@@ -490,10 +472,14 @@ const handleAction = async (
 
       <button
         onClick={() => {
-          setIsPrefillMode(false);
+          if (!canCreateMissions) {
+            setActionFeedback({ type: "info", message: creationBlockedReason });
+            return;
+          }
           setIsAdding(true);
         }}
-        className="fixed bottom-32 right-8 w-16 h-16 sm:w-20 sm:h-20 bg-[var(--primary)] text-white rounded-[2rem] shadow-[0_20px_50px_var(--primary-glow)] flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-50 group"
+        className="fixed bottom-32 right-8 w-16 h-16 sm:w-20 sm:h-20 bg-[var(--primary)] text-white rounded-[2rem] shadow-[0_20px_50px_var(--primary-glow)] flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-50 group disabled:opacity-60 disabled:cursor-not-allowed"
+        disabled={!canCreateMissions}
       >
         <Plus size={40} className="group-hover:rotate-90 transition-transform duration-300" />
       </button>
@@ -574,6 +560,7 @@ const handleAction = async (
                   />
                   <div className="relative">
                     <input
+                      ref={rewardInputRef}
                       type="number"
                       placeholder="Награда (звёзд)"
                       className="w-full h-16 rounded-2xl px-6 font-bold text-lg bg-black/50 border border-white/10 outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
@@ -588,47 +575,46 @@ const handleAction = async (
                 </div>
               </div>
 
-              {!isPrefillMode ? (
-                <div className="space-y-4">
-                  <label
-                    onClick={showSoonFeatureNotice}
-                    className="flex items-center justify-between p-6 bg-white/[0.03] rounded-3xl cursor-pointer hover:bg-white/[0.05] transition-all border border-white/5"
-                  >
-                    <div className="flex items-center gap-4 min-w-0 flex-1">
-                      <div className="p-3 rounded-xl transition-colors bg-white/10 text-[var(--text-muted)]">
-                        <RefreshCcw size={22} />
-                      </div>
-                      <div className="min-w-0">
-                        <span className="text-lg font-black text-white block whitespace-nowrap">ПОВТОР</span>
-                      </div>
+              {/* Настройка повторений */}
+              <div className="space-y-4">
+                <label
+                  onClick={showSoonFeatureNotice}
+                  className="flex items-center justify-between p-6 bg-white/[0.03] rounded-3xl cursor-pointer hover:bg-white/[0.05] transition-all border border-white/5"
+                >
+                  <div className="flex items-center gap-4 min-w-0 flex-1">
+                    <div className="p-3 rounded-xl transition-colors bg-white/10 text-[var(--text-muted)]">
+                      <RefreshCcw size={22} />
                     </div>
-                    <div className="ml-3 w-[84px] shrink-0 flex flex-col items-center justify-center gap-1.5">
-                      <span className="px-2 py-0.5 rounded-full border border-amber-400/40 text-[9px] font-black tracking-widest text-amber-300">СКОРО</span>
-                      <input
-                        type="checkbox"
-                        className="w-7 h-7 accent-[var(--primary)] rounded-lg pointer-events-none"
-                        checked={false}
-                        readOnly
-                      />
+                    <div className="min-w-0">
+                      <span className="text-lg font-black text-white block whitespace-nowrap">ПОВТОР</span>
                     </div>
-                  </label>
+                  </div>
+                  <div className="ml-3 w-[84px] shrink-0 flex flex-col items-center justify-center gap-1.5">
+                    <span className="px-2 py-0.5 rounded-full border border-amber-400/40 text-[9px] font-black tracking-widest text-amber-300">СКОРО</span>
+                    <input
+                      type="checkbox"
+                      className="w-7 h-7 accent-[var(--primary)] rounded-lg pointer-events-none"
+                      checked={false}
+                      readOnly
+                    />
+                  </div>
+                </label>
 
-                  {newMission.isRecurring && (
-                    <div className="p-6 bg-white/[0.02] border border-white/5 rounded-3xl space-y-6 animate-in slide-in-from-top-4 duration-300">
-                      <div className="space-y-3">
-                        <p className="text-[11px] font-black text-[var(--text-muted)] uppercase tracking-[0.2em]">График выполнения</p>
-                        <div className="relative">
-                          <select
-                            className="w-full h-14 bg-black/40 border border-white/10 rounded-2xl px-6 font-bold appearance-none outline-none focus:ring-2 focus:ring-[var(--primary)]"
-                            value={newMission.recurrenceType}
-                            onChange={(e) => setNewMission({ ...newMission, recurrenceType: e.target.value })}
-                          >
-                            <option value="daily">Ежедневно</option>
-                            <option value="weekends">По выходным</option>
-                            <option value="custom">Выбрать дни недели</option>
-                          </select>
-                          <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none opacity-40" />
-                        </div>
+                {newMission.isRecurring && (
+                  <div className="p-6 bg-white/[0.02] border border-white/5 rounded-3xl space-y-6 animate-in slide-in-from-top-4 duration-300">
+                    <div className="space-y-3">
+                      <p className="text-[11px] font-black text-[var(--text-muted)] uppercase tracking-[0.2em]">График выполнения</p>
+                      <div className="relative">
+                        <select
+                          className="w-full h-14 bg-black/40 border border-white/10 rounded-2xl px-6 font-bold appearance-none outline-none focus:ring-2 focus:ring-[var(--primary)]"
+                          value={newMission.recurrenceType}
+                          onChange={(e) => setNewMission({ ...newMission, recurrenceType: e.target.value })}
+                        >
+                          <option value="daily">Ежедневно</option>
+                          <option value="weekends">По выходным</option>
+                          <option value="custom">Выбрать дни недели</option>
+                        </select>
+                        <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none opacity-40" />
                       </div>
 
                       {newMission.recurrenceType === "custom" && (

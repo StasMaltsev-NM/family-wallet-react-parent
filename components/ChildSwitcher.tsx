@@ -14,21 +14,13 @@ interface Props {
 
 const ChildSwitcher: React.FC<Props> = ({ children, selectedId, onSelect, onAdd, childPurchases }) => {
   return (
-    <div className="flex w-full max-w-full overflow-x-auto overflow-y-visible no-scrollbar gap-5 items-center pt-2 pb-2 pl-5 pr-6 snap-x snap-mandatory">
+    <div className="child-switcher flex w-full max-w-full overflow-x-auto overflow-y-visible no-scrollbar items-center pt-2 pb-2 snap-x snap-mandatory">
       {children.map(child => {
         const isSelected = child.id === selectedId;
         
         // Реальные покупки из API
         const apiChildId = (child as any).apiChildId || child.id;
         const pendingPurchases = childPurchases[apiChildId]?.filter((p: any) => p.status === "pending").length ?? 0;
-        
-        console.log('[SWITCHER]', child.name, {
-          apiChildId,
-          purchases: childPurchases[apiChildId],
-          pendingPurchases,
-          pendingMissions: child.missions.filter(m => m.status === 'pending').length,
-          activities: child.activities?.length || 0  // ← ДОБАВЬ ЭТО!
-        });
         
         const hasNotification = 
           pendingPurchases > 0 || 
@@ -39,10 +31,10 @@ const ChildSwitcher: React.FC<Props> = ({ children, selectedId, onSelect, onAdd,
           <button
             key={child.id}
             onClick={() => onSelect(child.id)}
-            className={`flex flex-col items-center gap-3 transition-all duration-300 flex-shrink-0 snap-center first:ml-1 last:mr-1 ${isSelected ? 'scale-110' : 'hover:scale-105'}`}
+            className={`child-switcher-item flex flex-col items-center gap-3 transition-all duration-300 flex-shrink-0 snap-center first:ml-1 last:mr-1 ${isSelected ? 'scale-110' : 'hover:scale-105'}`}
           >
             {/* Внешний контейнер (Кольцо Уведомления - Желтое) */}
-            <div className={`relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500
+            <div className={`child-switcher-avatar relative rounded-full flex items-center justify-center transition-all duration-500
               ${hasNotification ? 'ring-[3px] ring-amber-400 animate-pulse' : 'ring-1 ring-white/5'}
               ${isSelected ? 'opacity-100 scale-100' : 'scale-90'}
             `}>
@@ -64,23 +56,23 @@ const ChildSwitcher: React.FC<Props> = ({ children, selectedId, onSelect, onAdd,
               </div>
             </div>
             
-            <span className={`text-[11px] font-black uppercase tracking-widest transition-colors duration-300 ${isSelected ? 'text-[var(--primary)]' : 'text-[var(--text-muted)]'}`}>
+            <span className={`child-switcher-label font-black uppercase tracking-widest transition-colors duration-300 ${isSelected ? 'text-[var(--primary)]' : 'text-[var(--text-muted)]'}`}>
               {child.name}
             </span>
           </button>
         );
       })}
       
-      <div className="flex flex-col items-center gap-3 flex-shrink-0 snap-center -translate-y-1">
+      <div className="flex flex-col items-center gap-3 flex-shrink-0 snap-center child-switcher-item">
         <button 
           onClick={onAdd}
-          className="w-16 h-16 rounded-full border-[3px] border-dashed border-[var(--text-muted)]/30 flex items-center justify-center text-[var(--text-muted)] hover:border-[var(--primary)] hover:text-[var(--primary)] transition-all"
+          className="child-switcher-add rounded-full border-[3px] border-dashed border-[var(--text-muted)]/30 flex items-center justify-center text-[var(--text-muted)] hover:border-[var(--primary)] hover:text-[var(--primary)] transition-all"
         >
-          <Plus size={32} />
+          <Plus size={30} />
         </button>
         <span
           aria-hidden="true"
-          className="text-[11px] font-black uppercase tracking-widest opacity-0 select-none pointer-events-none"
+          className="child-switcher-label font-black uppercase tracking-widest opacity-0 select-none pointer-events-none"
         >
           ADD
         </span>
