@@ -2614,7 +2614,7 @@ const ChildInviteCodeModal: React.FC<ChildInviteCodeModalProps> = ({
       <h3 className="text-xl font-black tracking-tight text-white">Код для ребёнка</h3>
       <p className="mt-3 text-sm font-semibold text-white/70">
         Профиль <span className="text-white">{childName}</span> создан. Введите этот код в приложении ребёнка{" "}
-        <span className="text-[var(--primary)]">@family_wallet_kids_bot</span> на его телефоне.
+        <span className="text-[var(--primary)]">@way_kids_bot</span> на его телефоне.
       </p>
       <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-center">
         <code className="font-mono text-2xl font-black tracking-[0.22em] text-white">{code}</code>
